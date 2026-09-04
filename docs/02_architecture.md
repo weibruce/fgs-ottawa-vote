@@ -1,7 +1,9 @@
 # 投票系統 — 架構設計
 
-> 版本：v1.0 | 日期：2026-09-04
-> 配套文件：01_requirements.md（佛光山幹部改選投票系統需求 v1.0）
+> 版本：v1.1 | 日期：2026-09-04
+> 配套文件：01_requirements.md（佛光山幹部改選投票系統需求 v1.1）
+
+> **v1.1 變更摘要**：① 新增 `divisions` 分區表，候選人/會員/投票/幹部任命均綁定分區；② 投票 API 增加 `division_id` 維度（身份確認依卡號路由分區，結果查詢分區級）；③ `members` 表姓名改簡繁雙存（`name_trad`/`name_simp`）+ `division_id` + `phone`；④ `votes` 表新增 `proxy`/`proxy_voter_name` 代理投票標記；⑤ `rounds` 表新增 `is_runoff`/`parent_round_id` 支援平票再投；⑥ 新增會員名單 Excel/CSV 匯入 API；⑦ 統一投票入口（同一 URL + QR，依分區路由頁面）。
 
 ---
 
@@ -50,31 +52,40 @@
           │                                          │
   ┌───────▼──────────────────────────────────────────▼──┐
   │              PostgreSQL (持久化)                      │
-  │  • members, candidates, rounds, votes                │
+  │  • divisions, members, candidates, rounds, votes     │
   │  • vote_results, admin, appointments                 │
   └─────────────────────────────────────────────────────┘
 ```
 
-**兩輪投票 + 幹部指派的系統流程**：
+**兩輪投票（第一輪分區制）+ 幹部指派的系統流程**：
 
 ```
-[管理員] 配置第一輪候選人（5-7 人）+ 投票參數
+[管理員] 配置五個分區（東/南/西/北/中）
     ↓
-[管理員] 開啟第一輪投票 → 生成連結 + 二維碼（現場展示）
+[管理員] 匯入會員名單（Excel/CSV：卡號、姓名、所屬分區；卡號唯一，姓名簡繁雙存）
     ↓
-[~300 會員] 微信掃碼 / 輸入連結 → 輸入佛光會員號 → 系統帶出姓名確認
+[管理員] 按分區配置候選人（每區 5-7 人，彼此不同）+ 投票參數
     ↓
-[系統] 防重檢查（會員號）→ 選擇 1-2 名候選人 → 提交 → 寫 PG + 更新 Redis 計數
+[管理員] 開啟第一輪投票 → 生成統一連結 + 二維碼（現場展示，五區共用）
     ↓
-[全員 + 後臺] 每 2s 輪詢實時結果
+[~300 會員] 微信掃碼 / 輸入連結 → 輸入姓名 + 佛光會員卡號 + 代投 checkbox
     ↓
-[管理員] 關閉第一輪 → 確認計票 → 鎖定（最高票 = 會長）
+[系統] 卡號 + 姓名匹配校驗 → 判定所屬分區 → 路由到本分區候選人頁
+       （已投 → 提示已投票；不匹配 → 報錯）
     ↓
-[管理員] 配置第二輪（副會長候選人 2-4 人，投票人 = 會長 + 幹部，1 票）
+[系統] 防重檢查（分區 + 卡號）→ 選擇 1-2 名本分區候選人 → 提交 → 寫 PG + 更新 Redis 分區計數
     ↓
-[會長 + 幹部] 通過獨立連結投票 → 管理員確認 → 鎖定（最高票 = 副會長）
+[全員 + 後臺] 每 2s 輪詢本分區實時結果
     ↓
-[管理員] 錄入幹部指派（祕書/財務/總務：姓名 + 任期）→ 確認 → 展示完整結果
+[管理員] 關閉第一輪 → 確認計票 → 鎖定（每區最高票 = 本區會長/副會長）
+    ↓
+[若某區平票] 觸發平票再投（加賽輪次，細節待討論）
+    ↓
+[管理員] 配置第二輪（副會長候選人 2-4 人，投票人 = 各區會長 + 幹部，1 票）
+    ↓
+[各區會長 + 幹部] 通過獨立連結投票 → 管理員確認 → 鎖定（最高票 = 副會長）
+    ↓
+[管理員] 錄入各分區幹部指派（祕書/財務/總務：姓名 + 任期）→ 確認 → 展示完整結果
 ```
 
 ---
@@ -93,7 +104,9 @@
 | **部署** | Docker Compose | 一鍵部署，服務編排，便於遷移 |
 | **反向代理** | Nginx | HTTPS 終結、靜態資源、負載均衡（如需多例項） |
 
-> **零外部依賴**：身份確認只用佛光會員號（後臺匯入的會員名單），不用簡訊驗證碼、不用微信 OAuth。省掉外部服務認證、金鑰管理和額外成本。
+> **零外部依賴**：身份確認只用「姓名 + 佛光會員卡號」（後臺匯入的會員名單），不用簡訊驗證碼、不用微信 OAuth、不用手機號。省掉外部服務認證、金鑰管理和額外成本。
+>
+> **簡繁轉換**：姓名簡繁雙存使用開源庫 **OpenCC**（`opencc-python-reimplemented`，純 Python、無外部服務依賴），匯入時由繁體生成簡體，查詢時做簡繁歸一化匹配。
 
 ### 2.2 為什麼不用更重的方案
 
@@ -132,25 +145,34 @@
 
 ```
 /vote (投票入口，?round=1)
-  ├── /vote/verify (用戶身份確認頁)
-  │     ├── 輸入佛光會員號（必填）
-  │     ├── 系統帶出姓名 → 「請確認：張三（FG20260001）」
-  │     └── 點選「確認」→ 呼叫 POST /api/votes/confirm
-  ├── /vote/choose (選擇候選人)
-  │     ├── 候選人列表（頭像 + 姓名 + 職位 + 宣言）
+  ├── /vote/verify (身份確認頁)
+  │     ├── 輸入姓名（必填，可簡體）
+  │     ├── 輸入佛光會員卡號（必填）
+  │     ├── 代投 checkbox「是否由他人代理投票」（可選，附代投人姓名輸入）
+  │     ├── 點選「確認」→ 呼叫 POST /api/votes/confirm
+  │     │     ├── 不匹配 → 報錯「姓名與會員卡號不匹配」
+  │     │     ├── 已投票 → 顯示「已投過票」
+  │     │     └── 匹配 → 顯示投票人資訊（姓名/卡號/所屬分區/是否代投）
+  │     └── 「開始投票」按鈕 → 依所屬分區路由到 /vote/choose?division={id}
+  ├── /vote/choose (選擇候選人，依分區)
+  │     ├── 本分區標題（如「東區」）
+  │     ├── 本分區候選人列表（頭像 + 姓名 + 職位 + 宣言）
   │     ├── 多選 checkbox
   │     ├── 已選計數（"已選 1/2 票"）
   │     ├── 確認投票按鈕
   │     └── 二次確認彈窗
   ├── /vote/success (投票成功)
   │     ├── "投票成功"
-  │     ├── 進入投票展示頁面按鈕
-  │     └── 實時結果（輪詢更新）
-  └── /vote/results (實時結果展示頁，可獨立訪問)
+  │     ├── 進入本分區投票展示頁面按鈕
+  │     └── 實時結果（輪詢更新，本分區）
+  └── /vote/results (實時結果展示頁，可獨立訪問，依分區)
+        ├── 本分區標題
         ├── 柱狀圖 + 得票數
         ├── 投票進度（已投/總人數 + 進度條）
         └── 最高票候選人高亮
 ```
+
+> **統一入口 + 分區路由**：五區共用同一 `/vote` 連結 + 同一張二維碼。`/vote/choose` 與 `/vote/results` 依 `confirm` 返回的 `division_id` 加 query 參數路由，前端依此加載本分區候選人與結果。
 
 #### 投票視窗狀態展示
 
@@ -226,35 +248,41 @@ document.addEventListener('visibilitychange', () => {
 /admin (後臺入口)
   ├── /admin/login (登入)
   ├── /admin/dashboard (儀表盤)
-  │     ├── 投票狀態概覽
-  │     ├── 實時計票
+  │     ├── 五分區投票狀態概覽
+  │     ├── 實時計票（分區級）
   │     └── 快捷操作
-  ├── /admin/candidates (候選人管理)
+  ├── /admin/divisions (分區管理)
+  │     ├── 五區維護（東/南/西/北/中：名稱、顏色、每區票數配置）
+  │     └── 每區投票視窗（可跟隨全局或獨立）
+  ├── /admin/candidates (候選人管理，按分區)
+  │     ├── 分區切換（看某區候選人）
   │     ├── 列表（拖拽排序）
   │     ├── 新增/編輯/刪除（投票開始後鎖定）
   │     ├── 頭像上傳
   │     └── 已任屆數（term_count）
   ├── /admin/rounds (輪次管理)
-  │     ├── 第一輪配置（會長選舉）
-  │     ├── 第二輪配置（副會長選舉：候選人 + 投票人白名單會員號）
+  │     ├── 第一輪配置（分區選舉，五區）
+  │     ├── 第二輪配置（副會長選舉：候選人 + 投票人白名單）
   │     ├── 投票參數（票數、最少票數、匿名投票、時間視窗、排序方式）
   │     ├── 開啟/關閉投票
-  │     ├── 生成二維碼
-  │     └── 確認計票 + 鎖定
-  ├── /admin/tally (實時計票)
-  │     ├── 實時結果（與投票頁相同）
-  │     ├── 投票人明細（姓名、會員號、投票時間、投了誰；匿名模式不顯示）
-  │     ├── 投票進度時間線
+  │     ├── 生成統一二維碼（五區共用）
+  │     └── 確認計票 + 鎖定（分區級）
+  ├── /admin/tally (實時計票，分區級)
+  │     ├── 分區切換 / 五區總覽
+  │     ├── 實時結果（與投票頁相同，本分區）
+  │     ├── 投票人明細（姓名、卡號、分區、是否代投、投票時間；匿名模式不顯示）
+  │     ├── 平票偵測 + 再投（加賽）入口
   │     └── 暫停/恢復輪詢
   ├── /admin/members (會員名單)
-  │     ├── 匯入 Excel（會員號、姓名）
-  │     ├── 列表 / 搜尋
-  │     └── 投票前可修改
-  ├── /admin/appointments (幹部指派)
-  │     ├── 職務名稱 + 姓名 + 任期 錄入
-  │     └── 完整選舉結果總覽（會長 + 副會長 + 幹部名單）
-  ├── /admin/export (資料匯出)
-  │     ├── 第一輪投票明細 CSV
+  │     ├── 匯入 Excel / CSV（卡號、姓名、所屬分區；卡號唯一，姓名簡繁雙存）
+  │     ├── 匯入預覽 + 校驗報告（重複卡號、缺失分區等）
+  │     ├── 列表 / 搜尋（按分區、姓名、卡號）
+  │     └── 投票前可修改/刪除
+  ├── /admin/appointments (幹部指派，分區級)
+  │     ├── 分區切換，錄入該區職務 + 姓名 + 任期
+  │     └── 完整選舉結果總覽（各區會長/副會長 + 各區幹部名單）
+  ├── /admin/export (資料匯出，按分區)
+  │     ├── 第一輪投票明細 CSV（分區）
   │     ├── 第二輪投票明細 CSV
   │     ├── 幹部指派明細
   │     └── 彙總統計
@@ -275,6 +303,7 @@ backend/
 │   ├── database.py             # PG 連接池（asyncpg）
 │   ├── redis_client.py         # Redis 連接
 │   ├── models/                 # SQLAlchemy / Pydantic 模型
+│   │   ├── division.py         # 分區
 │   │   ├── member.py
 │   │   ├── candidate.py
 │   │   ├── round.py
@@ -283,29 +312,32 @@ backend/
 │   │   └── appointment.py
 │   ├── schemas/                # Pydantic 請求/響應 schema
 │   │   ├── vote.py
+│   │   ├── division.py
 │   │   ├── candidate.py
 │   │   ├── round.py
 │   │   └── admin.py
 │   ├── api/
 │   │   ├── routes/
 │   │   │   ├── votes.py        # 投票 API（公開）
-│   │   │   ├── results.py      # 結果查詢 API（公開）
+│   │   │   ├── results.py      # 結果查詢 API（公開，分區級）
 │   │   │   ├── admin.py        # 管理 API（需鑑權）
 │   │   │   └── health.py       # 健康檢查
 │   │   ├── deps.py             # 依賴注入（DB session, Redis, admin auth）
 │   │   └── middleware.py       # 請求日誌，限流
 │   ├── services/
-│   │   ├── vote_service.py     # 投票核心邏輯
-│   │   ├── result_service.py   # 計票 + 緩存
-│   │   ├── member_service.py   # 會員名單（匯入/查詢）
-│   │   └── export_service.py   # 數據導出
+│   │   ├── vote_service.py     # 投票核心邏輯（分區級）
+│   │   ├── result_service.py   # 計票 + 緩存（分區級）
+│   │   ├── member_service.py   # 會員名單（匯入/查詢/簡繁匹配）
+│   │   ├── division_service.py # 分區管理
+│   │   └── export_service.py   # 數據導出（分區級）
 │   ├── workers/
 │   │   └── consumer.py         # Redis Stream 消費者（asyncio task）
 │   ├── utils/
 │   │   ├── security.py         # 密碼哈希，JWT
 │   │   ├── qr.py               # 二維碼生成
-│   │   └── validators.py       # 會員號校驗
-│   └── init_db.py              # 數據庫初始化（建表 + 默認管理員）
+│   │   ├── opencc.py           # 簡繁轉換 + 歸一化匹配
+│   │   └── validators.py       # 卡號 + 姓名校驗
+│   └── init_db.py              # 數據庫初始化（建表 + 預設管理員 + 五區）
 ├── alembic/                    # 數據庫遷移
 ├── tests/
 │   ├── test_vote_service.py
@@ -322,35 +354,51 @@ backend/
 
 | 方法 | 路徑 | 說明 | 請求體 | 響應 |
 |------|------|------|--------|------|
-| GET | `/api/votes/round/{round_id}` | 獲取輪次資訊（狀態、候選人、票數配置） | — | `{status, candidates[], min_votes, max_votes, start_time, end_time}` |
-| POST | `/api/votes/confirm` | 佛光會員號 → 查會員名單帶出姓名 → voter_token | `{member_no}` | `{voter_token, name, member_no}` |
-| POST | `/api/votes/submit` | 提交投票 | `{voter_token, round_id, candidate_ids[]}` | `{success: true, message}` |
-| GET | `/api/votes/results?round_id=1` | 獲取實時結果 | — | `{status, total_voters, voted_count, candidates: [{id, name, vote_count}]}` |
+| GET | `/api/votes/round/{round_id}` | 獲取輪次資訊（狀態、票數配置、分區列表） | — | `{status, divisions[], min_votes, max_votes, start_time, end_time}` |
+| POST | `/api/votes/confirm` | 姓名 + 卡號 + 代投 → 校驗匹配 → 判定分區 → voter_token | `{name, member_no, proxy, proxy_voter_name?}` | `{voter_token, member_name, member_no, division_id, division_name, proxy}` |
+| GET | `/api/votes/round/{round_id}/division/{division_id}` | 獲取某分區候選人列表 + 票數配置 | — | `{division_name, candidates[], min_votes, max_votes}` |
+| POST | `/api/votes/submit` | 提交投票（依 token 內分區） | `{voter_token, round_id, candidate_ids[], proxy, proxy_voter_name?}` | `{success: true, message}` |
+| GET | `/api/votes/results?round_id=1&division_id=2` | 獲取某分區實時結果 | — | `{division_name, status, total_voters, voted_count, candidates: [{id, name, vote_count}]}` |
 
-> **confirm 行為**：會員號不在名單中 → 404「未找到該會員號」；該會員號已投票 → 409「您已投過票」；輪次設定白名單且不在其中 → 403「您無許可權參與本輪投票」。成功返回 voter_token + 姓名（前端展示確認）。
+> **confirm 行為**：
+> - 卡號不在名單中 → 404「未找到該會員卡號」
+> - 卡號存在但姓名不匹配（簡繁歸一化後仍不等）→ 400「姓名與會員卡號不匹配」
+> - 該卡號已投票 → 409「您已投過票」
+> - 輪次設定白名單且不在其中 → 403「您無許可權參與本輪投票」
+> - 成功：簡繁歸一化匹配 → 返回 voter_token + 姓名（繁體存檔）+ 所屬分區 + 代投標記
 >
-> **第二輪訪問控制**：第二輪的 `round` 配置中有 `allowed_member_nos[]`（指定投票人會員號白名單）。
+> **分區路由**：`confirm` 依卡號查 `members.division_id` 確定所屬分區，返回給前端；`submit` 時校驗 `candidate_ids` 全部屬於該分區。
+>
+> **第二輪訪問控制**：第二輪的 `round` 配置中有 `allowed_member_nos[]`（指定投票人卡號白名單）。
+>
+> **代投**：`proxy=true` 時，`votes.proxy=TRUE` + `proxy_voter_name` 記錄代投人姓名（可選，細節待確認 #6）。代投票與本人票同等計入，僅標記可追溯。
 
 ##### 管理 API（需 JWT 鑑權）
 
 | 方法 | 路徑 | 說明 |
 |------|------|------|
 | POST | `/api/admin/login` | 管理員登入 → JWT（首次登入強制改密） |
-| GET | `/api/admin/candidates` | 候選人列表 |
-| POST | `/api/admin/candidates` | 新增候選人（含 term_count 已任屆數） |
+| GET | `/api/admin/divisions` | 分區列表（五區） |
+| POST | `/api/admin/divisions` | 新增/維護分區（名稱、顏色、每區票數、視窗） |
+| PUT | `/api/admin/divisions/{id}` | 編輯分區配置 |
+| GET | `/api/admin/candidates?division_id=1` | 某分區候選人列表 |
+| POST | `/api/admin/candidates` | 新增候選人（含 division_id、term_count） |
 | PUT | `/api/admin/candidates/{id}` | 編輯候選人（投票開始後鎖定） |
 | DELETE | `/api/admin/candidates/{id}` | 刪除候選人（僅投票未開始時） |
-| POST | `/api/admin/rounds` | 建立輪次 |
+| POST | `/api/admin/rounds` | 建立輪次（含 is_runoff/parent_round_id） |
 | PUT | `/api/admin/rounds/{id}` | 編輯輪次配置（票數、匿名、時間、第二輪白名單等） |
 | POST | `/api/admin/rounds/{id}/activate` | 開啟投票 |
 | POST | `/api/admin/rounds/{id}/close` | 關閉投票 |
-| POST | `/api/admin/rounds/{id}/confirm` | 確認計票 + 鎖定 |
-| GET | `/api/admin/tally?round_id=1` | 實時計票（含投票人明細，匿名時隱藏） |
-| GET | `/api/admin/members` | 會員名單列表 |
-| POST | `/api/admin/members/import` | 匯入會員名單（Excel：會員號、姓名） |
-| GET | `/api/admin/export?round_id=1` | 匯出 CSV |
-| POST | `/api/admin/appointments` | 錄入幹部任命（姓名、崗位、任期） |
-| GET | `/api/admin/appointments` | 幹部任命列表 |
+| POST | `/api/admin/rounds/{id}/confirm` | 確認計票 + 鎖定（分區級，偵測平票） |
+| POST | `/api/admin/rounds/{id}/runoff` | 平票再投：建立加賽輪次（候選 = 平票者） |
+| GET | `/api/admin/tally?round_id=1&division_id=2` | 實時計票（分區級，含投票人明細/代投，匿名時隱藏） |
+| GET | `/api/admin/members?division_id=2` | 會員名單列表（按分區/姓名/卡號搜尋） |
+| POST | `/api/admin/members/import` | 匯入會員名單（Excel/CSV：卡號、姓名、分區；卡號唯一，簡繁雙存） |
+| PUT | `/api/admin/members/{id}` | 修改會員（投票前） |
+| DELETE | `/api/admin/members/{id}` | 刪除會員（投票前） |
+| GET | `/api/admin/export?round_id=1&division_id=2` | 匯出 CSV（按分區） |
+| POST | `/api/admin/appointments` | 錄入幹部任命（姓名、崗位、分區、任期） |
+| GET | `/api/admin/appointments?division_id=2` | 幹部任命列表（按分區） |
 | POST | `/api/admin/appointments/confirm` | 確認幹部指派完成（鎖定） |
 | PUT | `/api/admin/settings` | 更新系統設定 |
 
@@ -359,33 +407,34 @@ backend/
 ```
 POST /api/votes/submit
   │
-  ├── 1. 驗證 voter_token（Redis 查，TTL 校驗）
+  ├── 1. 驗證 voter_token（Redis 查，TTL 校驗）→ 取得 member_id + division_id
   │     └── token 無效/過期 → 401
   │
   ├── 2. 檢查輪次狀態（PG 查）
   │     └── 非 active → 400「投票未開始/已結束」
   │
   ├── 3. 第二輪訪問控制（如輪次設定了 allowed_member_nos）
-  │     └── 會員號不在白名單 → 403「您無許可權參與本輪投票」
+  │     └── 卡號不在白名單 → 403「您無許可權參與本輪投票」
   │
-  ├── 4. 防重檢查
+  ├── 4. 防重檢查（分區級）
   │     ├── Redis: EXISTS vote:{round_id}:{member_id}
   │     │   └── 存在 → 409「您已投過票，無需重複投票」
   │     └── （雙重檢查）PG: SELECT 1 FROM votes WHERE round_id=? AND member_id=?
   │
-  ├── 5. 校驗候選人
+  ├── 5. 校驗候選人（分區級）
   │     ├── candidate_ids 數量在 [min_votes, max_votes] 範圍內
   │     ├── 每個 candidate_id 屬於當前輪次
+  │     ├── 每個 candidate_id 的 division_id 必須 == token 的 division_id（禁止跨區）
   │     └── 無重複
   │
   ├── 6. 寫入投票（事務）
-  │     ├── PG: INSERT INTO votes (round_id, member_id, candidate_ids, voted_at)
-  │     │       VALUES (?, ?, ?, NOW())
+  │     ├── PG: INSERT INTO votes (round_id, member_id, division_id, candidate_ids, proxy, proxy_voter_name, voted_at)
+  │     │       VALUES (?, ?, ?, ?, ?, ?, NOW())
   │     ├── Redis: SET vote:{round_id}:{member_id} 1 EX {ttl}
-  │     └── Redis: INCRBY vote_count:{round_id}:{candidate_id} 1 (每個候選人)
+  │     └── Redis: INCRBY vote_count:{round_id}:{division_id}:{candidate_id} 1 (每個候選人)
   │
-  ├── 7. 更新 Redis 投票進度
-  │     └── Redis: INCR voted_count:{round_id}
+  ├── 7. 更新 Redis 分區投票進度
+  │     └── Redis: INCR voted_count:{round_id}:{division_id}
   │
   └── 8. 返回 {success: true}
 ```
@@ -397,24 +446,52 @@ POST /api/votes/submit
 #### 核心流程 — 查詢結果
 
 ```
-GET /api/votes/results?round_id=1
+GET /api/votes/results?round_id=1&division_id=2
   │
-  ├── 1. 嘗試從 Redis 讀取
-  │     ├── MGET vote_count:{round_id}:1, vote_count:{round_id}:2, ...
-  │     ├── GET voted_count:{round_id}
+  ├── 1. 嘗試從 Redis 讀取（分區級）
+  │     ├── MGET vote_count:{round_id}:{division_id}:1, ...:2, ...
+  │     ├── GET voted_count:{round_id}:{division_id}
   │     └── 命中 → 返回（< 5ms）
   │
   ├── 2. Redis 未命中（快取失效）
   │     ├── PG: SELECT candidate_id, COUNT(*) FROM votes
-  │     │       WHERE round_id=? GROUP BY candidate_id
+  │     │       WHERE round_id=? AND division_id=? GROUP BY candidate_id
   │     ├── 回填 Redis（SET + EX 60s）
   │     └── 返回
   │
   └── 3. 附加後設資料
-        ├── 輪次狀態（active/closed）
-        ├── 總投票人數（輪次配置）
-        └── 候選人資訊（姓名、頭像）
+        ├── 分區狀態（active/closed）
+        ├── 分區總投票人數（該分區會員數）
+        └── 本分區候選人資訊（姓名、頭像）
 ```
+
+#### 核心流程 — 會員名單匯入（Excel/CSV）
+
+```
+POST /api/admin/members/import  (multipart: file)
+  │
+  ├── 1. 解析檔案（pandas / openpyxl，支援 .xlsx / .csv）
+  │     └── 期望欄位：卡號、姓名、所屬分區（東/南/西/北/中）
+  │
+  ├── 2. 逐行校驗
+  │     ├── 卡號唯一性（檔案內重複 + 與現有 members 重複）
+  │     ├── 所屬分區必須是五區之一（可支援中文/代碼映射）
+  │     ├── 姓名非空
+  │     └── 收集校驗報告（行號 + 錯誤原因）
+  │
+  ├── 3. 簡繁雙存
+  │     ├── 輸入姓名 → 若已含簡體字則 OpenCC t2s 存 name_simp、t2t 存 name_trad
+  │     ├── 以繁體為存檔基準（name_trad）
+  │     └── 生成 name_simp（OpenCC s2t）
+  │
+  ├── 4. 寫入（事務，全部成功或全部回滾）
+  │     └── PG: INSERT INTO members (member_no, name_trad, name_simp, division_id) ...
+  │
+  └── 5. 返回匯入結果
+        └── {imported: 287, failed: 3, errors: [{row: 12, reason: "卡號重複"}]}
+```
+
+> **匯入策略**：預設**增量 + 卡號唯一校驗**（已存在卡號跳過並計入 failed，避免覆蓋已投票會員）；覆蓋模式可選（投票開始前）。投票開始（round active）後禁止匯入/修改/刪除會員，需先關閉輪次。
 
 #### 消費者（降級場景）
 
@@ -484,41 +561,52 @@ async def consume_votes():
                        │ start_time       │
                        │ end_time         │
 ┌──────────────┐       │ allowed_member   │
-│   candidates │       │   _nos (TEXT[])  │
+│  divisions   │       │   _nos (TEXT[])  │
 ├──────────────┤       │   (第二輪白名單)  │
-│ id (PK)      │       │ created_at       │
-│ round_id (FK)│       └────────┬─────────┘
-│ name         │                │ 1
-│ avatar_url   │       ┌────────▼─────────┐
-│ position     │       │   round_cand     │
-│ description  │       ├──────────────────┤
-│ slogan       │       │ round_id (FK)    │
-│ sort_order   │       │ candidate_id (FK)│
-│ term_count   │       │ sort_order       │
-└──────────────┘       └──────────────────┘
-┌──────────────────┐
-│    members       │
-├──────────────────┤
-│ id (PK)          │
-│ member_no (UNIQ) │
-│ name             │
-│ created_at       │
-└────────┬─────────┘
-         │ 1
-         │ N
-┌────────▼─────────┐       ┌──────────────────┐
-│     votes        │       │  appointments    │
-├──────────────────┤       ├──────────────────┤
-│ id (PK)          │       │ id (PK)          │
-│ round_id (FK)    │       │ name             │
-│ member_id (FK)   │       │ position         │
-│ candidate_ids    │       │ term             │
-│   (TEXT[])       │       │ appointed_by     │
-│ voted_at         │       │ appointed_at     │
-│ status (enum)    │       └──────────────────┘
-└──────────────────┘
+│ id (PK)      │       │ is_runoff (bool) │
+│ name (東/南.. │       │ parent_round_id  │
+│ color        │       │   (FK, 加賽來源)  │
+│ min_votes    │       │ created_at       │
+│ max_votes    │       └────────┬─────────┘
+│ start_time   │                │ 1
+│ end_time     │       ┌────────▼─────────┐
+└──────┬───────┘       │  round_cand      │
+       │ 1             ├──────────────────┤
+┌──────▼───────┐       │ round_id (FK)    │
+│  candidates  │       │ candidate_id (FK)│
+├──────────────┤       │ sort_order       │
+│ id (PK)      │       └──────────────────┘
+│ division_id  │
+│  (FK)        │       ┌──────────────────┐
+│ name         │       │    members       │
+│ avatar_url   │       ├──────────────────┤
+│ position     │       │ id (PK)          │
+│ description  │       │ member_no (UNIQ) │
+│ slogan       │       │ name_trad        │
+│ sort_order   │       │ name_simp        │
+│ term_count   │       │ division_id (FK) │
+└──────────────┘       │ phone            │
+                       │ created_at       │
+                       └────────┬─────────┘
+                                │ 1
+                                │ N
+                       ┌────────▼─────────┐       ┌──────────────────┐
+                       │     votes        │       │  appointments    │
+                       ├──────────────────┤       ├──────────────────┤
+                       │ id (PK)          │       │ id (PK)          │
+                       │ round_id (FK)    │       │ division_id (FK) │
+                       │ member_id (FK)   │       │ name             │
+                       │ division_id (FK) │       │ position         │
+                       │ candidate_ids    │       │ term             │
+                       │   (TEXT[])       │       │ appointed_by     │
+                       │ proxy (bool)     │       │ appointed_at     │
+                       │ proxy_voter_name │       └──────────────────┘
+                       │ voted_at         │
+                       │ status (enum)    │
+                       └──────────────────┘
 ```
-```
+
+> **分區（divisions）**：第一輪五區（東/南/西/北/中）。`candidates`、`members`、`votes`、`appointments` 均外鍵到 `divisions`。`votes.division_id` 在寫入時由 token 的 `division_id` 帶入，`UNIQUE(round_id, member_id)` 保證一人一輪一票。
 
 #### 關鍵表 DDL
 
@@ -532,23 +620,38 @@ CREATE TABLE admins (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- 分區（第一輪五區：東/南/西/北/中）
+CREATE TABLE divisions (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(20) NOT NULL UNIQUE,       -- 東/南/西/北/中
+    color VARCHAR(20),                       -- 展示顏色（可選）
+    min_votes INT NOT NULL DEFAULT 1,        -- 本區每人最少票數
+    max_votes INT NOT NULL DEFAULT 2,        -- 本區每人最多票數
+    start_time TIMESTAMP,                    -- 本區視窗（NULL=跟隨 round）
+    end_time TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- 投票輪次
 CREATE TABLE rounds (
     id SERIAL PRIMARY KEY,
-    title VARCHAR(100) NOT NULL,           -- "第一輪：會長選舉"
+    title VARCHAR(100) NOT NULL,           -- "第一輪：分區選舉"
     status VARCHAR(20) NOT NULL DEFAULT 'draft',  -- draft/active/closed/locked
     min_votes INT NOT NULL DEFAULT 1,
-    max_votes INT NOT NULL DEFAULT 2,      -- 第一輪預設 2 票
+    max_votes INT NOT NULL DEFAULT 2,      -- 預設 2 票（可被 division 覆蓋）
     anonymous BOOL NOT NULL DEFAULT TRUE,  -- 匿名投票：開啟時後臺不顯示投票人明細
     start_time TIMESTAMP,
     end_time TIMESTAMP,
     allowed_member_nos TEXT[],          -- 第二輪投票人白名單（NULL=不限制）
+    is_runoff BOOL NOT NULL DEFAULT FALSE,    -- 是否平票加賽輪次
+    parent_round_id INT REFERENCES rounds(id), -- 加賽來源輪次（NULL=非加賽）
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- 候選人
+-- 候選人（綁定分區）
 CREATE TABLE candidates (
     id SERIAL PRIMARY KEY,
+    division_id INT NOT NULL REFERENCES divisions(id),  -- 所屬分區
     name VARCHAR(100) NOT NULL,
     avatar_url VARCHAR(500),
     position VARCHAR(100),                 -- 職位/部門（一行簡介）
@@ -567,11 +670,14 @@ CREATE TABLE round_candidates (
     PRIMARY KEY (round_id, candidate_id)
 );
 
--- 會員名單（後臺匯入，member_no 唯一）
+-- 會員名單（後臺匯入，member_no 唯一；姓名簡繁雙存）
 CREATE TABLE members (
     id SERIAL PRIMARY KEY,
-    member_no VARCHAR(50) UNIQUE NOT NULL, -- 佛光會員號
-    name VARCHAR(100) NOT NULL,            -- 姓名
+    member_no VARCHAR(50) UNIQUE NOT NULL, -- 佛光會員卡號
+    name_trad VARCHAR(100) NOT NULL,       -- 姓名（繁體，存檔基準）
+    name_simp VARCHAR(100) NOT NULL,       -- 姓名（簡體，OpenCC 由 name_trad 生成）
+    division_id INT NOT NULL REFERENCES divisions(id),  -- 所屬分區
+    phone VARCHAR(20),                     -- 手機號（可選，預設不用於驗證）
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -580,17 +686,21 @@ CREATE TABLE votes (
     id SERIAL PRIMARY KEY,
     round_id INT NOT NULL REFERENCES rounds(id),
     member_id INT NOT NULL REFERENCES members(id),
+    division_id INT NOT NULL REFERENCES divisions(id),  -- 投票分區（= member 分區）
     candidate_ids TEXT[] NOT NULL,         -- PostgreSQL 數組類型
+    proxy BOOL NOT NULL DEFAULT FALSE,     -- 是否代理投票
+    proxy_voter_name VARCHAR(100),         -- 代投人姓名（可選，細節待確認）
     voted_at TIMESTAMP NOT NULL DEFAULT NOW(),
     status VARCHAR(20) NOT NULL DEFAULT 'valid',  -- valid/void
     UNIQUE(round_id, member_id)            -- 每會員每輪只能投一次
 );
 
--- 幹部任命
+-- 幹部任命（綁定分區）
 CREATE TABLE appointments (
     id SERIAL PRIMARY KEY,
+    division_id INT NOT NULL REFERENCES divisions(id),  -- 所屬分區
     name VARCHAR(100) NOT NULL,
-    position VARCHAR(100) NOT NULL,        -- 祕書/財務/總務/副會長
+    position VARCHAR(100) NOT NULL,        -- 會長/副會長/祕書/財務/總務
     term VARCHAR(100),                     -- 任期（如 "2026-2028"）
     appointed_by VARCHAR(100),             -- 任命人（會長姓名）
     appointed_at TIMESTAMP DEFAULT NOW()
@@ -599,22 +709,27 @@ CREATE TABLE appointments (
 -- 索引
 CREATE INDEX idx_votes_round ON votes(round_id);
 CREATE INDEX idx_votes_member ON votes(member_id);
+CREATE INDEX idx_votes_division ON votes(division_id);
 CREATE INDEX idx_members_no ON members(member_no);
+CREATE INDEX idx_members_division ON members(division_id);
+CREATE INDEX idx_candidates_division ON candidates(division_id);
 ```
 
+> **姓名簡繁雙存**：`name_trad` 為存檔基準（匯入時若只填簡體則用 OpenCC 反向生成繁體），`name_simp` 由 `name_trad` 經 OpenCC `s2t`/`t2s` 生成。查詢匹配時對輸入姓名做簡繁歸一化（轉成統一形後比對），簡體輸入也能命中。
+>
 > **vote_result（計票結果）**：快取層，Redis 為主（見下方 Redis 鍵設計），PG 的 votes 表為最終資料源，輪詢快取失效時從 votes 表 GROUP BY 重算回填。
 
 #### Redis 鍵設計
 
 ```
-# 投票計數（實時結果）
-vote_count:{round_id}:{candidate_id} → INT
-  示例: vote_count:1:3 → 42
+# 投票計數（實時結果，分區級）
+vote_count:{round_id}:{division_id}:{candidate_id} → INT
+  示例: vote_count:1:2:3 → 42
   TTL: 無（持久，投票鎖定後以 PG 為準）
 
-# 投票進度
-voted_count:{round_id} → INT
-  示例: voted_count:1 → 287
+# 投票進度（分區級）
+voted_count:{round_id}:{division_id} → INT
+  示例: voted_count:1:2 → 56
   TTL: 無
 
 # 防重標記
@@ -622,8 +737,8 @@ vote:{round_id}:{member_id} → "1"
   示例: vote:1:3 → "1"
   TTL: 投票視窗時長 + 1 小時（兜底，PG 是唯一約束判據）
 
-# 投票人 token
-voter_token:{token} → {member_id, member_no, name, round_id, created_at}
+# 投票人 token（含分區 + 代投）
+voter_token:{token} → {member_id, member_no, name, division_id, round_id, proxy, proxy_voter_name, created_at}
   TTL: 投票視窗時長
 
 # 降級佇列（PG 宕機時）
@@ -637,15 +752,17 @@ admin_session:{token} → {username, created_at}
 
 ### 3.5 防重複投票機制
 
-三層防重：
+三層防重（分區級，卡號綁定分區）：
 
 | 層 | 機制 | 說明 |
 |----|------|------|
 | **1. Redis 快速檢查** | `EXISTS vote:{round_id}:{member_id}` | 投票前 O(1) 檢查，< 1ms |
 | **2. PG 唯一約束** | `UNIQUE(round_id, member_id)` | 資料庫層面兜底，即使 Redis 失效 |
-| **3. 業務邏輯** | 已投票會員號再次訪問 → 提示「您已投過票，無需重複投票」 | 前端友好提示 |
+| **3. 業務邏輯** | 已投票卡號再次訪問 → 提示「您已投過票，無需重複投票」 | 前端友好提示 |
 
-> **匿名投票**：`rounds.anonymous = TRUE` 時，後臺計票頁面不顯示投票人明細（姓名、會員號、投了誰），僅展示候選人得票統計；匯出同理。匿名設定隻影響展示層，投票記錄本身完整保留在 votes 表中。
+> **跨區防護**：`confirm` 依卡號確定唯一 `division_id`，`submit` 校驗 `candidate_ids` 全屬該分區；卡號綁定唯一分區，無法跨區投票。
+>
+> **匿名投票**：`rounds.anonymous = TRUE` 時，後臺計票頁面不顯示投票人明細（姓名、卡號、是否代投、投了誰），僅展示候選人得票統計；匯出同理。匿名設定隻影響展示層，投票記錄本身完整保留在 votes 表中。
 
 ### 3.6 降級策略
 
@@ -662,24 +779,28 @@ admin_session:{token} → {username, created_at}
 | HTTPS | Nginx 終結 TLS，後端僅 HTTP |
 | 管理員鑑權 | JWT（access token 8h + refresh token 7d），與投票介面完全隔離 |
 | 密碼儲存 | bcrypt（cost=12）；首次登入強制修改 |
-| 投票 token | 隨機 32 位元組 hex，Redis 儲存，TTL = 投票視窗 |
+| 投票 token | 隨機 32 位元組 hex，Redis 儲存（含分區 + 代投），TTL = 投票視窗 |
 | SQL 注入 | SQLAlchemy ORM + 引數化查詢 |
 | XSS | React 自動轉義；CSP header |
 | CSRF | SameSite=Strict cookie + Origin 檢查 |
 | 投票不可篡改 | votes 表無 UPDATE/DELETE API；審計日誌記錄所有寫入 |
-| 身份確認 | 佛光會員號（後臺匯入的會員名單）+ 姓名確認；無外部驗證依賴 |
-| 第二輪訪問控制 | 白名單 `allowed_member_nos`，非指定會員號 403 |
+| 身份確認 | 姓名 + 佛光會員卡號（後臺匯入名單）雙欄位校驗，簡繁歸一化匹配；無外部驗證依賴 |
+| 分區隔離 | 卡號綁定唯一分區，跨區候選人提交被拒（403） |
+| 代投可追溯 | `proxy=true` 記錄 + 可選 `proxy_voter_name`，票與本人票同等計入 |
+| 第二輪訪問控制 | 白名單 `allowed_member_nos`，非指定卡號 403 |
 
-### 3.8 平票處理
+### 3.8 平票再投（加賽）
 
-需求預設規則 A（加賽）+ 備選規則 B（抽籤），系統設計如下：
+需求 v1.1 明確加入「平票可以再投」功能（細節待討論 #1），系統設計如下：
 
 | 規則 | 系統支援 | 說明 |
 |------|----------|------|
-| **規則 A：加賽（預設）** | 支援（待確認是否開發） | 管理員確認計票時若偵測到最高票並列，可選擇「進入加賽」：系統自動建立新輪次（status=draft），候選人 = 平票者，原輪次鎖定 |
-| **規則 B：抽籤** | 人工操作 | 系統僅記錄結果：管理員手動指定當選者（在輪次確認介面輸入） |
+| **加賽再投（預設）** | 支援 | 管理員在某分區確認計票時若偵測到最高票並列，可選擇「進入加賽」：系統自動建立加賽輪次（`is_runoff=TRUE`, `parent_round_id`=原輪次，status=draft），該分區候選 = 平票者，原分區輪次鎖定 |
+| **抽籤（備選）** | 人工操作 | 系統僅記錄結果：管理員手動指定當選者（在輪次確認介面輸入） |
 
-> 加賽功能在需求文件的開放問題 #1/#4 中，**待確認是否開發**。本架構預留了介面（round 建立 API 可指定候選人名單），實現成本低。
+> **分區級加賽**：加賽以**分區**為單位觸發（某區平票只加賽該區），不影響其他區。`rounds.is_runoff` + `parent_round_id` 已預留於 DDL。
+>
+> **待討論細節**（需求開放問題 #1）：加賽投票人範圍（本區全部會員？僅原投票人？）、加賽票數、加賽次數上限（是否允許多輪加賽）。確認前該功能預留介面但預設不啟用。
 
 ---
 
