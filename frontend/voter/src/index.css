@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* ============================================================
+   佛光山投票系統 — 設計令牌（Design Tokens）
+   依 img/voting_system_layout_01~06 設計稿 + draw_pages.py 常量
+   ============================================================ */
+@theme {
+  /* 主色（佛光山紅金主題） */
+  --color-primary: #b22222;        /* 主紅：按鈕、導覽列、強調 */
+  --color-primary-dark: #8c1818;   /* 深紅：hover、文字強調 */
+  --color-gold: #c69a3c;           /* 金：副標、裝飾線 */
+  --color-gold-light: #e8c878;     /* 淺金 */
+  --color-cream: #faf6ec;          /* 頁面底色 */
+  --color-card: #ffffff;           /* 卡片底 */
+  --color-light-bg: #f5f2eb;       /* 淺底卡 */
+  --color-ink: #28282c;            /* 主文字 */
+  --color-gray: #78787e;           /* 次要文字 */
+  --color-border: #d6d4d0;         /* 分隔線 */
+  --color-success: #228b22;        /* 成功（驗證通過） */
+  --color-success-bg: #e2f5e2;     /* 成功淺底 */
+
+  /* 五區代表色 */
+  --color-div-east: #b22222;       /* 東：紅 */
+  --color-div-south: #c85a1e;      /* 南：橙 */
+  --color-div-west: #286eb4;       /* 西：藍 */
+  --color-div-north: #5a3c96;      /* 北：紫 */
+  --color-div-central: #28825a;    /* 中：綠 */
+
+  /* 字體 */
+  --font-sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* ============================================================
+   基礎重置 + 移動端適配
+   ============================================================ */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  /* 觸控友善：禁止雙擊縮放 */
+  touch-action: manipulation;
+}
+
+/* 卡片陰影（輕量） */
+.card-shadow {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* 底部安全區留白（iPhone 瀏海/Home 指示） */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
