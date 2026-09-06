@@ -16,6 +16,9 @@ build/
 .env
 *.env
 
+# 下載的 deb 包緩存
+.pkgcache/
+
 # 编辑器
 .vscode/
 .idea/

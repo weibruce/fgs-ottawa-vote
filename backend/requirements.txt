@@ -1,0 +1,19 @@
+# 佛光山投票系统 — 后端依赖
+# Python 3.14 兼容
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+sqlalchemy>=2.0.36
+alembic>=1.14.0
+psycopg2-binary>=2.9.10
+redis>=5.2.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+PyJWT>=2.10.0
+bcrypt>=4.2.0
+opencc-python-reimplemented>=0.1.7
+python-multipart>=0.0.18
+httpx>=0.28.0
+qrcode>=7.4.2
+pandas>=2.2.0
+openpyxl>=3.1.2
+pillow>=11.0.0
