@@ -7,6 +7,49 @@
 
 ---
 
+## 0. 實施進度（2026-09-06 更新）
+
+> 本章節記錄實際開發進度，與下方計劃對照。
+
+### 已完成
+
+| 里程碑 | 狀態 | 說明 |
+|--------|------|------|
+| **M1: 基礎框架** | ✅ 完成 | 後端骨架 + DB schema（9 表）+ 管理員 JWT + 分區 CRUD + 候選人 CRUD，端到端驗證通過 |
+| **M2: 核心投票** | ✅ 完成（後端） | 身份確認（OpenCC 簡繁）+ 投票提交（防重/票數/分區校驗）+ 實時結果（Redis MGET+PG 回填），12 項測試通過。投票前端（2.6-2.11）待 M3 一併做 |
+
+### 環境實際配置（no-root，非 Docker）
+
+> 原計劃用 Docker Compose（1.9），實際環境無 Docker，改用 **deb 提取 + 本地啟動**，效果等同。
+
+| 組件 | 版本 | 部署方式 | 端口 |
+|------|------|----------|------|
+| PostgreSQL | 18.6 | `apt-get download` + `dpkg-deb -x` 提取到 `~/.local/pgsql/`，`initdb` 初始化 data 目錄 | 5432 |
+| Redis | 8.0.5 | `apt-get download` + `dpkg-deb -x` 提取到 `~/.local/redis/` | 6379 |
+| FastAPI | 0.141.1 | `python3 -m venv` + `get-pip.py`（無 ensurepip）+ pip 裝 17 依賴 | 8000 |
+
+**啟動腳本**：
+- `scripts/start_all.sh [start|stop|status]` — 一鍵啟停 PG + Redis + API
+- `scripts/pgctl.sh` / `scripts/redisctl.sh` — 單獨管控 PG / Redis
+
+**資料庫**：`fgs_vote`（UTF8），應用用戶 `fgs_app`（權限已授予 public schema）。
+
+**初始數據**：管理員 `admin`（首次登入強制改密）+ 五區（東/南/西/北/中）。
+
+### 待辦（M3 起）
+- [ ] M2 投票前端（2.6-2.11：身份確認頁/分區選擇頁/成功+結果頁/輪詢/降級/移動端）
+- [ ] M3 完整後臺（輪次管理 + 會員匯入 + 幹部指派 + 加賽 + 匯出 + 後臺前端）
+- [ ] M4 加固上線（安全 + 降級測試 + 壓測 + 演練）
+
+### 測試數據說明
+- 當前 DB 含測試種子數據（3 候選人 / 3 會員 / 1 輪次 / 2 投票），用於驗證投票流程。
+- 真實使用前會被會員匯入 + 候選人管理覆蓋（M3 匯入功能上線後）。
+- 如需清空：`DELETE FROM vote_candidates/votes/members/candidates/round_candidates/rounds`（保留 admins + divisions）。
+
+---
+
+---
+
 ## 1. 專案總覽
 
 | 項 | 值 |
