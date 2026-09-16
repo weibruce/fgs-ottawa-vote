@@ -11,7 +11,6 @@ import { Fragment, useState, type ReactNode } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
 import { Card, CardHeader, Button, PageIntro, ProgressBar, DivisionMark, TableWrap, LinkMore } from '../components/ui'
 import { IconRefresh, IconLock, IconAlert } from '../components/icons'
-import { DIVISION_COLORS } from '../data/mock'
 import { useAsync } from '../hooks/useAsync'
 import { apiError } from '../api/client'
 import {
@@ -150,7 +149,8 @@ function DivisionCard({
   tieNote?: string
   color?: string
 }) {
-  const markColor = color || DIVISION_COLORS[name.charAt(0)] || '#8B1A1A'
+  // 顏色一律由 API（round progress / divisions）提供
+  const markColor = color || 'var(--color-primary)'
   const pct = Number(text.match(/(\d+)%/)?.[1] ?? 0)
   return (
     <div className="rounded-lg bg-white p-4" style={{ border: `1px solid ${INNER_BORDER}` }}>

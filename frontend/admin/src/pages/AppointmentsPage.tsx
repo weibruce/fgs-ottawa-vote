@@ -8,19 +8,16 @@
  *   4. 幹部名單卡：分區色塊 + 標題/當選資訊 + 已指派數，下方 3 張幹部卡
  *
  * 資料來源：API（src/api/appointments.ts）
- *   - 分區分頁 / 顏色：mock.ts 的 mockDivisions（版面用）
+ *   - 分區分頁 / 顏色：GET /admin/appointments/summary（division_name + color）
  *   - 名單：GET /admin/appointments?division_id=
  *   - 當選資訊 + 已確認狀態：GET /admin/appointments/summary
  *   - 寫入：POST / PUT /{id} / DELETE /{id}
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
 import { Card, CardHeader, PageIntro, Button, DivisionMark } from '../components/ui'
 import { IconPlus, IconEdit, IconTrash } from '../components/icons'
-import { mockDivisions } from '../data/mock'
-import { appointmentRoles, appointmentFormSeed } from '../data/mock.appointments'
-import type { AppointmentItem } from '../data/mock.appointments'
 import { apiError } from '../api/client'
 import type { AppointmentOut, AppointmentSummary } from '../api/types'
 import {
@@ -32,9 +29,25 @@ import {
 } from '../api/appointments'
 import { useAsync } from '../hooks/useAsync'
 
-/** 名單項目：mock 型別 + API id（供編輯／刪除用） */
-interface RosterItem extends AppointmentItem {
+/** 「擔任崗位」下拉選項（純 UI 選項，非資料） */
+const ROLE_OPTIONS = ['對外聯絡', '祕書', '財務', '總務', '公關'] as const
+
+/** 新增表單預設值（對齊參考稿） */
+const FORM_SEED = {
+  name: '',
+  role: '對外聯絡',
+  by: '林明德',
+  term: '2026-2028',
+}
+
+/** 名單項目（顯示用，由 API 的 AppointmentOut 轉換） */
+interface RosterItem {
   id: number
+  name: string
+  surname: string
+  role: string
+  by: string
+  term: string
 }
 
 /** 把 API 紀錄轉成卡片顯示型（頭像取姓名首字） */
@@ -141,9 +154,9 @@ function AppointmentCard({
 }
 
 export function AppointmentsPage() {
-  const [division, setDivision] = useState(mockDivisions[0].name)
+  const [division, setDivision] = useState('')
   const [formOpen, setFormOpen] = useState(true)
-  const [form, setForm] = useState(appointmentFormSeed)
+  const [form, setForm] = useState({ ...FORM_SEED })
   const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [writeError, setWriteError] = useState<string | null>(null)
@@ -154,6 +167,13 @@ export function AppointmentsPage() {
     error: summaryError,
     reload: reloadSummary,
   } = useAsync<AppointmentSummary[]>(() => fetchAppointmentSummary(), [])
+
+  // 分區分頁與顏色皆來自 summary（API），不再依賴 mock
+  const divisionTabs = summary ?? []
+  // 首次載入後把預設分區設為第一區（參考稿預設東區）
+  useEffect(() => {
+    if (!division && divisionTabs.length > 0) setDivision(divisionTabs[0].division_name)
+  }, [division, divisionTabs])
 
   const meta = summary?.find((s) => s.division_name === division) ?? null
   const divisionId = meta?.division_id
@@ -168,8 +188,12 @@ export function AppointmentsPage() {
     [divisionId],
   )
 
-  const roster: RosterItem[] = (records ?? []).map(toRosterItem)
-  const color = mockDivisions.find((d) => d.name === division)?.color ?? '#8B1A1A'
+  // 名單卡只列「指派幹部」；會長/副會長由選舉產生，只在當選資訊顯示
+  const ELECTED_POSITIONS = ['會長', '副會長']
+  const roster: RosterItem[] = (records ?? [])
+    .filter((r) => !ELECTED_POSITIONS.includes(r.position))
+    .map(toRosterItem)
+  const color = summary?.find((r) => r.division_name === division)?.color ?? '#8B1A1A'
 
   const elected = meta?.president
     ? `當選會長：${meta.president}${meta.vice_president ? ` · 副會長：${meta.vice_president}` : ''} · 任期 ${meta.term}`
@@ -177,13 +201,13 @@ export function AppointmentsPage() {
 
   const pageError = listError ?? summaryError ?? writeError
 
-  const patch = (key: keyof typeof appointmentFormSeed, value: string) =>
+  const patch = (key: keyof typeof FORM_SEED, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }))
 
   /** 收合並清空表單（放棄編輯） */
   const closeForm = () => {
     setFormOpen(false)
-    setForm(appointmentFormSeed)
+    setForm(FORM_SEED)
     setEditingId(null)
   }
 
@@ -219,7 +243,7 @@ export function AppointmentsPage() {
       if (editingId != null) await updateAppointment(editingId, body)
       else await createAppointment(body)
       setFormOpen(false)
-      setForm(appointmentFormSeed)
+      setForm(FORM_SEED)
       setEditingId(null)
       await Promise.all([reloadList(), reloadSummary()])
     } catch (e) {
@@ -237,7 +261,7 @@ export function AppointmentsPage() {
       await deleteAppointment(item.id)
       if (editingId === item.id) {
         setFormOpen(false)
-        setForm(appointmentFormSeed)
+        setForm(FORM_SEED)
         setEditingId(null)
       }
       await Promise.all([reloadList(), reloadSummary()])
@@ -247,11 +271,11 @@ export function AppointmentsPage() {
   }
 
   // 編輯紀錄的崗位不在預設選項時，補進下拉以免顯示空白
-  const roleOptions: readonly string[] = (appointmentRoles as readonly string[]).includes(
+  const roleOptions: readonly string[] = (ROLE_OPTIONS as readonly string[]).includes(
     form.role,
   )
-    ? appointmentRoles
-    : [form.role, ...appointmentRoles]
+    ? ROLE_OPTIONS
+    : [form.role, ...ROLE_OPTIONS]
 
   return (
     <AdminLayout title="幹部指派">
@@ -274,18 +298,18 @@ export function AppointmentsPage() {
 
       {/* 分區膠囊分頁 */}
       <div className="mt-[2px] inline-flex items-center gap-1 rounded-[10px] border border-border bg-card p-2">
-        {mockDivisions.map((d) => (
+        {divisionTabs.map((d) => (
           <button
-            key={d.id}
+            key={d.division_id}
             type="button"
-            onClick={() => setDivision(d.name)}
+            onClick={() => setDivision(d.division_name)}
             className={`h-8 rounded-lg px-4 text-[14px] leading-none transition-colors ${
-              division === d.name
+              division === d.division_name
                 ? 'bg-primary font-medium text-white'
                 : 'text-ink-soft hover:bg-light-bg'
             }`}
           >
-            {d.name}
+            {d.division_name}
           </button>
         ))}
       </div>

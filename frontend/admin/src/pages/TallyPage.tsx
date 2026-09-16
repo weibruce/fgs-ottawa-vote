@@ -18,12 +18,12 @@ import {
   TableWrap,
 } from '../components/ui'
 import { IconRefresh } from '../components/icons'
-import { DIVISION_COLORS, mockDivisions } from '../data/mock'
+import { listDivisions } from '../api/divisions'
 import { fetchTally, fetchTallyOverview, fetchVoters } from '../api/tally'
 import { fetchSettings } from '../api/settings'
 import { listRounds } from '../api/rounds'
 import { useAsync, usePolling } from '../hooks/useAsync'
-import type { TallyOut, VoterDetail } from '../api/types'
+import type { TallyOut, VoterDetail, DivisionOut } from '../api/types'
 
 /* ── 常數 ── */
 
@@ -176,6 +176,10 @@ export function TallyPage() {
   )
   const overview = overviewState.data
 
+  // 分區清單（名稱 + 標識色）：分頁與顏色一律來自 API，載入中不借用 mock
+  const divisionsState = useAsync<DivisionOut[]>(() => listDivisions(), [])
+  const divisions = divisionsState.data ?? []
+
   const divRow = overview?.find((r) => r.name === division)
   const divId = divRow?.division_id ?? null
 
@@ -220,13 +224,14 @@ export function TallyPage() {
   // enabled 僅在首次 render 生效，而輪次是非同步載入；固定啟用，未取得輪次時 reloadAll 直接返回
   const polling = usePolling(reloadAll, intervalSec * 1000)
 
-  // 分頁列：優先用 API 回傳的分區，載入中沿用既有五分區名稱以維持版面骨架
+  // 分頁列：優先用計票總覽的分區，其次用分區清單（兩者都來自 API）
   const divisionTabs = useMemo(() => {
-    const names = overview?.map((r) => r.name) ?? mockDivisions.map((d) => d.name)
+    const names = overview?.map((r) => r.name) ?? divisions.map((d) => d.name)
     return [ALL_DIVISIONS, ...names]
-  }, [overview])
+  }, [overview, divisions])
 
-  const accent = divRow?.color ?? DIVISION_COLORS[division.charAt(0)] ?? '#8b1a1a'
+  const accent =
+    divRow?.color ?? divisions.find((d) => d.name === division)?.color ?? '#8b1a1a'
 
   const t: TallyView = useMemo(() => {
     if (division === ALL_DIVISIONS) {

@@ -11,7 +11,6 @@ import { useMemo, useState } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
 import { Button, Card, DivisionTag, Field, PageIntro } from '../components/ui'
 import { IconEdit, IconPlus, IconTrash } from '../components/icons'
-import { DIVISION_COLORS } from '../data/mock'
 import { useAsync } from '../hooks/useAsync'
 import { apiError } from '../api/client'
 import { listCandidates, createCandidate, updateCandidate, deleteCandidate } from '../api/candidates'
@@ -68,7 +67,11 @@ export function CandidatesPage() {
     const cur = rounds.find((r) => r.status === 'active') ?? rounds[0] ?? null
     const list = await listCandidates(undefined, cur?.id)
     const divIdByName: Record<string, number> = {}
-    for (const d of divisions) divIdByName[d.name] = d.id
+    const divColorByName: Record<string, string> = {}
+    for (const d of divisions) {
+      divIdByName[d.name] = d.id
+      divColorByName[d.name] = d.color
+    }
 
     const perDiv: Record<string, number> = {}
     const rowsMapped: CandRow[] = list.map((c) => {
@@ -86,11 +89,12 @@ export function CandidatesPage() {
         votes: c.vote_count ?? 0,
       }
     })
-    return { rows: rowsMapped, divIdByName }
+    return { rows: rowsMapped, divIdByName, divColorByName }
   }, [])
 
   const rows: CandRow[] = data?.rows ?? []
   const divIdByName = data?.divIdByName ?? {}
+  const divColorByName = data?.divColorByName ?? {}
   const divisionOptions = Object.keys(divIdByName)
   // 參考稿預設停在「東區」分頁
   const [tab, setTab] = useState<string>('東區')
@@ -252,7 +256,7 @@ export function CandidatesPage() {
                   </div>
                 </td>
                 <td className="h-[69px] px-5 py-0">
-                  <DivisionTag name={c.division} color={DIVISION_COLORS[c.division.replace(/區$/, '')]} />
+                  <DivisionTag name={c.division} color={divColorByName[c.division]} />
                 </td>
                 <td className="h-[69px] px-5 py-0 text-[14px] text-ink-soft">{c.position}</td>
                 <td className="h-[69px] px-5 py-0 text-[14px] text-ink-soft">{c.slogan}</td>

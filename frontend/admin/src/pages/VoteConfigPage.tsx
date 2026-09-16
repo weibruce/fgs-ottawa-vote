@@ -29,7 +29,6 @@ import { listRounds, updateRound } from '../api/rounds'
 import { fetchSettings, updateSettings, fetchQrBlob } from '../api/settings'
 import { fetchDivisionOverview } from '../api/divisions'
 import { fetchDashboardSummary } from '../api/dashboard'
-import { CANDIDATE_ORDER_OPTIONS, QR_MODULES } from '../data/mock.voteconfig'
 
 /** ISO 字串 → 參考稿顯示格式 `2026-09-04 10:00` */
 function fmtDateTime(iso: string | null | undefined): string {
@@ -39,6 +38,24 @@ function fmtDateTime(iso: string | null | undefined): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
+
+/** 「候選人排序」下拉選項（純 UI 選項；輪次 API 尚未提供排序欄位） */
+const CANDIDATE_ORDER_OPTIONS = [
+  { value: 'fixed', label: '固定順序' },
+  { value: 'random', label: '隨機排序' },
+]
+
+/** QR 載入中的裝飾圖樣（真實 QR 由 /admin/settings/qr 產生，載入完成即取代） */
+const QR_MODULES: readonly (readonly number[])[] = [
+  [0, 1, 0, 0, 1, 0, 0, 0],
+  [1, 1, 0, 1, 0, 1, 0, 1],
+  [0, 0, 0, 1, 0, 0, 0, 1],
+  [0, 1, 1, 1, 1, 0, 1, 0],
+  [0, 0, 0, 1, 1, 0, 0, 0],
+  [0, 0, 1, 1, 1, 1, 0, 1],
+  [0, 1, 1, 0, 0, 1, 0, 1],
+  [1, 0, 0, 0, 1, 1, 1, 1],
+]
 
 /* ── 版面常數（皆量自參考稿） ── */
 

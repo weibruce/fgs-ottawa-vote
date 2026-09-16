@@ -85,6 +85,8 @@ def appointment_summary(
         president = next((a.name for a in items if a.position == PRESIDENT), None)
         vice_president = next((a.name for a in items if a.position == VICE_PRESIDENT), None)
         term = items[0].term if items else ""
+        # 「已指派幹部」不含會長/副會長（那是由選舉產生、記錄在同一張表僅供彙總顯示）
+        appointed = [a for a in items if a.position not in (PRESIDENT, VICE_PRESIDENT)]
         summary.append(
             AppointmentSummaryOut(
                 division_id=d.id,
@@ -93,7 +95,7 @@ def appointment_summary(
                 president=president,
                 vice_president=vice_president,
                 term=term or "",
-                appointed_count=len(items),
+                appointed_count=len(appointed),
                 is_confirmed=bool(items) and all(a.is_confirmed for a in items),
             )
         )

@@ -17,7 +17,6 @@ import {
   IconTally,
 } from '../components/icons'
 import type { IconProps } from '../components/icons'
-import { mockExports } from '../data/mock'
 import { apiError } from '../api/client'
 import { listDivisions } from '../api/divisions'
 import { listRounds } from '../api/rounds'
@@ -194,6 +193,28 @@ function ExportButton({
   )
 }
 
+/** 匯出項目目錄（純 UI 目錄：後端 /exports/{kind} 為固定集合，非動態資料） */
+const EXPORT_CARDS: { title: string; desc: string; formats: string[] }[] = [
+  {
+    title: '各分區投票明細',
+    desc: '姓名、卡號、所屬分區、是否代投、投票時間、投了誰（匿名模式下不顯示身份）',
+    formats: ['Excel', 'CSV'],
+  },
+  { title: '第二輪投票明細', desc: '總會副會長選舉完整投票錄', formats: ['Excel', 'CSV'] },
+  { title: '幹部指派名單', desc: '按分區匯出各區幹部任命資料', formats: ['Excel'] },
+  {
+    title: '五區彙總統計',
+    desc: '各分區投票率、得票分布、平票情況彙總報表',
+    formats: ['Excel', 'PDF'],
+  },
+  {
+    title: '會員名單',
+    desc: '包含卡號、簡繁雙存姓名、分區、手機的完整名單',
+    formats: ['Excel', 'CSV'],
+  },
+  { title: '完整選舉報告', desc: '包含全部輪次、結果、指派的終局報告文件', formats: ['PDF'] },
+]
+
 export function ExportPage() {
   const [division, setDivision] = useState('all')
   const [round, setRound] = useState('all')
@@ -271,7 +292,7 @@ export function ExportPage() {
 
       {/* ── 匯出項目（2 欄 × 3 列） ── */}
       <div className="grid gap-4 md:grid-cols-2">
-        {mockExports.cards.map((c) => {
+        {EXPORT_CARDS.map((c) => {
           const { Icon, size } = CARD_ICON[c.title] ?? { Icon: IconFileText, size: 25 }
           return (
             <Card key={c.title} className="p-5">
