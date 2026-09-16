@@ -1,6 +1,57 @@
 """輪次管理 Pydantic schema"""
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel, Field
+
+
+class TieCandidateOut(BaseModel):
+    """平票候選人（同分最高票）"""
+
+    id: int
+    name: str
+    vote_count: int
+
+
+class TieDivisionOut(BaseModel):
+    """出現平票的分區（供 confirm 回傳提示）"""
+
+    division_id: int
+    name: str
+    color: str = ""
+    tie_candidates: list[TieCandidateOut] = Field(default_factory=list)
+
+
+class DivisionProgressOut(BaseModel):
+    """單一分區的計票進度 + 平票偵測"""
+
+    division_id: int
+    name: str
+    color: str
+    total_members: int
+    voted_count: int
+    progress_pct: int
+    is_tie: bool
+    tie_candidates: list[TieCandidateOut] = Field(default_factory=list)
+
+
+class RoundProgressOut(BaseModel):
+    """輪次各分區進度"""
+
+    round_id: int
+    divisions: list[DivisionProgressOut] = Field(default_factory=list)
+
+
+class RunoffCreate(BaseModel):
+    """啟動加賽輪次"""
+
+    division_id: int = Field(..., description="加賽所在分區")
+    candidate_ids: list[int] = Field(..., min_length=1, description="平票候選人 ID（必須同分最高票）")
+    min_votes: int | None = Field(None, ge=1, description="加賽每人最少票數（預設 1）")
+    max_votes: int | None = Field(None, ge=1, description="加賽每人最多票數（預設 1）")
+    voter_scope: Literal["all", "voted"] | None = Field(
+        None, description="投票人範圍：all=本區全部會員 / voted=僅原投票人"
+    )
+    max_runoffs: int | None = Field(None, ge=1, description="加賽次數上限（暫存於備註）")
 
 
 class RoundCreate(BaseModel):
@@ -49,6 +100,9 @@ class RoundOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     candidate_ids: list[int] = []
+    # 平票提示（confirm 時填入；其他端點預設無平票）
+    has_tie: bool = False
+    tie_divisions: list[TieDivisionOut] = Field(default_factory=list)
 
     class Config:
         from_attributes = True

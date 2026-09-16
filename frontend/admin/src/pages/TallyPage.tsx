@@ -3,8 +3,11 @@
  * 版面數值皆由參考稿逐像素量測（1920×940、DPR=1）：
  *   說明列 y95..133｜膠囊分頁 y157..206｜實時結果卡 y231..759｜投票人明細卡 y784..
  *   卡頭色帶 110px（primary 5%）｜候選人列距 64px、進度條 12px
+ *
+ * 資料來源：/admin/tally（單區）、/admin/tally/overview（五區）、/admin/tally/voters（明細）
+ * 輪詢間隔取自 /admin/settings.poll_interval_sec（讀不到預設 2 秒）。
  */
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
 import {
   Card,
@@ -15,14 +18,22 @@ import {
   TableWrap,
 } from '../components/ui'
 import { IconRefresh } from '../components/icons'
-import { mockTally, mockDivisions, mockCandidates, DIVISION_COLORS } from '../data/mock'
+import { DIVISION_COLORS, mockDivisions } from '../data/mock'
+import { fetchTally, fetchTallyOverview, fetchVoters } from '../api/tally'
+import { fetchSettings } from '../api/settings'
+import { listRounds } from '../api/rounds'
+import { useAsync, usePolling } from '../hooks/useAsync'
+import type { TallyOut, VoterDetail } from '../api/types'
 
-/* ── 資料層（接 API 後替換 tallyFor 的實作即可，JSX 不需改動） ── */
+/* ── 常數 ── */
 
 /** 「五區總覽」不是分區，而是所有分區的彙總 */
 const ALL_DIVISIONS = '五區總覽'
 
-const DIVISION_TABS = [ALL_DIVISIONS, ...mockDivisions.map((d) => d.name)]
+/** 選舉名稱（契約的 TallyOut 未提供，版面固定文案） */
+const TALLY_TITLE = '會長/副會長選舉'
+
+const ANONYMOUS_NOTE = '匿名模式下不顯示投票人身份'
 
 interface TallyCandidate {
   rank: number
@@ -49,56 +60,21 @@ interface TallyView {
   detailRows: TallyDetailRow[]
 }
 
-/**
- * 取得指定分頁的即時計票資料。
- * 東區直接使用參考稿 mockTally；其餘分區由 mockDivisions／mockCandidates 推導，
- * 五區總覽則彙總五分區。接後端 API 時只需把這個函式改成 fetch。
- */
-function tallyFor(division: string): TallyView {
-  if (division === mockTally.division) return mockTally
+/** ISO 時間 → `YYYY-MM-DD HH:mm:ss`（與參考稿格式一致） */
+function formatTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
 
-  if (division === ALL_DIVISIONS) {
-    const voted = mockDivisions.reduce((sum, d) => sum + d.voted, 0)
-    const total = mockDivisions.reduce((sum, d) => sum + d.members, 0)
-    return {
-      title: mockTally.title,
-      voted,
-      total,
-      pct: Math.round((voted / total) * 100),
-      candidates: mockDivisions.map((d) => ({
-        rank: d.id,
-        name: d.name,
-        label: '分區票數',
-        votes: d.voted,
-      })),
-      detailNote: mockTally.detailNote,
-      detailRows: mockTally.detailRows,
-    }
-  }
-
-  const info = mockDivisions.find((d) => d.name === division)
-  if (!info) {
-    return {
-      title: mockTally.title,
-      voted: 0,
-      total: 0,
-      pct: 0,
-      candidates: [],
-      detailNote: mockTally.detailNote,
-      detailRows: [],
-    }
-  }
-
+function toDetailRow(v: VoterDetail): TallyDetailRow {
   return {
-    title: mockTally.title,
-    voted: info.voted,
-    total: info.members,
-    pct: Math.round((info.voted / info.members) * 100),
-    candidates: mockCandidates
-      .filter((c) => c.division === division)
-      .map((c) => ({ rank: c.rank, name: c.name, label: c.position, votes: c.votes })),
-    detailNote: mockTally.detailNote,
-    detailRows: [],
+    card: v.member_no,
+    name: v.member_name,
+    proxy: v.is_proxy ? v.proxy_note || '是' : '—',
+    votedFor: v.voted_for.length > 0 ? v.voted_for.join('、') : '—',
+    time: formatTime(v.voted_at),
   }
 }
 
@@ -179,10 +155,132 @@ function CandidateRow({
 /* ── 頁面 ── */
 
 export function TallyPage() {
-  const [division, setDivision] = useState(mockTally.division)
-  const t = tallyFor(division)
-  const accent = DIVISION_COLORS[division.charAt(0)] ?? '#8b1a1a'
+  const [division, setDivision] = useState('東區')
+  const [refreshError, setRefreshError] = useState<string | null>(null)
+
+  // 當前輪次（優先 active，其次最後一個）與輪詢間隔
+  const roundsState = useAsync(listRounds, [])
+  const round =
+    roundsState.data?.find((r) => r.status === 'active') ??
+    roundsState.data?.[roundsState.data.length - 1] ??
+    null
+  const roundId = round?.id ?? null
+
+  const settingsState = useAsync(fetchSettings, [])
+  const intervalSec = settingsState.data?.poll_interval_sec ?? 2
+
+  // 五區彙總（同時提供分區名稱 → id 對照）
+  const overviewState = useAsync(
+    () => (roundId !== null ? fetchTallyOverview(roundId) : Promise.resolve([])),
+    [roundId],
+  )
+  const overview = overviewState.data
+
+  const divRow = overview?.find((r) => r.name === division)
+  const divId = divRow?.division_id ?? null
+
+  // 單區結果 + 投票人明細
+  const tallyState = useAsync<TallyOut | null>(
+    () => (roundId !== null && divId !== null ? fetchTally(roundId, divId) : Promise.resolve(null)),
+    [roundId, divId],
+  )
+  const votersState = useAsync(
+    () => (roundId !== null && divId !== null ? fetchVoters(roundId, divId) : Promise.resolve(null)),
+    [roundId, divId],
+  )
+
+  const tally = tallyState.data
+  const voters = votersState.data
+
+  // 靜默重新載入（輪詢 / 重新整理）：不顯示 loading，失敗保留舊資料
+  const reloadAll = useCallback(async () => {
+    if (roundId === null) return
+    try {
+      const ov = await fetchTallyOverview(roundId)
+      overviewState.setData(ov)
+      if (division !== ALL_DIVISIONS) {
+        const row = ov.find((r) => r.name === division)
+        if (row) {
+          const [t, v] = await Promise.all([
+            fetchTally(roundId, row.division_id),
+            fetchVoters(roundId, row.division_id),
+          ])
+          tallyState.setData(t)
+          votersState.setData(v)
+        }
+      }
+      setRefreshError(null)
+    } catch {
+      setRefreshError('重新整理失敗，將於下個週期重試')
+    }
+    // setData 為 useState setter，穩定不變
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roundId, division])
+
+  // enabled 僅在首次 render 生效，而輪次是非同步載入；固定啟用，未取得輪次時 reloadAll 直接返回
+  const polling = usePolling(reloadAll, intervalSec * 1000)
+
+  // 分頁列：優先用 API 回傳的分區，載入中沿用既有五分區名稱以維持版面骨架
+  const divisionTabs = useMemo(() => {
+    const names = overview?.map((r) => r.name) ?? mockDivisions.map((d) => d.name)
+    return [ALL_DIVISIONS, ...names]
+  }, [overview])
+
+  const accent = divRow?.color ?? DIVISION_COLORS[division.charAt(0)] ?? '#8b1a1a'
+
+  const t: TallyView = useMemo(() => {
+    if (division === ALL_DIVISIONS) {
+      const rows = overview ?? []
+      const voted = rows.reduce((sum, r) => sum + r.voted_count, 0)
+      const total = rows.reduce((sum, r) => sum + r.total_members, 0)
+      return {
+        title: TALLY_TITLE,
+        voted,
+        total,
+        pct: total > 0 ? Math.round((voted / total) * 100) : 0,
+        candidates: rows.map((r, i) => ({
+          rank: i + 1,
+          name: r.name,
+          label: '分區票數',
+          votes: r.voted_count,
+        })),
+        detailNote: '五區彙總 · 請切換分區查看投票人明細',
+        detailRows: [],
+      }
+    }
+
+    if (!tally) {
+      return {
+        title: TALLY_TITLE,
+        voted: 0,
+        total: 0,
+        pct: 0,
+        candidates: [],
+        detailNote: ANONYMOUS_NOTE,
+        detailRows: [],
+      }
+    }
+
+    const items = voters?.anonymous ? [] : voters?.items ?? []
+    return {
+      title: TALLY_TITLE,
+      voted: tally.voted_count,
+      total: tally.total_members,
+      pct: tally.progress_pct,
+      candidates: tally.candidates.map((c, i) => ({
+        rank: i + 1,
+        name: c.name,
+        label: c.title,
+        votes: c.vote_count,
+      })),
+      detailNote: tally.round.anonymous ? ANONYMOUS_NOTE : `共 ${items.length} 筆投票紀錄`,
+      detailRows: items.map(toDetailRow),
+    }
+  }, [division, overview, tally, voters])
+
   const maxVotes = t.candidates.reduce((max, c) => Math.max(max, c.votes), 0)
+  const error =
+    roundsState.error || overviewState.error || tallyState.error || votersState.error || refreshError
 
   return (
     <AdminLayout title="實時計票">
@@ -191,9 +289,9 @@ export function TallyPage() {
           <div className="flex items-center gap-2">
             <span className="inline-flex h-[38px] items-center gap-2 rounded-lg border border-border bg-card px-3 text-[12px] text-ink-soft">
               <span className="h-2 w-2 shrink-0 rounded-full bg-[#10b981]" />
-              輪詢中 · 2s
+              輪詢中 · {intervalSec}s
             </span>
-            <Button variant="outline" className="px-3">
+            <Button variant="outline" className="px-3" onClick={() => polling.refresh()}>
               <IconRefresh size={16} />
               重新整理
             </Button>
@@ -203,9 +301,15 @@ export function TallyPage() {
         實時計票面板 · 分區切換或五區總覽
       </PageIntro>
 
+      {error && (
+        <div className="mb-4 rounded-lg border border-[#e6c9c9] bg-[#fbf1f1] px-4 py-3 text-[13px] text-primary">
+          {error}
+        </div>
+      )}
+
       {/* 膠囊分頁列 */}
       <div className="mt-1 mb-6 inline-flex gap-[5px] rounded-[10px] border border-border bg-card p-2">
-        {DIVISION_TABS.map((name) => {
+        {divisionTabs.map((name) => {
           const active = name === division
           return (
             <button
@@ -278,7 +382,11 @@ export function TallyPage() {
             {t.detailRows.length === 0 && (
               <tr>
                 <td colSpan={5} className="py-8 text-center text-[13px] text-gray">
-                  此分區尚無投票明細
+                  {tallyState.loading || votersState.loading
+                    ? '載入中…'
+                    : division === ALL_DIVISIONS
+                      ? '請切換分區查看投票人明細'
+                      : '此分區尚無投票明細'}
                 </td>
               </tr>
             )}

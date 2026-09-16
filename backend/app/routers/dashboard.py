@@ -93,6 +93,9 @@ def dashboard_summary(db: Session = Depends(get_db), _admin=Depends(get_current_
             "closes_at": cur.closes_at.isoformat() if cur.closes_at else None,
         }
 
+    vote_rate = round(total_votes / total_members * 100, 1) if total_members else 0.0
+    proxy_pct = round(total_proxy / total_votes * 100, 1) if total_votes else 0.0
+
     return {
         "current_round": current_round,
         "stats": {
@@ -100,6 +103,8 @@ def dashboard_summary(db: Session = Depends(get_db), _admin=Depends(get_current_
             "votes_cast": total_votes,
             "candidate_total": cand_total,
             "proxy_votes": total_proxy,
+            "vote_rate_pct": vote_rate,
+            "proxy_pct": proxy_pct,
         },
         "divisions": division_stats,
     }

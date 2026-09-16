@@ -19,6 +19,7 @@ from app.database import Base
 from app.models import (  # noqa: F401  確保所有模型註冊到 Base.metadata
     Admin, Division, Candidate, Round, RoundCandidate,
     Member, Vote, VoteCandidate, Appointment,
+    AppSetting, ExportLog, ActivityLog,
 )
 from app.config import get_settings
 

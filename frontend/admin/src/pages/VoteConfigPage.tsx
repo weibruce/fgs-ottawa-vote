@@ -10,7 +10,7 @@
  * 不修改 src/components/ui.tsx（已於回報中列出差異，供主控決定是否統一調整共用檔）。
  * 資料一律由常數驅動，之後可直接換成 API。
  */
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
 import { Card, CardHeader, Button } from '../components/ui'
@@ -23,13 +23,22 @@ import {
   IconQrCode,
   IconRefresh,
 } from '../components/icons'
-import { mockVoteConfig } from '../data/mock'
-import {
-  VOTE_ROUND_OPTIONS,
-  CANDIDATE_ORDER_OPTIONS,
-  PARTICIPATION_ROWS,
-  QR_MODULES,
-} from '../data/mock.voteconfig'
+import { useAsync } from '../hooks/useAsync'
+import { apiError } from '../api/client'
+import { listRounds, updateRound } from '../api/rounds'
+import { fetchSettings, updateSettings, fetchQrBlob } from '../api/settings'
+import { fetchDivisionOverview } from '../api/divisions'
+import { fetchDashboardSummary } from '../api/dashboard'
+import { CANDIDATE_ORDER_OPTIONS, QR_MODULES } from '../data/mock.voteconfig'
+
+/** ISO 字串 → 參考稿顯示格式 `2026-09-04 10:00` */
+function fmtDateTime(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
 
 /* ── 版面常數（皆量自參考稿） ── */
 
@@ -44,22 +53,103 @@ const HEAD_STATS = 'px-5 pt-[20px] pb-[24px] -mb-[18px]' // 標題 14px、標題
 /* ── 頁面 ── */
 
 export function VoteConfigPage() {
-  const c = mockVoteConfig
-  const [round, setRound] = useState(VOTE_ROUND_OPTIONS[0].value)
+  // 輪次（當前 active）、系統設定（入口連結）、分區進度、儀表板（代理投票數）
+  const { data, error: loadError, reload } = useAsync(async () => {
+    const [rounds, settings, divisions, summary] = await Promise.all([
+      listRounds(),
+      fetchSettings(),
+      fetchDivisionOverview(),
+      fetchDashboardSummary(),
+    ])
+    const cur = rounds.find((r) => r.status === 'active') ?? rounds[0] ?? null
+    return { rounds, cur, settings, divisions, summary }
+  }, [])
+
+  const [round, setRound] = useState('')
   const [order, setOrder] = useState(CANDIDATE_ORDER_OPTIONS[0].value)
-  const [minVotes, setMinVotes] = useState(String(c.minVotes))
-  const [maxVotes, setMaxVotes] = useState(String(c.maxVotes))
-  const [start, setStart] = useState(c.start)
-  const [end, setEnd] = useState(c.end)
-  const [anonymous, setAnonymous] = useState(c.anonymous)
-  const [url, setUrl] = useState(c.url)
+  const [minVotes, setMinVotes] = useState('1')
+  const [maxVotes, setMaxVotes] = useState('2')
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState('')
+  const [anonymous, setAnonymous] = useState(true)
+  const [url, setUrl] = useState('')
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [qrSrc, setQrSrc] = useState<string | null>(null)
 
-  const save = useCallback(() => {
-    setSaved(true)
-    window.setTimeout(() => setSaved(false), 2000)
-  }, [])
+  // 資料載入後把值填進表單（只做一次，避免覆蓋使用者編輯）
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => {
+    if (!data || hydrated) return
+    if (data.cur) {
+      setRound(String(data.cur.id))
+      setMinVotes(String(data.cur.min_votes))
+      setMaxVotes(String(data.cur.max_votes))
+      setAnonymous(data.cur.anonymous)
+      setStart(fmtDateTime(data.cur.opens_at))
+      setEnd(fmtDateTime(data.cur.closes_at))
+    }
+    if (data.settings.vote_base_url) setUrl(data.settings.vote_base_url)
+    setHydrated(true)
+  }, [data, hydrated])
+
+  // 入口連結 → 真實 QR Code（PNG blob）；失敗時退回原本的圖樣
+  useEffect(() => {
+    if (!url) return
+    let alive = true
+    fetchQrBlob(url)
+      .then((u) => {
+        if (alive) setQrSrc(u)
+      })
+      .catch(() => {
+        if (alive) setQrSrc(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [url])
+
+  const roundOptions = (data?.rounds ?? []).map((r) => ({
+    value: String(r.id),
+    label: r.name,
+  }))
+
+  const participation = (() => {
+    const divs = data?.divisions ?? []
+    const totalMembers = divs.reduce((a, d) => a + d.member_count, 0)
+    const totalVoted = divs.reduce((a, d) => a + d.voted_count, 0)
+    const proxy = data?.summary?.stats.proxy_votes ?? 0
+    const pct = totalMembers ? ((totalVoted / totalMembers) * 100).toFixed(1) : '0.0'
+    return [
+      { label: '總會員', value: `${totalMembers} 人` },
+      { label: '已投票', value: `${totalVoted} 人 (${pct}%)` },
+      { label: '代理投票', value: `${proxy} 筆` },
+      { label: '非法嘗試', value: '0 次' },
+    ]
+  })()
+
+  const save = useCallback(async () => {
+    const target = data?.cur
+    if (!target) return
+    setSaveError(null)
+    try {
+      await updateRound(target.id, {
+        min_votes: Number(minVotes) || 0,
+        max_votes: Number(maxVotes) || 1,
+        anonymous,
+        notes: target.notes,
+      })
+      if (url !== data?.settings.vote_base_url) {
+        await updateSettings({ vote_base_url: url })
+      }
+      setSaved(true)
+      window.setTimeout(() => setSaved(false), 2000)
+      await reload()
+    } catch (e) {
+      setSaveError(apiError(e))
+    }
+  }, [data, minVotes, maxVotes, anonymous, url, reload])
 
   const copy = useCallback(() => {
     void navigator.clipboard?.writeText(url)
@@ -73,6 +163,12 @@ export function VoteConfigPage() {
       <p className="text-[14px] leading-[21px] text-gray-deep mb-6">
         配置當前輪次投票參數、投票視窗及統一入口連結
       </p>
+
+      {loadError && (
+        <div className="mb-4 rounded-lg border border-danger/30 bg-danger-bg px-4 py-3 text-[14px] text-danger">
+          載入投票配置失敗：{loadError}
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-6 items-start">
         {/* ── 左欄：基本參數 ── */}
@@ -90,7 +186,7 @@ export function VoteConfigPage() {
                 <Select
                   value={round}
                   onChange={setRound}
-                  options={VOTE_ROUND_OPTIONS}
+                  options={roundOptions.length ? roundOptions : [{ value: '', label: '尚未建立輪次' }]}
                 />
               </FormField>
 
@@ -158,13 +254,18 @@ export function VoteConfigPage() {
                 </span>
               </button>
 
-              <Button
-                onClick={save}
-                className="h-9 px-[18px] rounded-md text-[14px]"
-              >
-                {saved ? <IconCheck size={14} strokeWidth={2} /> : <PlayIcon />}
-                儲存並套用
-              </Button>
+              <div className="flex items-center gap-3">
+                {saveError && (
+                  <span className="text-[12px] leading-none text-danger">{saveError}</span>
+                )}
+                <Button
+                  onClick={save}
+                  className="h-9 px-[18px] rounded-md text-[14px]"
+                >
+                  {saved ? <IconCheck size={14} strokeWidth={2} /> : <PlayIcon />}
+                  儲存並套用
+                </Button>
+              </div>
             </div>
           </div>
         </Card>
@@ -185,7 +286,11 @@ export function VoteConfigPage() {
             <div className="px-6 pb-6">
               {/* QR 白底區塊 */}
               <div className="h-[210px] rounded-md border border-border bg-white flex items-center justify-center">
-                <QrPattern size={160} />
+                {qrSrc ? (
+                  <img src={qrSrc} alt="投票入口 QR Code" className="w-[160px] h-[160px]" />
+                ) : (
+                  <QrPattern size={160} />
+                )}
               </div>
 
               {/* 統一入口連結 */}
@@ -217,7 +322,7 @@ export function VoteConfigPage() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => setUrl(c.url)}
+                  onClick={() => void reload()}
                   className="h-[34px] rounded-md gap-[6px] text-[12px] font-normal bg-white"
                 >
                   <IconRefresh size={14} strokeWidth={1.9} />
@@ -242,7 +347,7 @@ export function VoteConfigPage() {
               }
             />
             <dl className="px-5 pb-[18px]">
-              {PARTICIPATION_ROWS.map((r) => (
+              {participation.map((r) => (
                 <div key={r.label} className="flex items-center h-5 text-[12px]">
                   <dt className="text-gray-deep">{r.label}：</dt>
                   <dd className="text-ink">{r.value}</dd>

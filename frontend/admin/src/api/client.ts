@@ -1,6 +1,9 @@
 /**
- * 管理後台 API client
- * Axios + Bearer token 認證
+ * 管理後台 API client（axios 實例 + token 管理 + 錯誤正規化）
+ *
+ * 各資源的呼叫函式分模組放在同目錄：
+ *   auth.ts divisions.ts candidates.ts members.ts tally.ts
+ *   rounds.ts appointments.ts exports.ts settings.ts dashboard.ts
  */
 import axios, { AxiosError } from 'axios'
 
@@ -20,108 +23,52 @@ export function clearToken() {
 
 export const api = axios.create({
   baseURL: import.meta.env.BASE_URL.replace(/\/$/, '') + '/api',
-  timeout: 10000,
+  timeout: 20000,
 })
 
-// Request interceptor: attach Bearer token
 api.interceptors.request.use((config) => {
   const token = getToken()
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
-// Response interceptor: 401 → clear token → redirect to login
+let redirecting = false
+
 api.interceptors.response.use(
   (res) => res,
   (err: AxiosError) => {
-    if (err.response?.status === 401) {
+    if (err.response?.status === 401 && !redirecting) {
+      redirecting = true
       clearToken()
-      window.location.href = window.location.pathname.startsWith('/admin')
-        ? '/admin/login'
-        : '/login'
+      const to = window.location.pathname.startsWith('/admin') ? '/admin/login' : '/login'
+      window.location.href = to
     }
     return Promise.reject(err)
   },
 )
 
-/** 管理員登入 */
-export function login(username: string, password: string) {
-  return api.post<{ access_token: string; token_type: string; username: string }>('/admin/login', {
-    username,
-    password,
-  })
+/** 直接回傳 response.data 的薄包裝（讓呼叫端拿到的就是資料本體） */
+export const http = {
+  get: async <T,>(url: string, config?: Parameters<typeof api.get>[1]): Promise<T> =>
+    (await api.get<T>(url, config)).data,
+  post: async <T,>(url: string, body?: unknown, config?: Parameters<typeof api.post>[2]): Promise<T> =>
+    (await api.post<T>(url, body, config)).data,
+  put: async <T,>(url: string, body?: unknown, config?: Parameters<typeof api.put>[2]): Promise<T> =>
+    (await api.put<T>(url, body, config)).data,
+  delete: async <T,>(url: string, config?: Parameters<typeof api.delete>[1]): Promise<T> =>
+    (await api.delete<T>(url, config)).data,
 }
 
-/** 輪次列表 */
-export function listRounds() {
-  return api.get<import('../types').RoundOut[]>('/admin/rounds')
-}
-
-/** 建立輪次 */
-export function createRound(body: import('../types').RoundCreate) {
-  return api.post<import('../types').RoundOut>('/admin/rounds', body)
-}
-
-/** 更新輪次 */
-export function updateRound(id: number, body: Partial<import('../types').RoundCreate>) {
-  return api.put<import('../types').RoundOut>(`/admin/rounds/${id}`, body)
-}
-
-/** 開啟投票 */
-export function activateRound(id: number) {
-  return api.post<import('../types').RoundOut>(`/admin/rounds/${id}/activate`)
-}
-
-/** 關閉投票 */
-export function closeRound(id: number) {
-  return api.post<import('../types').RoundOut>(`/admin/rounds/${id}/close`)
-}
-
-/** 確認計票 */
-export function confirmRound(id: number) {
-  return api.post<import('../types').RoundOut>(`/admin/rounds/${id}/confirm`)
-}
-
-/** 候選人列表 */
-export function listCandidates(divisionId?: number) {
-  const params: Record<string, unknown> = {}
-  if (divisionId) params.division_id = divisionId
-  return api.get<import('../types').CandidateOut[]>('/admin/candidates', { params })
-}
-
-/** 建立候選人 */
-export function createCandidate(body: {
-  division_id: number
-  name: string
-  title?: string
-  avatar_url?: string
-  slogan?: string
-  description?: string
-  term_count?: number
-  sort_order?: number
-  is_active?: boolean
-}) {
-  return api.post<import('../types').CandidateOut>('/admin/candidates', body)
-}
-
-/** 更新候選人 */
-export function updateCandidate(id: number, body: Partial<import('../types').CandidateOut>) {
-  return api.put<import('../types').CandidateOut>(`/admin/candidates/${id}`, body)
-}
-
-/** 刪除候選人 */
-export function deleteCandidate(id: number) {
-  return api.delete(`/admin/candidates/${id}`)
-}
-
-/** 分區列表 */
-export function listDivisions() {
-  return api.get<import('../types').DivisionOut[]>('/admin/divisions')
-}
-
-/** 儀表板總覽 */
-export function getDashboardSummary() {
-  return api.get<import('../types').DashboardSummary>('/admin/dashboard/summary')
+/** 把 axios 錯誤轉成可直接顯示的中文訊息 */
+export function apiError(e: unknown): string {
+  const err = e as AxiosError<{ detail?: string; error?: string }>
+  if (err?.response) {
+    return (
+      err.response.data?.detail ||
+      err.response.data?.error ||
+      `請求失敗（${err.response.status}）`
+    )
+  }
+  if (err?.request) return '無法連線到伺服器，請確認後端已啟動'
+  return (e as Error)?.message || '未知錯誤'
 }

@@ -8,14 +8,55 @@
  *   卡片高度拆解：1px 框 + 8px 標識色帶 + 84px 標頭(pt20/pb16，48px 標識方塊)
  *                + 68px 三格統計 + 56px 底部列(pt16/pb20) + 1px 框 = 218
  *
- * 資料來源：src/data/mock.ts 的 mockDivisions。
- * 之後接 API 時只需把 `useState(mockDivisions)` 換成遠端資料，卡片與統計皆由資料驅動。
+ * 資料來源：GET /api/admin/divisions/overview（見 docs/05_api_contract.md）。
  */
 import { useState } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
 import { Card, DivisionMark, Button, Field, PageIntro } from '../components/ui'
 import { IconEdit, IconMapPin, IconPlus } from '../components/icons'
-import { mockDivisions, type MockDivision } from '../data/mock'
+import { useAsync } from '../hooks/useAsync'
+import { apiError } from '../api/client'
+import {
+  fetchDivisionOverview,
+  createDivision,
+  updateDivision,
+  deleteDivision,
+} from '../api/divisions'
+import type { DivisionOverview } from '../api/types'
+
+/** 卡片實際需要的資料形狀（由 API 的 DivisionOverview 轉換而來） */
+interface DivisionCardData {
+  id: number
+  code: string
+  name: string
+  color: string
+  members: number
+  candidates: number
+  voted: number
+  status: string
+  address: string
+}
+
+const ROUND_STATUS_LABEL: Record<string, string> = {
+  draft: '未開始',
+  active: '進行中',
+  closed: '已結束',
+  locked: '已鎖定',
+}
+
+function toCardData(d: DivisionOverview): DivisionCardData {
+  return {
+    id: d.id,
+    code: d.code,
+    name: d.name,
+    color: d.color,
+    members: d.member_count,
+    candidates: d.candidate_count,
+    voted: d.voted_count,
+    status: ROUND_STATUS_LABEL[d.status] ?? d.status,
+    address: `佛光山總會 ${d.name}`,
+  }
+}
 
 /* ── 卡片中間三格統計：標籤與參考稿逐字一致，值由資料帶入 ── */
 type StatKey = 'members' | 'candidates' | 'voted'
@@ -55,39 +96,70 @@ function LockGlyph({ size = 18 }: { size?: number }) {
 }
 
 export function DivisionsPage() {
-  const [rows, setRows] = useState<MockDivision[]>(mockDivisions)
+  const { data, loading, error, reload } = useAsync(fetchDivisionOverview, [])
   const [lockedIds, setLockedIds] = useState<number[]>([])
   const [showModal, setShowModal] = useState(false)
-  const [editing, setEditing] = useState<MockDivision | null>(null)
+  const [editing, setEditing] = useState<DivisionCardData | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+
+  const rows: DivisionCardData[] = (data ?? []).map(toCardData)
+
+  const flash = (msg: string) => {
+    setToast(msg)
+    window.setTimeout(() => setToast(null), 2500)
+  }
 
   const startAdd = () => {
     setEditing(null)
     setShowModal(true)
   }
 
-  const startEdit = (d: MockDivision) => {
+  const startEdit = (d: DivisionCardData) => {
     setEditing(d)
     setShowModal(true)
   }
 
-  const toggleLock = (d: MockDivision) => {
+  const toggleLock = (d: DivisionCardData) => {
     setLockedIds((prev) =>
       prev.includes(d.id) ? prev.filter((id) => id !== d.id) : [...prev, d.id],
     )
   }
 
-  const remove = (d: MockDivision) => {
-    if (window.confirm(`確定刪除 ${d.name}？`)) {
-      setRows((prev) => prev.filter((x) => x.id !== d.id))
+  /** 新增或更新分區（呼叫後端後重新載入） */
+  const save = async (d: DivisionCardData) => {
+    try {
+      const body = {
+        code: d.code,
+        name: d.name,
+        color: d.color,
+        min_votes: 1,
+        max_votes: 2,
+        sort_order: rows.findIndex((r) => r.id === d.id),
+      }
+      if (editing) {
+        await updateDivision(d.id, { name: d.name, color: d.color })
+        flash('分區已更新')
+      } else {
+        await createDivision(body)
+        flash('分區已新增')
+      }
+      setShowModal(false)
+      await reload()
+    } catch (e) {
+      flash(apiError(e))
     }
   }
 
-  const save = (d: MockDivision) => {
-    setRows((prev) => {
-      const exists = prev.some((x) => x.id === d.id)
-      return exists ? prev.map((x) => (x.id === d.id ? d : x)) : [...prev, d]
-    })
-    setShowModal(false)
+  const remove = async (d: DivisionCardData) => {
+    if (!window.confirm(`確定刪除 ${d.name}？`)) return
+    try {
+      await deleteDivision(d.id)
+      flash('分區已刪除')
+      setShowModal(false)
+      await reload()
+    } catch (e) {
+      flash(apiError(e))
+    }
   }
 
   return (
@@ -108,6 +180,16 @@ export function DivisionsPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 pt-[3px]">
+        {error && (
+          <div className="col-span-2 rounded-lg border border-danger/30 bg-danger-bg px-4 py-3 text-[14px] text-danger">
+            載入分區失敗：{error}
+          </div>
+        )}
+        {loading && rows.length === 0 && (
+          <div className="col-span-2 py-16 text-center text-[14px] text-gray">
+            載入中…
+          </div>
+        )}
         {rows.map((d) => (
           <DivisionCard
             key={d.id}
@@ -118,6 +200,12 @@ export function DivisionsPage() {
           />
         ))}
       </div>
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-ink px-4 py-2.5 text-[14px] text-white shadow-lg">
+          {toast}
+        </div>
+      )}
 
       {showModal && (
         <DivisionModal
@@ -139,10 +227,10 @@ function DivisionCard({
   onEdit,
   onToggleLock,
 }: {
-  division: MockDivision
+  division: DivisionCardData
   locked: boolean
-  onEdit: (d: MockDivision) => void
-  onToggleLock: (d: MockDivision) => void
+  onEdit: (d: DivisionCardData) => void
+  onToggleLock: (d: DivisionCardData) => void
 }) {
   const d = division
 
@@ -236,10 +324,10 @@ function DivisionModal({
   onSave,
   onDelete,
 }: {
-  initial: MockDivision | null
+  initial: DivisionCardData | null
   onClose: () => void
-  onSave: (d: MockDivision) => void
-  onDelete: (d: MockDivision) => void
+  onSave: (d: DivisionCardData) => void
+  onDelete: (d: DivisionCardData) => void
 }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [code, setCode] = useState(initial?.code ?? '')

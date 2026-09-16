@@ -35,3 +35,10 @@ class CandidateOut(CandidateBase):
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}
+
+
+class CandidateAdminOut(CandidateOut):
+    """管理後台列表用：附區名與（可選）當前票數"""
+
+    division_name: str = ""
+    vote_count: int | None = None

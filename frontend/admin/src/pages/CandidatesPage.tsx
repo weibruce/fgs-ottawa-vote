@@ -11,7 +11,26 @@ import { useMemo, useState } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
 import { Button, Card, DivisionTag, Field, PageIntro } from '../components/ui'
 import { IconEdit, IconPlus, IconTrash } from '../components/icons'
-import { DIVISION_COLORS, mockCandidates, mockDivisions, type MockCandidate } from '../data/mock'
+import { DIVISION_COLORS } from '../data/mock'
+import { useAsync } from '../hooks/useAsync'
+import { apiError } from '../api/client'
+import { listCandidates, createCandidate, updateCandidate, deleteCandidate } from '../api/candidates'
+import { listRounds } from '../api/rounds'
+import { fetchDivisionOverview } from '../api/divisions'
+
+/** 表格實際需要的資料形狀（由 API 轉換而來，維持原本 JSX 不變） */
+interface CandRow {
+  id: number
+  rank: number
+  name: string
+  surname: string
+  bio: string
+  division: string
+  position: string
+  slogan: string
+  terms: string
+  votes: number
+}
 
 /** 「全部」分頁的鍵值 */
 const ALL = '全部' as const
@@ -43,11 +62,40 @@ function IconSortArrows({ size = 12 }: { size?: number }) {
 }
 
 export function CandidatesPage() {
-  const [rows, setRows] = useState<MockCandidate[]>(mockCandidates)
+  // 同時取得分區（名稱↔ID）、輪次（取 active 以帶出得票數）、候選人
+  const { data, loading, error, reload } = useAsync(async () => {
+    const [rounds, divisions] = await Promise.all([listRounds(), fetchDivisionOverview()])
+    const cur = rounds.find((r) => r.status === 'active') ?? rounds[0] ?? null
+    const list = await listCandidates(undefined, cur?.id)
+    const divIdByName: Record<string, number> = {}
+    for (const d of divisions) divIdByName[d.name] = d.id
+
+    const perDiv: Record<string, number> = {}
+    const rowsMapped: CandRow[] = list.map((c) => {
+      perDiv[c.division_name] = (perDiv[c.division_name] ?? 0) + 1
+      return {
+        id: c.id,
+        rank: perDiv[c.division_name],
+        name: c.name,
+        surname: c.name.charAt(0),
+        bio: c.description,
+        division: c.division_name,
+        position: c.title,
+        slogan: c.slogan,
+        terms: `${c.term_count} 屆`,
+        votes: c.vote_count ?? 0,
+      }
+    })
+    return { rows: rowsMapped, divIdByName }
+  }, [])
+
+  const rows: CandRow[] = data?.rows ?? []
+  const divIdByName = data?.divIdByName ?? {}
+  const divisionOptions = Object.keys(divIdByName)
   // 參考稿預設停在「東區」分頁
   const [tab, setTab] = useState<string>('東區')
   const [showModal, setShowModal] = useState(false)
-  const [editing, setEditing] = useState<MockCandidate | null>(null)
+  const [editing, setEditing] = useState<CandRow | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
   const flash = (msg: string) => {
@@ -76,24 +124,49 @@ export function CandidatesPage() {
     setShowModal(true)
   }
 
-  const startEdit = (c: MockCandidate) => {
+  const startEdit = (c: CandRow) => {
     setEditing(c)
     setShowModal(true)
   }
 
-  const remove = (c: MockCandidate) => {
-    if (window.confirm(`確定刪除 ${c.name}？`)) {
-      setRows((prev) => prev.filter((x) => x !== c))
+  const remove = async (c: CandRow) => {
+    if (!window.confirm(`確定刪除 ${c.name}？`)) return
+    try {
+      await deleteCandidate(c.id)
+      flash('已刪除候選人')
+      setShowModal(false)
+      await reload()
+    } catch (e) {
+      flash(apiError(e))
     }
   }
 
-  const save = (c: MockCandidate) => {
-    setRows((prev) => {
-      const exists = prev.some((x) => x.name === c.name && x.division === c.division)
-      return exists ? prev.map((x) => (x === editing ? c : x)) : [...prev, c]
-    })
-    setShowModal(false)
-    flash(editing ? '已更新候選人資料' : '已新增候選人')
+  const save = async (c: CandRow) => {
+    const division_id = divIdByName[c.division]
+    if (!division_id) {
+      flash('找不到對應分區')
+      return
+    }
+    const body = {
+      division_id,
+      name: c.name,
+      title: c.position,
+      slogan: c.slogan,
+      description: c.bio,
+    }
+    try {
+      if (editing) {
+        await updateCandidate(editing.id, body)
+        flash('已更新候選人資料')
+      } else {
+        await createCandidate(body)
+        flash('已新增候選人')
+      }
+      setShowModal(false)
+      await reload()
+    } catch (e) {
+      flash(apiError(e))
+    }
   }
 
   return (
@@ -108,6 +181,12 @@ export function CandidatesPage() {
       >
         各分區候選人名單（投票開始後不可修改）
       </PageIntro>
+
+      {error && (
+        <div className="mt-4 rounded-lg border border-danger/30 bg-danger-bg px-4 py-3 text-[14px] text-danger">
+          載入候選人失敗：{error}
+        </div>
+      )}
 
       {/* 膠囊分頁列（左側一段寬度，不橫跨內容區） */}
       <Card className="mt-[22px] flex w-fit items-center gap-[3px] p-2">
@@ -129,7 +208,10 @@ export function CandidatesPage() {
 
       {/* 候選人表格 */}
       <Card className="mt-6 overflow-hidden">
-        <table className="ui-table table-fixed w-full">
+        {loading && rows.length === 0 && (
+          <div className="py-20 text-center text-[14px] text-gray">載入中…</div>
+        )}
+        <table className={`ui-table table-fixed w-full ${loading && rows.length === 0 ? 'hidden' : ''}`}>
           <colgroup>
             {COL_W.map((w, i) => (
               <col key={i} style={{ width: w }} />
@@ -208,6 +290,7 @@ export function CandidatesPage() {
 
       {showModal && (
         <CandidateModal
+          divisionOptions={divisionOptions}
           initial={editing}
           onClose={() => setShowModal(false)}
           onSave={save}
@@ -226,13 +309,15 @@ export function CandidatesPage() {
 /* ── 新增／編輯（尚未接 API，先以本地 state 呈現） ── */
 
 function CandidateModal({
+  divisionOptions,
   initial,
   onClose,
   onSave,
 }: {
-  initial: MockCandidate | null
+  divisionOptions: string[]
+  initial: CandRow | null
   onClose: () => void
-  onSave: (c: MockCandidate) => void
+  onSave: (c: CandRow) => void
 }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [division, setDivision] = useState(initial?.division ?? '東區')
@@ -244,6 +329,7 @@ function CandidateModal({
     const trimmed = name.trim()
     if (!trimmed) return
     onSave({
+      id: initial?.id ?? 0,
       rank: initial?.rank ?? 1,
       name: trimmed,
       surname: trimmed.charAt(0),
@@ -283,9 +369,9 @@ function CandidateModal({
               value={division}
               onChange={(e) => setDivision(e.target.value)}
             >
-              {mockDivisions.map((d) => (
-                <option key={d.id} value={d.name}>
-                  {d.name}
+              {divisionOptions.map((n) => (
+                <option key={n} value={n}>
+                  {n}
                 </option>
               ))}
             </select>

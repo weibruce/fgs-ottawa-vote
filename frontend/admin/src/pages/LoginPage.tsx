@@ -3,7 +3,8 @@
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { login, setToken } from '../api/client'
+import { login } from '../api/auth'
+import { setToken } from '../api/client'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -18,8 +19,8 @@ export function LoginPage() {
     setError(null)
     try {
       const res = await login(username.trim(), password)
-      setToken(res.data.access_token)
-      localStorage.setItem('admin_username', res.data.username || username.trim())
+      setToken(res.access_token)
+      localStorage.setItem('admin_username', res.username || username.trim())
       navigate('/')
     } catch {
       setError('帳號或密碼錯誤')

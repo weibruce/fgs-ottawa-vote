@@ -6,6 +6,7 @@ from app.models.round_ import Round, RoundCandidate
 from app.models.member import Member
 from app.models.vote import Vote, VoteCandidate
 from app.models.appointment import Appointment
+from app.models.system import AppSetting, ExportLog, ActivityLog
 
 __all__ = [
     "Admin",
@@ -17,4 +18,7 @@ __all__ = [
     "Vote",
     "VoteCandidate",
     "Appointment",
+    "AppSetting",
+    "ExportLog",
+    "ActivityLog",
 ]

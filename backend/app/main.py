@@ -7,7 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.routers import health, admin_auth, divisions, candidates, votes, rounds, dashboard
+from app.routers import (
+    health, admin_auth, divisions, candidates, votes, rounds, dashboard,
+    members, tally, appointments, exports,
+)
+from app.routers import settings as settings_router
 
 # 日誌配置
 logging.basicConfig(
@@ -42,6 +46,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:5175",
+        "http://127.0.0.1:5175",
         "http://localhost:4173",
         "http://127.0.0.1:4173",
     ],
@@ -68,6 +76,11 @@ app.include_router(candidates.router, prefix=f"{settings.api_prefix}")
 app.include_router(votes.router, prefix=f"{settings.api_prefix}")
 app.include_router(rounds.router, prefix=f"{settings.api_prefix}")
 app.include_router(dashboard.router, prefix=f"{settings.api_prefix}")
+app.include_router(members.router, prefix=f"{settings.api_prefix}")
+app.include_router(tally.router, prefix=f"{settings.api_prefix}")
+app.include_router(appointments.router, prefix=f"{settings.api_prefix}")
+app.include_router(exports.router, prefix=f"{settings.api_prefix}")
+app.include_router(settings_router.router, prefix=f"{settings.api_prefix}")
 
 
 @app.get("/")

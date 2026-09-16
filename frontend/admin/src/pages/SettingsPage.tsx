@@ -9,10 +9,14 @@
  * 註：CardHeader / Field 的預設內距與字級與本頁參考稿不同，
  *     故於此以 className / ReactNode 覆寫（不動共用檔）。
  */
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
 import { Button, Card, CardHeader, Field, PageIntro } from '../components/ui'
 import { IconBell, IconUser } from '../components/icons'
+import { useAsync } from '../hooks/useAsync'
+import { apiError } from '../api/client'
+import { changePassword, fetchMe } from '../api/auth'
+import { fetchSettings, updateSettings } from '../api/settings'
 
 /* ── 文案與預設值（之後由 API 覆寫） ── */
 
@@ -114,18 +118,56 @@ const CARD_HEADER_CLASS = '[&>div>p]:mt-[10px]'
 const inputClass = 'ui-input bg-white rounded-md'
 
 export function SettingsPage() {
-  const [username] = useState(ACCOUNT.username)
+  /* ── 資料來源：GET /api/admin/settings ── */
+  const { data, error, reload } = useAsync(fetchSettings, [])
+
+  /* ── 帳號：localStorage.admin_username，沒有才用 GET /api/admin/me 補 ── */
+  const [username, setUsername] = useState(
+    () => localStorage.getItem('admin_username') || ACCOUNT.username,
+  )
+
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [oldPassword, setOldPassword] = useState('')
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [passwordBusy, setPasswordBusy] = useState(false)
+  const [saving, setSaving] = useState(false)
+
   const [intervalSec, setIntervalSec] = useState(String(POLLING_DEFAULTS.intervalSec))
   const [healthCheckSec, setHealthCheckSec] = useState(String(POLLING_DEFAULTS.healthCheckSec))
   const [toast, setToast] = useState<string | null>(null)
+
+  /* 載入完成 → 填入輪詢與健康檢查欄位（資料未到前沿用設計稿預設值） */
+  useEffect(() => {
+    if (!data) return
+    setIntervalSec(String(data.poll_interval_sec))
+    setHealthCheckSec(String(data.health_check_interval_sec))
+  }, [data])
+
+  /* 補帳號名稱（登入時已寫入 localStorage；重新整理後仍可還原） */
+  useEffect(() => {
+    if (localStorage.getItem('admin_username')) return
+    let cancelled = false
+    fetchMe()
+      .then((me) => {
+        if (cancelled) return
+        setUsername(me.username)
+        localStorage.setItem('admin_username', me.username)
+      })
+      .catch(() => {
+        /* 取不到就沿用預設顯示值，不影響版面 */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const flash = (msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
   }
 
+  /* ── 更新密碼（前端驗證 → 原密碼 modal → POST /api/admin/change-password） ── */
   const handleUpdatePassword = () => {
     if (newPassword.length < ACCOUNT.minPasswordLength) {
       flash(`密碼至少 ${ACCOUNT.minPasswordLength} 位`)
@@ -135,13 +177,68 @@ export function SettingsPage() {
       flash('兩次輸入的密碼不一致')
       return
     }
-    flash('密碼已更新（mock）')
-    setNewPassword('')
-    setConfirmPassword('')
+    setOldPassword('')
+    setShowPasswordModal(true)
   }
 
-  const handleSaveAll = () => {
-    flash(`設定已儲存：輪詢 ${intervalSec} 秒／健康檢查 ${healthCheckSec} 秒（mock）`)
+  const closePasswordModal = () => {
+    if (passwordBusy) return
+    setShowPasswordModal(false)
+    setOldPassword('')
+  }
+
+  const confirmUpdatePassword = async () => {
+    if (!oldPassword) {
+      flash('請輸入原密碼')
+      return
+    }
+    try {
+      setPasswordBusy(true)
+      await changePassword(oldPassword, newPassword)
+      setShowPasswordModal(false)
+      setOldPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      flash('密碼已更新')
+    } catch (e) {
+      flash(apiError(e))
+    } finally {
+      setPasswordBusy(false)
+    }
+  }
+
+  /* ── 儲存所有設定（PUT /api/admin/settings，只帶本頁兩個欄位） ── */
+  const handleSaveAll = async () => {
+    const poll = Number(intervalSec)
+    const health = Number(healthCheckSec)
+    if (!Number.isInteger(poll) || poll < 1 || poll > 10) {
+      flash('輪詢間隔需為 1-10 秒的整數')
+      return
+    }
+    if (!Number.isInteger(health) || health < 1 || health > 3600) {
+      flash('健康檢查間隔需為 1-3600 秒的整數')
+      return
+    }
+    try {
+      setSaving(true)
+      await updateSettings({
+        poll_interval_sec: poll,
+        health_check_interval_sec: health,
+      })
+      await reload()
+      flash(`設定已儲存：輪詢 ${poll} 秒／健康檢查 ${health} 秒`)
+    } catch (e) {
+      flash(apiError(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /* ── 取消：還原為已載入的設定值（無資料時回到預設值） ── */
+  const handleCancel = () => {
+    setIntervalSec(String(data?.poll_interval_sec ?? POLLING_DEFAULTS.intervalSec))
+    setHealthCheckSec(String(data?.health_check_interval_sec ?? POLLING_DEFAULTS.healthCheckSec))
+    flash('已取消修改')
   }
 
   return (
@@ -152,6 +249,12 @@ export function SettingsPage() {
       </div>
 
       <div className="space-y-6">
+        {error && (
+          <div className="rounded-lg border border-danger/30 bg-danger-bg px-4 py-3 text-[14px] text-danger">
+            載入設定失敗：{error}
+          </div>
+        )}
+
         {/* 帳戶安全 */}
         <Card>
           <div className={CARD_HEADER_WRAP}>
@@ -239,15 +342,54 @@ export function SettingsPage() {
 
         {/* 底部操作（卡片之外、右對齊） */}
         <div className="flex justify-end gap-2">
-          <Button variant="outline" className="px-5" onClick={() => flash('已取消修改（mock）')}>
+          <Button variant="outline" className="px-5" onClick={handleCancel}>
             取消
           </Button>
-          <Button className="px-5" onClick={handleSaveAll}>
+          <Button className="px-5" onClick={handleSaveAll} disabled={saving}>
             <IconSave size={16} />
-            儲存所有設定
+            {saving ? '儲存中…' : '儲存所有設定'}
           </Button>
         </div>
       </div>
+
+      {/* 原密碼確認（僅點擊「更新密碼」且前端驗證通過後出現，非設計稿靜態版面） */}
+      {showPasswordModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={closePasswordModal}
+        >
+          <div
+            className="bg-card rounded-lg border border-border w-full max-w-md p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-[18px] font-bold text-ink leading-none">確認原密碼</h3>
+            <p className="text-[12px] text-gray-deep mt-3 leading-none">
+              為確保安全，請輸入目前的管理員密碼
+            </p>
+
+            <div className="mt-6">
+              <Field label={<FieldLabel>原密碼</FieldLabel>}>
+                <input
+                  type="password"
+                  className={inputClass}
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  autoFocus
+                />
+              </Field>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 mt-7">
+              <Button variant="outline" onClick={closePasswordModal} disabled={passwordBusy}>
+                取消
+              </Button>
+              <Button onClick={confirmUpdatePassword} disabled={passwordBusy}>
+                {passwordBusy ? '更新中…' : '確認更新'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 bg-ink text-white text-[13px] rounded-lg px-4 py-3 shadow-lg">

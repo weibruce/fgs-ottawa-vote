@@ -33,3 +33,13 @@ class DivisionUpdate(BaseModel):
 class DivisionOut(DivisionBase):
     id: int
     model_config = {"from_attributes": True}
+
+
+class DivisionOverviewOut(DivisionOut):
+    """分區管理頁卡片用：附統計與當前輪次狀態"""
+
+    member_count: int = 0
+    candidate_count: int = 0
+    voted_count: int = 0
+    status: str = "draft"
+    round_id: int | None = None

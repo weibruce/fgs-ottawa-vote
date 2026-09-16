@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.admin import Admin
-from app.schemas.auth import LoginRequest, TokenResponse, ChangePasswordRequest
+from app.schemas.auth import LoginRequest, TokenResponse, ChangePasswordRequest, AdminMeOut
 from app.services.auth import (
     hash_password,
     verify_password,
@@ -27,6 +27,17 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     token = create_access_token(admin.id, admin.username)
     return TokenResponse(
         access_token=token,
+        admin_id=admin.id,
+        username=admin.username,
+        display_name=admin.display_name,
+        must_change_password=admin.must_change_password,
+    )
+
+
+@router.get("/me", response_model=AdminMeOut)
+def me(admin: Admin = Depends(get_current_admin)):
+    """當前登入管理員（前端重新整理後還原登入態）"""
+    return AdminMeOut(
         admin_id=admin.id,
         username=admin.username,
         display_name=admin.display_name,

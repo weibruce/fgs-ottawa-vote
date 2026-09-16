@@ -1,7 +1,7 @@
 /**
  * 資料匯出 — 1:1 對齊參考稿 docs/ui/admin/voting_system_dashboard_09.png
  * 幾何量測（1920×940 CSS px）：篩選卡 70px 高、匯出卡兩欄 gap-16、卡片高 136px、
- * 歷史卡表頭 40px、資料列 45px。所有文案／數字取自 mock，之後可直接換成 API。
+ * 歷史卡表頭 40px、資料列 45px。卡片文案取自 mock，篩選選項／匯出歷史改由 API 提供。
  */
 import { useState } from 'react'
 import type { ComponentType, ReactNode } from 'react'
@@ -18,6 +18,12 @@ import {
 } from '../components/icons'
 import type { IconProps } from '../components/icons'
 import { mockExports } from '../data/mock'
+import { apiError } from '../api/client'
+import { listDivisions } from '../api/divisions'
+import { listRounds } from '../api/rounds'
+import { downloadExport, fetchExportHistory, runExport } from '../api/exports'
+import type { ExportKind, ExportLogOut } from '../api/types'
+import { useAsync } from '../hooks/useAsync'
 
 /** 獎章圖示（參考稿卡片三為「圓章＋下方緞帶」，icons.tsx 無對應圖示，於此自繪） */
 function IconMedal({ size = 21 }: IconProps) {
@@ -49,9 +55,39 @@ const CARD_ICON: Record<string, { Icon: ComponentType<IconProps>; size: number }
   完整選舉報告: { Icon: IconCalendar, size: 25 },
 }
 
-/* ── 篩選選項（目前為常數，接 API 後由後端提供） ── */
-const DIVISION_OPTIONS = ['全部分區', '東區', '南區', '西區', '北區', '中區']
-const ROUND_OPTIONS = ['全部輪次', '第一輪', '第二輪']
+/* ── 卡片標題 → 後端匯出類型（契約第 8 節） ── */
+const KIND_BY_TITLE: Record<string, ExportKind> = {
+  各分區投票明細: 'division_votes',
+  第二輪投票明細: 'round2_votes',
+  幹部指派名單: 'appointments',
+  五區彙總統計: 'division_summary',
+  會員名單: 'members',
+  完整選舉報告: 'full_report',
+}
+
+/* ── 按鈕格式標籤 → API format（契約僅定義 csv/xlsx；PDF 按鈕沿用 xlsx） ── */
+const API_FORMAT: Record<string, 'csv' | 'xlsx'> = {
+  Excel: 'xlsx',
+  CSV: 'csv',
+  PDF: 'xlsx',
+}
+
+/** ISO 時間 → 'YYYY-MM-DD HH:MM' */
+function formatTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** 位元組數 → '128 KB' */
+function formatSize(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined) return '—'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
 
 /* ── 匯出歷史表頭（欄寬比例對齊參考稿） ── */
 const HISTORY_COLUMNS: {
@@ -164,16 +200,49 @@ export function ExportPage() {
   const [anonymous, setAnonymous] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
-  const handleExport = (format: string, title: string) => {
-    // TODO: 接 API — POST /api/exports { division, round, anonymous, title, format }
-    setToast(`已匯出「${title}」（${format}）— mock 模式不產生真實檔案`)
+  /* 篩選選項由後端提供（分區 / 輪次） */
+  const { data: divisions } = useAsync(() => listDivisions(), [])
+  const { data: rounds } = useAsync(() => listRounds(), [])
+  const { data: history, loading: historyLoading, error: historyError, reload: reloadHistory } =
+    useAsync(() => fetchExportHistory(), [])
+
+  const divisionOptions = ['全部分區', ...(divisions ?? []).map((d) => d.name)]
+  const roundOptions = ['全部輪次', ...(rounds ?? []).map((r) => r.name)]
+
+  const divisionId =
+    division === 'all' ? null : ((divisions ?? []).find((d) => d.name === division)?.id ?? null)
+  const roundId =
+    round === 'all' ? null : ((rounds ?? []).find((r) => r.name === round)?.id ?? null)
+
+  const showToast = (msg: string) => {
+    setToast(msg)
     setTimeout(() => setToast(null), 2500)
   }
 
-  const handleDownload = (file: string) => {
-    // TODO: 接 API — GET /api/exports/download?file=...
-    setToast(`重新下載「${file}」— mock 模式不產生真實檔案`)
-    setTimeout(() => setToast(null), 2500)
+  const handleExport = async (format: string, title: string) => {
+    const kind = KIND_BY_TITLE[title]
+    if (!kind) return
+    try {
+      const filename = await runExport(kind, {
+        division_id: divisionId,
+        round_id: roundId,
+        anonymous,
+        format: API_FORMAT[format] ?? 'xlsx',
+      })
+      showToast(`已匯出「${filename}」`)
+      void reloadHistory()
+    } catch (e) {
+      showToast(apiError(e))
+    }
+  }
+
+  const handleDownload = async (log: ExportLogOut) => {
+    try {
+      await downloadExport(log.id, log.filename)
+      showToast(`已重新下載「${log.filename}」`)
+    } catch (e) {
+      showToast(apiError(e))
+    }
   }
 
   return (
@@ -187,8 +256,8 @@ export function ExportPage() {
       <Card className="mb-6 flex items-center gap-3 px-4 py-4">
         <IconFilter size={16} className="shrink-0 text-gray-deep" />
         <span className="shrink-0 text-[14px] text-ink-soft">篩選條件：</span>
-        <FilterSelect label="分區" value={division} onChange={setDivision} options={DIVISION_OPTIONS} />
-        <FilterSelect label="輪次" value={round} onChange={setRound} options={ROUND_OPTIONS} />
+        <FilterSelect label="分區" value={division} onChange={setDivision} options={divisionOptions} />
+        <FilterSelect label="輪次" value={round} onChange={setRound} options={roundOptions} />
         <label className="ml-auto flex cursor-pointer items-center gap-2">
           <input
             type="checkbox"
@@ -256,28 +325,57 @@ export function ExportPage() {
             </tr>
           </thead>
           <tbody>
-            {mockExports.history.map((h) => (
-              <tr key={h.time + h.file} className="border-b border-[#EFE5D0] last:border-0">
-                <td className="px-5 py-3 text-[13px] leading-5 text-ink">{h.time}</td>
-                <td className="px-5 py-3 text-[14px] leading-5 text-ink">
-                  <span className="flex items-center gap-2">
-                    <IconSheet size={16} />
-                    <span className="truncate">{h.file}</span>
-                  </span>
-                </td>
-                <td className="px-5 py-3 text-[14px] leading-5 text-gray-deep">{h.size}</td>
-                <td className="px-5 py-3 text-[14px] leading-5 text-ink">{h.by}</td>
-                <td className="px-5 py-3 text-right text-[12px] leading-5">
-                  <button
-                    type="button"
-                    onClick={() => handleDownload(h.file)}
-                    className="text-primary hover:underline"
-                  >
-                    重新下載
-                  </button>
+            {historyError ? (
+              <tr>
+                <td
+                  colSpan={HISTORY_COLUMNS.length}
+                  className="px-5 py-6 text-center text-[13px] leading-5 text-primary"
+                >
+                  載入失敗：{historyError}
                 </td>
               </tr>
-            ))}
+            ) : historyLoading && !history ? (
+              <tr>
+                <td
+                  colSpan={HISTORY_COLUMNS.length}
+                  className="px-5 py-6 text-center text-[13px] leading-5 text-gray"
+                >
+                  載入中…
+                </td>
+              </tr>
+            ) : (history ?? []).length === 0 ? (
+              <tr>
+                <td
+                  colSpan={HISTORY_COLUMNS.length}
+                  className="px-5 py-6 text-center text-[13px] leading-5 text-gray"
+                >
+                  尚無匯出紀錄
+                </td>
+              </tr>
+            ) : (
+              (history ?? []).map((h) => (
+                <tr key={h.id} className="border-b border-[#EFE5D0] last:border-0">
+                  <td className="px-5 py-3 text-[13px] leading-5 text-ink">{formatTime(h.created_at)}</td>
+                  <td className="px-5 py-3 text-[14px] leading-5 text-ink">
+                    <span className="flex items-center gap-2">
+                      <IconSheet size={16} />
+                      <span className="truncate">{h.filename}</span>
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-[14px] leading-5 text-gray-deep">{formatSize(h.size)}</td>
+                  <td className="px-5 py-3 text-[14px] leading-5 text-ink">{h.operator}</td>
+                  <td className="px-5 py-3 text-right text-[12px] leading-5">
+                    <button
+                      type="button"
+                      onClick={() => handleDownload(h)}
+                      className="text-primary hover:underline"
+                    >
+                      重新下載
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </Card>

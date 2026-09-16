@@ -1,6 +1,6 @@
 # 投票系統 — 開發計劃
 
-> 版本：v1.3 | 日期：2026-09-16
+> 版本：v1.4 | 日期：2026-09-16
 > 配套文件：01_requirements.md（佛光山幹部改選投票系統需求 v1.1）、02_architecture.md（v1.1）
 
 > **v1.3 變更摘要**：① 管理後台 **9 個模組 UI 全部 1:1 對齊參考稿**（UI-first，mock 數據）：儀表板/分區管理/候選人管理/會員名單/投票配置/實時計票/輪次管理/幹部指派/資料匯出/系統設置；② 側欄導航改為 9 項（新增「分區管理」「投票配置」），頂欄加入搜尋框/通知鈴鐺/用戶頭像；③ mock 數據層 `frontend/admin/src/data/mock.ts` 與參考稿數字逐項對齊（300 會員/203 已投/68% / 15 候選人 / 29 幹事 / 五區進度），接 API 時整體替換；④ 路由 basename 自動偵測（vite dev `/` 與 nginx `/admin` 雙兼容）；⑤ M3 頁面改為 UI 完成、待接 API 狀態。
@@ -10,6 +10,8 @@
 > **v1.1 變更摘要**：① 新增分區（divisions）模組與五區數據模型，M1 schema 增加 divisions 表、candidates/members/votes/appointments 增加 division_id；② M2 身份確認改為「姓名 + 卡號」雙欄位 + 簡繁歸一化 + 分區路由；③ M3 新增會員 Excel/CSV 匯入（簡繁雙存）、分區管理頁面、分區級計票；④ 加賽（平票再投）由「預留」提升為**明確開發項**（分區級加賽）；⑤ 工期由 10 天上調至 **12 個工作日**（新增分區、匯入、簡繁、加賽工作量）。
 
 ---
+
+> **v1.4 變更摘要**：M3 完成 —— 後端補齊管理端 API（會員匯入/計票/幹部/匯出/設定/QR/加賽），管理後台 10 頁全部接上真實 API，新增 API 契約文件 05_api_contract.md。
 
 ## 0. 實施進度（2026-09-16 更新）
 
@@ -41,22 +43,31 @@
 
 **初始數據**：管理員 `admin`（首次登入強制改密）+ 五區（東/南/西/北/中）。
 
-### 待辦（M3 起）
+### M3：後端 API + 管理後台接線 ✅ 完成（2026-09-16）
 
-> **2026-09-16 更新**：M3 全部頁面 UI 已完成並 1:1 對齊參考稿（mock 數據層 `src/data/mock.ts`），剩餘工作統一為「接 API」——把各頁 mock 替換為真實端點。
+> **2026-09-16 更新**：M3 全部完成。後端補齊管理端 API，管理後台 10 個頁面**全部由 mock 改接真實 API**，
+> 版面維持與設計稿 1:1（差異率 0.71%～2.61%，殘差為真實資料文字）。
+> API 契約見 **`docs/05_api_contract.md`**。
 
-- [ ] M3-3.1 輪次管理頁面：UI ✅（mock）；待接 API：平票偵測提示 + 分區級平票標記 + 輪次狀態機操作（activate/close/confirm）
-- [ ] M3-3.2 二維碼生成 + 大屏展示：投票前端 /screen ✅；後台 QR 生成（投票配置頁「下載 QR」目前為 mock）
-- [ ] M3-3.3 會員名單匯入（Excel/CSV，pandas/openpyxl，簡繁雙存）：UI ✅（mock）；待接 API：上傳解析 + 匯入 + 下載範例
-- [ ] M3-3.4 會員名單管理頁面：UI ✅（mock 10 筆 + 篩選 + 分頁）；待接 API：真實名單 + 分區統計 + 編輯/刪除
-- [ ] M3-3.5 後台計票頁面：UI ✅（mock 排行 + 明細）；待接 API：投票人明細 + 分區級/總覽切換（後端 API 已就緒）
-- [ ] M3-3.6 第二輪流程（白名單 + 獨立連結）：UI ✅（mock 配置卡）；待接 API
-- [ ] M3-3.7 幹部指派（分區）：UI ✅（mock 29 人）；待接 API：分區指派 CRUD
-- [ ] M3-3.8 加賽（平票再投，分區級）：UI ✅（mock 啟動卡）；待接 API
-- [ ] M3-3.9 資料匯出 CSV：UI ✅（mock 6 卡片 + 歷史）；待接 API：真實檔案生成（後端 /api/admin/exports 待建）
-- [ ] M3-3.10 系統設定頁面：UI ✅（mock 5 tab）；待接 API：改密（後端 /api/admin/change-password 已有）+ 輪詢/時區/保留策略
-- [ ] 分區管理頁面：UI ✅（mock）；待接 API：後端 /api/admin/divisions CRUD 已就緒，直接對接
-- [ ] 投票配置頁面：UI ✅（mock）；待接 API：輪次參數（min/max votes、視窗、匿名、排序）+ 入口連結
+| 模組 | 後端 | 前端 | 備註 |
+|------|------|------|------|
+| 認證 | ✅ `GET /admin/me`、`POST /admin/login`、`change-password` | ✅ 登入頁 + 路由守衛 `RequireAuth` | 密碼修改以 modal 補「原密碼」，靜態版面不動 |
+| 儀表板 | ✅ `/admin/dashboard/summary`（含投票率/代投率） | ✅ 橫幅/統計卡/分區列 + 活動日誌 | 活動日誌接 `/admin/settings/activity` |
+| 分區管理 | ✅ `/admin/divisions/overview`（含會員/候選人/已投票/輪次狀態） | ✅ 卡片格 + CRUD | |
+| 候選人管理 | ✅ `?round_id=` 附得票數、`division_name` | ✅ 分頁 tab + 表格 + CRUD | |
+| 會員名單 | ✅ 列表（分頁/篩選/繁簡搜尋）、`/stats`、CRUD、**Excel/CSV 匯入**、範本下載 | ✅ 五區統計 + 篩選 + 分頁 + 匯入 | 卡號全庫唯一（migration）；投票中鎖 PUT/DELETE |
+| 投票配置 | ✅ 輪次參數（active 可改票數/匿名/視窗）、`/admin/settings` | ✅ 表單 + 入口連結 + **真實 QR**（`/admin/settings/qr`） | |
+| 實時計票 | ✅ `/admin/tally`、`/overview`、`/voters`（匿名後端遮蔽）+ 平票偵測 | ✅ 分區切換 + 輪詢（間隔取自設定） | |
+| 輪次管理 | ✅ `/{id}/progress`（含平票）、`POST /{id}/runoff`、confirm 回平票 | ✅ 步驟條 + 進度卡 + 加賽啟動 | |
+| 幹部指派 | ✅ CRUD + `/summary` + `confirm`（鎖定後 409） | ✅ 分區切換 + 表單 + 名單卡 | |
+| 資料匯出 | ✅ `/exports/{kind}`（CSV/XLSX/BOM/中文檔名/匿名遮蔽）+ `/history` + `/download` | ✅ 6 卡片 + 篩選 + 歷史 | PDF 按鈕目前映射為 xlsx |
+| 系統設定 | ✅ `/admin/settings`（GET/PUT）、`/activity`、`/qr` | ✅ 帳密 + 輪詢/健康檢查 | |
+
+**新增資料表**：`app_settings`、`export_logs`、`activity_logs`、`members.phone`（alembic migration）
+**示範資料**：`backend/seed_demo.py`（五區/300 會員/15 候選人/203 票/南區最高票平票/東區幹部），供開發與示範
+
+### 待辦（M4 起）
+
 - [ ] M4 加固上線（安全 + 降級測試 + 壓測 + 部署 + 演練 + 備份）
 
 ### 測試數據說明

@@ -5,8 +5,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Navigate } from 'react-router-dom'
 import { AdminLayout } from '../components/AdminLayout'
 import { StatusBadge } from '../components/StatusBadge'
-import { listRounds, createRound, updateRound, activateRound, closeRound, confirmRound, listCandidates, getToken } from '../api/client'
-import type { RoundOut, CandidateOut } from '../types'
+import { listRounds, createRound, updateRound, activateRound, closeRound, confirmRound } from '../api/rounds'
+import { listCandidates } from '../api/candidates'
+import { getToken } from '../api/client'
+import type { RoundOut, CandidateOut } from '../api/types'
 
 export function RoundFormPage() {
   const { id } = useParams()
@@ -38,10 +40,10 @@ export function RoundFormPage() {
     }
     Promise.all([
       listCandidates(),
-      roundId ? listRounds().then((r) => r.data.find((x) => x.id === roundId) || null) : Promise.resolve(null),
+      roundId ? listRounds().then((list) => list.find((x) => x.id === roundId) || null) : Promise.resolve(null),
     ])
       .then(([candsRes, r]) => {
-        setCandidates(Array.isArray(candsRes.data) ? candsRes.data : [])
+        setCandidates(Array.isArray(candsRes) ? candsRes : [])
         if (r) {
           setRound(r)
           setName(r.name)
@@ -75,10 +77,10 @@ export function RoundFormPage() {
           min_votes: minVotes,
           max_votes: maxVotes,
           anonymous,
-          notes: notes || null,
+          notes: notes || undefined,
           candidate_ids: candidateIds,
         })
-        navigate(`/rounds/${res.data.id}`)
+        navigate(`/rounds/${res.id}`)
       } else if (roundId) {
         await updateRound(roundId, {
           name: name.trim(),
@@ -86,7 +88,7 @@ export function RoundFormPage() {
           min_votes: minVotes,
           max_votes: maxVotes,
           anonymous,
-          notes: notes || null,
+          notes: notes || undefined,
           candidate_ids: candidateIds,
         })
         navigate('/rounds')
@@ -108,7 +110,7 @@ export function RoundFormPage() {
       if (action === 'confirm') await confirmRound(roundId)
       // Refresh round data
       const res = await listRounds()
-      const updated = res.data.find((r) => r.id === roundId)
+      const updated = res.find((r) => r.id === roundId)
       if (updated) setRound(updated)
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '操作失敗'

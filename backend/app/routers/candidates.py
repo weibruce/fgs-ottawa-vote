@@ -1,30 +1,66 @@
 """候選人 CRUD 路由（按分區，需管理員認證）"""
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_admin
 from app.models.candidate import Candidate
 from app.models.division import Division
-from app.schemas.candidate import CandidateCreate, CandidateUpdate, CandidateOut
+from app.models.round_ import RoundCandidate
+from app.models.vote import Vote, VoteCandidate
+from app.schemas.candidate import CandidateCreate, CandidateUpdate, CandidateOut, CandidateAdminOut
 
 router = APIRouter(prefix="/admin/candidates", tags=["admin-candidates"])
 
 
-@router.get("", response_model=list[CandidateOut])
+def _division_names(db: Session) -> dict[int, str]:
+    return {d.id: d.name for d in db.query(Division).all()}
+
+
+def _vote_counts(db: Session, round_id: int) -> dict[int, int]:
+    """某輪次各候選人得票數（即時統計，300 人規模直接 GROUP BY）"""
+    rows = (
+        db.query(VoteCandidate.candidate_id, func.count(VoteCandidate.id))
+        .join(Vote, Vote.id == VoteCandidate.vote_id)
+        .filter(Vote.round_id == round_id)
+        .group_by(VoteCandidate.candidate_id)
+        .all()
+    )
+    return {cid: n for cid, n in rows}
+
+
+def _to_admin_out(c: Candidate, div_names: dict[int, str], votes: dict[int, int] | None) -> CandidateAdminOut:
+    out = CandidateAdminOut.model_validate(c)
+    out.division_name = div_names.get(c.division_id, "")
+    out.vote_count = votes.get(c.id, 0) if votes is not None else None
+    return out
+
+
+@router.get("", response_model=list[CandidateAdminOut])
 def list_candidates(
     division_id: int | None = Query(None, description="按分區篩選"),
+    round_id: int | None = Query(None, description="帶此參數時回傳各候選人在該輪次的得票數"),
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    """列出候選人（可按分區篩選）"""
+    """列出候選人（可按分區篩選；可附得票數）"""
     q = db.query(Candidate)
     if division_id is not None:
         q = q.filter(Candidate.division_id == division_id)
-    return q.order_by(Candidate.division_id, Candidate.sort_order, Candidate.id).all()
+    if round_id is not None:
+        q = (
+            q.join(RoundCandidate, RoundCandidate.candidate_id == Candidate.id)
+            .filter(RoundCandidate.round_id == round_id)
+            .distinct()
+        )
+    rows = q.order_by(Candidate.division_id, Candidate.sort_order, Candidate.id).all()
+    div_names = _division_names(db)
+    votes = _vote_counts(db, round_id) if round_id is not None else None
+    return [_to_admin_out(c, div_names, votes) for c in rows]
 
 
-@router.post("", response_model=CandidateOut)
+@router.post("", response_model=CandidateAdminOut)
 def create_candidate(
     body: CandidateCreate, db: Session = Depends(get_db), _admin=Depends(get_current_admin)
 ):
@@ -35,10 +71,10 @@ def create_candidate(
     db.add(cand)
     db.commit()
     db.refresh(cand)
-    return cand
+    return _to_admin_out(cand, _division_names(db), None)
 
 
-@router.put("/{candidate_id}", response_model=CandidateOut)
+@router.put("/{candidate_id}", response_model=CandidateAdminOut)
 def update_candidate(
     candidate_id: int,
     body: CandidateUpdate,
@@ -53,7 +89,7 @@ def update_candidate(
         setattr(cand, field, value)
     db.commit()
     db.refresh(cand)
-    return cand
+    return _to_admin_out(cand, _division_names(db), None)
 
 
 @router.delete("/{candidate_id}")

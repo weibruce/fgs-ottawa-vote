@@ -19,3 +19,12 @@ class TokenResponse(BaseModel):
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str = Field(..., min_length=6, max_length=128)
+
+
+class AdminMeOut(BaseModel):
+    """當前登入管理員（前端重新整理後還原登入態用）"""
+
+    admin_id: int
+    username: str
+    display_name: str
+    must_change_password: bool = False

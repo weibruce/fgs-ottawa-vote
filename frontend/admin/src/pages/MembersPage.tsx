@@ -2,9 +2,16 @@
  * 會員名單 — 1:1 對齊參考稿 docs/ui/admin/voting_system_dashboard_04.png
  * 幾何量測（1920×940）：
  *   分區小卡 h=106 / gap-3；篩選列 h=38；表格卡片 y 352→904（表頭 41px、資料列 46px、頁尾 51px）
- * 資料來源：src/data/mock.ts（唯讀）—— 接 API 時僅需替換資料層
+ * 資料來源：src/api/members.ts（listMembers / fetchMemberStats / importMembers）
  */
-import { useMemo, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from 'react'
 import { AdminLayout } from '../components/AdminLayout'
 import {
   IconCheckCircle,
@@ -12,26 +19,40 @@ import {
   IconSearch,
 } from '../components/icons'
 import { Button, Card, DivisionTag, PageIntro } from '../components/ui'
-import {
-  DIVISION_COLORS,
-  mockDivisions,
-  mockMembers,
-  type MockMember,
-} from '../data/mock'
+import { apiError } from '../api/client'
+import { fetchMemberStats, importMembers, listMembers } from '../api/members'
+import type { MemberStats } from '../api/types'
+import { useAsync } from '../hooks/useAsync'
 
 const PAGE_SIZE = 10
-
-/** 名單總筆數（mock：對應參考稿「顯示 10 / 300 筆」）。接 API 後由後端回傳 */
-const TOTAL_MEMBERS = 300
-
-/** 分頁示範（參考稿僅示範第 1、2 頁）。接 API 後改由總筆數計算 */
-const MOCK_TOTAL_PAGES = 2
 
 /** 已投票狀態色（參考稿 emerald-700） */
 const VOTED_GREEN = '#047857'
 
-const divisionColor = (division: string) =>
-  DIVISION_COLORS[division.replace(/區$/, '')] ?? '#8B1A1A'
+/** 載入中的小卡佔位（維持 5 卡版面，避免載入時跳動） */
+const PLACEHOLDER_STATS: MemberStats[] = Array.from({ length: 5 }, (_, i) => ({
+  division_id: -1 - i,
+  division_name: '',
+  color: '#E5DDC9',
+  total: 0,
+  voted: 0,
+}))
+
+/** 投票時間顯示：ISO8601 → 「YYYY-MM-DD HH:MM」（Asia/Taipei） */
+function formatVotedAt(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(d)
+}
 
 /* ── 投票狀態（圖示 16px + 文字 12px，參考稿圖示圓徑約 14px、與文字間距 4px） ── */
 function NotVotedIcon() {
@@ -100,31 +121,87 @@ function PageButton({
 
 export function MembersPage() {
   const [keyword, setKeyword] = useState('')
+  const [debouncedKeyword, setDebouncedKeyword] = useState('')
   const [division, setDivision] = useState('all')
   const [status, setStatus] = useState('all')
   const [page, setPage] = useState(1)
   const [toast, setToast] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
-  const filtered = useMemo<MockMember[]>(
+  // 搜尋 debounce（300ms；Enter 亦可立即套用）
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedKeyword(keyword.trim()), 300)
+    return () => window.clearTimeout(timer)
+  }, [keyword])
+
+  const statsQuery = useAsync(() => fetchMemberStats(), [])
+  const membersQuery = useAsync(
     () =>
-      mockMembers.filter((m) => {
-        const kw = keyword.trim()
-        if (kw && !m.card.includes(kw) && !m.nameTrad.includes(kw) && !m.nameSimp.includes(kw))
-          return false
-        if (division !== 'all' && m.division !== division) return false
-        if (status === 'voted' && !m.voted) return false
-        if (status === 'not-voted' && m.voted) return false
-        return true
+      listMembers({
+        division_id: division === 'all' ? null : Number(division),
+        status: status === 'all' ? '' : status === 'voted' ? 'voted' : 'not_voted',
+        q: debouncedKeyword,
+        page,
+        page_size: PAGE_SIZE,
       }),
-    [keyword, division, status],
+    [division, status, debouncedKeyword, page],
   )
 
-  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  const totalPages = Math.max(MOCK_TOTAL_PAGES, Math.ceil(filtered.length / PAGE_SIZE))
+  const stats = statsQuery.data ?? PLACEHOLDER_STATS
+  const colorByName = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const s of statsQuery.data ?? []) map[s.division_name] = s.color
+    return map
+  }, [statsQuery.data])
+
+  const rows = membersQuery.data?.items ?? []
+  const total = membersQuery.data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  // 篩選後頁數變少時，把頁碼收回範圍內
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
+
+  // 分頁按鈕視窗（最多 5 顆），避免頁數過多撐破版面
+  const pageNumbers = useMemo(() => {
+    const win = 5
+    let start = Math.max(1, page - Math.floor(win / 2))
+    const end = Math.min(totalPages, start + win - 1)
+    start = Math.max(1, end - win + 1)
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+  }, [page, totalPages])
+
+  const divisionColor = (name: string) => colorByName[name] ?? '#8B1A1A'
 
   const flash = (msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
+  }
+
+  const onPickFile = () => fileRef.current?.click()
+
+  const onImportFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setImporting(true)
+    try {
+      const res = await importMembers(file, 'merge')
+      const summary = `匯入 ${res.imported} 筆・略過 ${res.skipped} 筆・失敗 ${res.failed} 筆`
+      flash(
+        res.errors.length
+          ? `${file.name}：${summary}（第 ${res.errors[0].row} 列：${res.errors[0].reason}）`
+          : `${file.name}：${summary}`,
+      )
+      await membersQuery.reload()
+      await statsQuery.reload()
+    } catch (err) {
+      flash(apiError(err))
+    } finally {
+      setImporting(false)
+    }
   }
 
   return (
@@ -132,15 +209,23 @@ export function MembersPage() {
       <PageIntro
         actions={
           <div className="flex items-center gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              className="hidden"
+              onChange={onImportFile}
+            />
             <Button
               variant="outline"
               className="px-3 gap-2"
-              onClick={() => flash('匯入名單需後端 API（mock 階段僅展示）')}
+              disabled={importing}
+              onClick={onPickFile}
             >
               <IconDownload size={16} />
-              匯入名單
+              {importing ? '匯入中…' : '匯入名單'}
             </Button>
-            <Button onClick={() => flash('新增會員需後端 API（mock 階段僅展示）')}>
+            <Button onClick={() => flash('新增會員請使用「匯入名單」，或透過 API 建立')}>
               新增會員
             </Button>
           </div>
@@ -151,11 +236,11 @@ export function MembersPage() {
 
       {/* ── 五區統計小卡（h=106；區名 12px、人數 26px 襯線、已投 12px） ── */}
       <div className="grid grid-cols-5 gap-3 mt-6">
-        {mockDivisions.map((d) => (
-          <Card key={d.id} className="relative h-[106px] pl-4 pt-[19px]">
-            <div className="text-[12px] leading-none text-gray-deep">{d.name}</div>
+        {stats.map((d) => (
+          <Card key={d.division_id} className="relative h-[106px] pl-4 pt-[19px]">
+            <div className="text-[12px] leading-none text-gray-deep">{d.division_name}</div>
             <div className="font-serif text-[26px] font-bold leading-none text-ink mt-2">
-              {d.members}
+              {d.total}
             </div>
             <div
               className="text-[12px] leading-none mt-[10px]"
@@ -181,6 +266,12 @@ export function MembersPage() {
               setKeyword(e.target.value)
               setPage(1)
             }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setDebouncedKeyword(e.currentTarget.value.trim())
+                setPage(1)
+              }
+            }}
             placeholder="搜尋姓名或會員卡號..."
             className="w-full bg-transparent outline-none text-[14px] text-ink placeholder:text-gray"
           />
@@ -195,9 +286,9 @@ export function MembersPage() {
           style={{ backgroundPosition: 'right 1px center' }}
         >
           <option value="all">全部分區</option>
-          {mockDivisions.map((d) => (
-            <option key={d.id} value={d.name}>
-              {d.name}
+          {(statsQuery.data ?? []).map((d) => (
+            <option key={d.division_id} value={String(d.division_id)}>
+              {d.division_name}
             </option>
           ))}
         </select>
@@ -216,6 +307,12 @@ export function MembersPage() {
         </select>
       </div>
 
+      {membersQuery.error && (
+        <div className="mt-[25px] rounded-lg border border-border bg-card px-4 py-3 text-[13px] text-primary">
+          載入會員名單失敗：{membersQuery.error}
+        </div>
+      )}
+
       {/* ── 名單表格 ── */}
       <Card className="mt-[25px] overflow-hidden">
         <div className="overflow-x-auto">
@@ -233,25 +330,28 @@ export function MembersPage() {
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((m) => (
-                <tr key={m.card}>
-                  <td className="pl-5 text-ink-soft">{m.card}</td>
-                  <td className="font-semibold text-ink">{m.nameTrad}</td>
-                  <td className="text-gray-deep">{m.nameSimp}</td>
+              {rows.map((m) => (
+                <tr key={m.id}>
+                  <td className="pl-5 text-ink-soft">{m.member_no}</td>
+                  <td className="font-semibold text-ink">{m.name_trad}</td>
+                  <td className="text-gray-deep">{m.name_simp}</td>
                   <td>
-                    <DivisionTag name={m.division} color={divisionColor(m.division)} />
+                    <DivisionTag
+                      name={m.division_name}
+                      color={divisionColor(m.division_name)}
+                    />
                   </td>
-                  <td className="text-gray-deep">{m.phone}</td>
+                  <td className="text-gray-deep">{m.phone || '—'}</td>
                   <td>
-                    <VoteStatus voted={m.voted} />
+                    <VoteStatus voted={m.has_voted} />
                   </td>
-                  <td className="text-gray-deep">{m.votedAt}</td>
+                  <td className="text-gray-deep">{formatVotedAt(m.voted_at)}</td>
                 </tr>
               ))}
-              {pageRows.length === 0 && (
+              {rows.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-gray-deep">
-                    無符合條件的會員
+                    {membersQuery.loading ? '載入中…' : '無符合條件的會員'}
                   </td>
                 </tr>
               )}
@@ -262,13 +362,13 @@ export function MembersPage() {
         {/* 卡片內頁尾：筆數 + 分頁 */}
         <div className="flex items-center justify-between h-[51px] px-5 border-t border-border">
           <span className="text-[12px] text-gray-deep">
-            顯示 {pageRows.length} / {TOTAL_MEMBERS} 筆
+            顯示 {rows.length} / {total} 筆
           </span>
           <div className="flex items-center gap-1">
             <PageButton disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
               上一頁
             </PageButton>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+            {pageNumbers.map((p) => (
               <PageButton key={p} active={p === page} onClick={() => setPage(p)}>
                 {p}
               </PageButton>

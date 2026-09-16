@@ -7,25 +7,46 @@
  *   3. 新增幹部指派表單卡（預設展開，標題列按鈕可收合）
  *   4. 幹部名單卡：分區色塊 + 標題/當選資訊 + 已指派數，下方 3 張幹部卡
  *
- * 資料來源：mock.ts（當選資訊）+ mock.appointments.ts（名單／表單選項），
- * 之後可直接換成 API 回傳的同型別資料。
+ * 資料來源：API（src/api/appointments.ts）
+ *   - 分區分頁 / 顏色：mock.ts 的 mockDivisions（版面用）
+ *   - 名單：GET /admin/appointments?division_id=
+ *   - 當選資訊 + 已確認狀態：GET /admin/appointments/summary
+ *   - 寫入：POST / PUT /{id} / DELETE /{id}
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
 import { Card, CardHeader, PageIntro, Button, DivisionMark } from '../components/ui'
 import { IconPlus, IconEdit, IconTrash } from '../components/icons'
-import { mockAppointments, mockDivisions } from '../data/mock'
-import {
-  appointmentRosters,
-  appointmentRoles,
-  appointmentFormSeed,
-} from '../data/mock.appointments'
+import { mockDivisions } from '../data/mock'
+import { appointmentRoles, appointmentFormSeed } from '../data/mock.appointments'
 import type { AppointmentItem } from '../data/mock.appointments'
+import { apiError } from '../api/client'
+import type { AppointmentOut, AppointmentSummary } from '../api/types'
+import {
+  listAppointments,
+  fetchAppointmentSummary,
+  createAppointment,
+  updateAppointment,
+  deleteAppointment,
+} from '../api/appointments'
+import { useAsync } from '../hooks/useAsync'
 
-/** 各分區當選資訊（共用 mock 提供東區，其餘分區待 API） */
-const ELECTED: Record<string, string> = {
-  [mockAppointments.division]: mockAppointments.elected,
+/** 名單項目：mock 型別 + API id（供編輯／刪除用） */
+interface RosterItem extends AppointmentItem {
+  id: number
+}
+
+/** 把 API 紀錄轉成卡片顯示型（頭像取姓名首字） */
+function toRosterItem(a: AppointmentOut): RosterItem {
+  return {
+    id: a.id,
+    name: a.name,
+    surname: a.name.trim().slice(0, 1) || '?',
+    role: a.position,
+    by: a.appointed_by,
+    term: a.term,
+  }
 }
 
 /** 下拉箭頭（量測自參考稿：10×6px、深墨色、右緣留 2px） */
@@ -70,7 +91,15 @@ function RoleIcon() {
 }
 
 /** 單張幹部卡 */
-function AppointmentCard({ item }: { item: AppointmentItem }) {
+function AppointmentCard({
+  item,
+  onEdit,
+  onDelete,
+}: {
+  item: RosterItem
+  onEdit: (item: RosterItem) => void
+  onDelete: (item: RosterItem) => void
+}) {
   return (
     <div className="rounded-[5px] border border-[#EFE5D0] bg-white">
       <div className="px-4 pt-4">
@@ -82,6 +111,7 @@ function AppointmentCard({ item }: { item: AppointmentItem }) {
             <button
               type="button"
               title="編輯"
+              onClick={() => onEdit(item)}
               className="text-ink-soft transition-colors hover:text-primary"
             >
               <IconEdit size={16} />
@@ -89,6 +119,7 @@ function AppointmentCard({ item }: { item: AppointmentItem }) {
             <button
               type="button"
               title="刪除"
+              onClick={() => onDelete(item)}
               className="text-primary transition-colors hover:text-primary-hover"
             >
               <IconTrash size={16} />
@@ -110,22 +141,117 @@ function AppointmentCard({ item }: { item: AppointmentItem }) {
 }
 
 export function AppointmentsPage() {
-  const [division, setDivision] = useState(mockAppointments.division)
+  const [division, setDivision] = useState(mockDivisions[0].name)
   const [formOpen, setFormOpen] = useState(true)
   const [form, setForm] = useState(appointmentFormSeed)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [writeError, setWriteError] = useState<string | null>(null)
 
-  const items = appointmentRosters[division] ?? []
-  const elected = ELECTED[division]
+  // 五區彙總：取得該區真實 division_id（DB id 可能與版面序號不同）＋當選資訊
+  const {
+    data: summary,
+    error: summaryError,
+    reload: reloadSummary,
+  } = useAsync<AppointmentSummary[]>(() => fetchAppointmentSummary(), [])
+
+  const meta = summary?.find((s) => s.division_name === division) ?? null
+  const divisionId = meta?.division_id
+
+  const {
+    data: records,
+    loading,
+    error: listError,
+    reload: reloadList,
+  } = useAsync<AppointmentOut[]>(
+    () => (divisionId ? listAppointments(divisionId) : Promise.resolve([])),
+    [divisionId],
+  )
+
+  const roster: RosterItem[] = (records ?? []).map(toRosterItem)
   const color = mockDivisions.find((d) => d.name === division)?.color ?? '#8B1A1A'
+
+  const elected = meta?.president
+    ? `當選會長：${meta.president}${meta.vice_president ? ` · 副會長：${meta.vice_president}` : ''} · 任期 ${meta.term}`
+    : null
+
+  const pageError = listError ?? summaryError ?? writeError
 
   const patch = (key: keyof typeof appointmentFormSeed, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }))
 
-  /** 收合並清空表單（接 API 後：儲存成功才清空、取消則丟棄） */
+  /** 收合並清空表單（放棄編輯） */
   const closeForm = () => {
     setFormOpen(false)
     setForm(appointmentFormSeed)
+    setEditingId(null)
   }
+
+  /** 載入既有紀錄到表單（編輯） */
+  const startEdit = (item: RosterItem) => {
+    setWriteError(null)
+    setEditingId(item.id)
+    setForm({ name: item.name, role: item.role, by: item.by, term: item.term })
+    setFormOpen(true)
+  }
+
+  /** 儲存：新增或更新，成功後清空表單並重新載入 */
+  const save = async () => {
+    if (saving) return
+    if (!divisionId) {
+      setWriteError('分區資料尚未載入，請稍後再試')
+      return
+    }
+    if (!form.name.trim()) {
+      setWriteError('請輸入姓名')
+      return
+    }
+    setSaving(true)
+    setWriteError(null)
+    const body = {
+      division_id: divisionId,
+      position: form.role,
+      name: form.name.trim(),
+      term: form.term,
+      appointed_by: form.by,
+    }
+    try {
+      if (editingId != null) await updateAppointment(editingId, body)
+      else await createAppointment(body)
+      setFormOpen(false)
+      setForm(appointmentFormSeed)
+      setEditingId(null)
+      await Promise.all([reloadList(), reloadSummary()])
+    } catch (e) {
+      setWriteError(apiError(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /** 刪除（已確認鎖定時後端回 409） */
+  const remove = async (item: RosterItem) => {
+    if (!window.confirm(`確定刪除「${item.name}」這筆幹部指派？`)) return
+    setWriteError(null)
+    try {
+      await deleteAppointment(item.id)
+      if (editingId === item.id) {
+        setFormOpen(false)
+        setForm(appointmentFormSeed)
+        setEditingId(null)
+      }
+      await Promise.all([reloadList(), reloadSummary()])
+    } catch (e) {
+      setWriteError(apiError(e))
+    }
+  }
+
+  // 編輯紀錄的崗位不在預設選項時，補進下拉以免顯示空白
+  const roleOptions: readonly string[] = (appointmentRoles as readonly string[]).includes(
+    form.role,
+  )
+    ? appointmentRoles
+    : [form.role, ...appointmentRoles]
 
   return (
     <AdminLayout title="幹部指派">
@@ -139,6 +265,12 @@ export function AppointmentsPage() {
       >
         各區當選會長指派本區幹部・不走投票・手動錄入
       </PageIntro>
+
+      {pageError && (
+        <div className="mt-4 rounded-lg border border-[#E5C4C4] bg-white px-4 py-3 text-[13px] text-primary">
+          {pageError}
+        </div>
+      )}
 
       {/* 分區膠囊分頁 */}
       <div className="mt-[2px] inline-flex items-center gap-1 rounded-[10px] border border-border bg-card p-2">
@@ -163,7 +295,7 @@ export function AppointmentsPage() {
         <Card className="mt-6 border-[#B8935A]!">
           <div className="px-5 pt-[23px] pb-5">
             <h3 className="text-[16px] font-bold leading-none text-ink">
-              新增幹部指派－{division}
+              {editingId != null ? '編輯' : '新增'}幹部指派－{division}
             </h3>
             <div className="mt-[23px] grid grid-cols-4 gap-3">
               <FormField label="姓名">
@@ -181,7 +313,7 @@ export function AppointmentsPage() {
                   // 參考稿箭頭為深色、較大且貼近右緣（覆寫 index.css 的淺色箭頭）
                   style={SELECT_ARROW}
                 >
-                  {appointmentRoles.map((role) => (
+                  {roleOptions.map((role) => (
                     <option key={role} value={role}>
                       {role}
                     </option>
@@ -207,7 +339,7 @@ export function AppointmentsPage() {
               <Button variant="outline" onClick={closeForm}>
                 取消
               </Button>
-              <Button onClick={closeForm}>儲存</Button>
+              <Button onClick={() => void save()}>儲存</Button>
             </div>
           </div>
         </Card>
@@ -237,21 +369,28 @@ export function AppointmentsPage() {
               <div className="text-[12px] leading-[12px] text-gray">已指派</div>
               <div className="mt-[9px] text-[14px] leading-[17px] text-gray">
                 <span className="mr-[4px] font-serif text-[24px] font-bold leading-[17px] text-ink">
-                  {items.length}
+                  {roster.length}
                 </span>
                 位幹部
               </div>
             </div>
           }
         />
-        {items.length > 0 ? (
+        {roster.length > 0 ? (
           <div className="grid grid-cols-3 gap-3 px-6 pb-6">
-            {items.map((item) => (
-              <AppointmentCard key={item.name} item={item} />
+            {roster.map((item) => (
+              <AppointmentCard
+                key={item.id}
+                item={item}
+                onEdit={startEdit}
+                onDelete={(it) => void remove(it)}
+              />
             ))}
           </div>
         ) : (
-          <div className="px-6 pb-6 text-[13px] text-gray">本區尚未指派幹部</div>
+          <div className="px-6 pb-6 text-[13px] text-gray">
+            {loading ? '載入中…' : '本區尚未指派幹部'}
+          </div>
         )}
       </Card>
     </AdminLayout>
