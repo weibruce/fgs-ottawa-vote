@@ -14,7 +14,6 @@ import type { ApiError } from '../types'
 
 export function VerifyPage() {
   const navigate = useNavigate()
-
   const { save } = useVoteStore()
 
   const [name, setName] = useState('')
@@ -86,7 +85,7 @@ export function VerifyPage() {
             type="text"
             value={memberNo}
             onChange={(e) => setMemberNo(e.target.value)}
-            placeholder="例：FG2026-0888"
+            placeholder="例：M001"
             className="w-full h-12 rounded-lg bg-light-bg border border-border px-4 text-base outline-none focus:border-primary"
             autoComplete="off"
           />

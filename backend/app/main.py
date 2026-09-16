@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.routers import health, admin_auth, divisions, candidates, votes
+from app.routers import health, admin_auth, divisions, candidates, votes, rounds, dashboard
 
 # 日誌配置
 logging.basicConfig(
@@ -66,6 +66,8 @@ app.include_router(admin_auth.router, prefix=f"{settings.api_prefix}")
 app.include_router(divisions.router, prefix=f"{settings.api_prefix}")
 app.include_router(candidates.router, prefix=f"{settings.api_prefix}")
 app.include_router(votes.router, prefix=f"{settings.api_prefix}")
+app.include_router(rounds.router, prefix=f"{settings.api_prefix}")
+app.include_router(dashboard.router, prefix=f"{settings.api_prefix}")
 
 
 @app.get("/")

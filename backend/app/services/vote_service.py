@@ -1,4 +1,4 @@
-"""投票服務 — 身份確認 / 投票提交 / 實時結果"""
+"""投票服務 — 身份確認 / 投票提交 / 實時結果 / 候選人名單"""
 import json
 import uuid
 from datetime import datetime, timezone
@@ -16,7 +16,6 @@ from app.redis_client import (
     vote_count_key,
     vote_cast_key,
     division_cast_key,
-    round_status_key,
 )
 from app.services.simp_trad import match_member_name
 
@@ -30,6 +29,7 @@ def confirm_identity(
     member_no: str,
     round_id: int,
     is_proxy: bool = False,
+    proxy_note: str = "",
 ) -> dict:
     """
     姓名 + 卡號 → 簡繁匹配 → 確定分區 → 生成 voter_token
@@ -52,7 +52,8 @@ def confirm_identity(
         raise HTTPException(status_code=400, detail="姓名與卡號不匹配")
 
     # 4. 防重：已投票
-    if db.query(Vote).filter(Vote.round_id == round_id, Vote.member_no == member_no).first():
+    already = db.query(Vote).filter(Vote.round_id == round_id, Vote.member_no == member_no).first()
+    if already:
         raise HTTPException(status_code=409, detail="您已投過票，無需重複投票")
 
     # 5. 第二輪白名單校驗
@@ -81,12 +82,14 @@ def confirm_identity(
         "round_id": round_id,
         "min_votes": min_votes,
         "max_votes": max_votes,
+        "already_voted": False,
         "voter": {
             "name": member.name_trad,
             "member_no": member_no,
             "division_id": member.division_id,
             "division_name": division.name,
             "is_proxy": is_proxy,
+            "proxy_voter_name": proxy_note if is_proxy else None,
         },
     }
 
@@ -119,6 +122,8 @@ def submit_vote(
     voter_token: str,
     round_id: int,
     candidate_ids: list[int],
+    proxy: bool = False,
+    proxy_note: str = "",
 ) -> dict:
     """
     防重 + 票數校驗 + 分區校驗 + 輪次狀態校驗 → 事務寫 PG + Redis 計數
@@ -182,7 +187,8 @@ def submit_vote(
             member_no=token_member_no,
             member_name=member.name_trad,
             division_id=member.division_id,
-            is_proxy=bool(claims.get("is_proxy", False)),
+            is_proxy=proxy,
+            proxy_note=proxy_note or "",
             min_votes_at_vote=min_votes,
             max_votes_at_vote=max_votes,
         )
@@ -215,56 +221,199 @@ def submit_vote(
     }
 
 
+# ============ 候選人名單（分區級，投票人用） ============
+def get_division_candidates(db: Session, round_id: int, division_id: int) -> dict:
+    """
+    某輪次某分區的候選人名單 + 票數範圍
+    前端投票頁（ChoosePage）載入
+    """
+    # 輪次
+    rnd = db.get(Round, round_id)
+    if rnd is None:
+        raise HTTPException(status_code=404, detail="輪次不存在")
+
+    # 分區
+    div = db.get(Division, division_id)
+    if div is None:
+        raise HTTPException(status_code=404, detail="分區不存在")
+
+    # 票數範圍（分區級覆蓋輪次級）
+    min_votes = div.min_votes if div.min_votes > 0 else rnd.min_votes
+    max_votes = div.max_votes
+
+    # 候選人（經輪次關聯，按 sort_order）
+    cands = (
+        db.query(Candidate)
+        .join(RoundCandidate, RoundCandidate.candidate_id == Candidate.id)
+        .filter(
+            RoundCandidate.round_id == round_id,
+            RoundCandidate.division_id == division_id,
+            Candidate.is_active == True,
+        )
+        .order_by(RoundCandidate.sort_order, Candidate.id)
+        .all()
+    )
+
+    return {
+        "division": {
+            "id": div.id,
+            "name": div.name,
+            "code": div.code,
+            "color": div.color,
+            "min_votes": min_votes,
+            "max_votes": max_votes,
+            "start_time": div.opens_at.isoformat() if div.opens_at else None,
+            "end_time": div.closes_at.isoformat() if div.closes_at else None,
+            "status": rnd.status,
+        },
+        "candidates": [
+            {
+                "id": c.id,
+                "division_id": c.division_id,
+                "name": c.name,
+                "name_en": None,
+                "position": c.title,
+                "avatar_url": c.avatar_url or None,
+                "description": c.description or "",
+                "slogan": c.slogan or None,
+                "term_count": c.term_count,
+                "sort_order": c.sort_order,
+            }
+            for c in cands
+        ],
+        "min_votes": min_votes,
+        "max_votes": max_votes,
+    }
+
+
 # ============ 實時結果 ============
+def _division_result_dict(db: Session, rnd: Round, div: Division, round_id: int) -> dict:
+    """計算單分區結果（供 get_results / get_single_division_result / get_overview_results 共用）"""
+    # 本分區候選人（經輪次關聯）
+    cands = (
+        db.query(Candidate)
+        .join(RoundCandidate, RoundCandidate.candidate_id == Candidate.id)
+        .filter(
+            RoundCandidate.round_id == round_id,
+            RoundCandidate.division_id == div.id,
+        )
+        .order_by(RoundCandidate.sort_order)
+        .all()
+    )
+
+    # Redis MGET 計數
+    cand_votes: dict[int, int] = {}
+    div_cast = 0
+    try:
+        keys = [vote_count_key(round_id, div.id, c.id) for c in cands]
+        if keys:
+            vals = redis_client.mget(keys)
+            for c, v in zip(cands, vals):
+                cand_votes[c.id] = int(v) if v is not None else 0
+        div_cast_raw = redis_client.get(division_cast_key(round_id, div.id))
+        div_cast = int(div_cast_raw) if div_cast_raw is not None else 0
+    except Exception:
+        cand_votes, div_cast = {}, 0
+
+    # 若 Redis 全 0 但有 PG 投票 → PG 回填
+    total_redis = sum(cand_votes.values())
+    if total_redis == 0:
+        pg_votes = db.query(Vote).filter(
+            Vote.round_id == round_id, Vote.division_id == div.id
+        ).count()
+        if pg_votes > 0:
+            _recount_from_pg(db, round_id, div.id, cands)
+            cand_votes = {c.id: _pg_candidate_votes(db, round_id, div.id, c.id) for c in cands}
+            div_cast = pg_votes
+
+    # 本分區會員總數
+    total_members = db.query(Member).filter(
+        Member.division_id == div.id, Member.is_active == True
+    ).count()
+
+    # 計算 is_leading（最高票，同分都標）
+    max_v = max(cand_votes.values()) if cand_votes else 0
+
+    return {
+        "division": {
+            "id": div.id,
+            "name": div.name,
+            "code": div.code,
+            "color": div.color,
+            "min_votes": div.min_votes if div.min_votes > 0 else rnd.min_votes,
+            "max_votes": div.max_votes,
+            "start_time": div.opens_at.isoformat() if div.opens_at else None,
+            "end_time": div.closes_at.isoformat() if div.closes_at else None,
+            "status": rnd.status,
+        },
+        "voted_count": div_cast,
+        "total_count": total_members,
+        "results": [
+            {
+                "candidate_id": c.id,
+                "name": c.name,
+                "votes": cand_votes.get(c.id, 0),
+                "is_leading": max_v > 0 and cand_votes.get(c.id, 0) == max_v,
+            }
+            for c in cands
+        ],
+        "status": rnd.status,
+    }
+
+
 def get_results(db: Session, round_id: int) -> dict:
     """
-    Redis MGET 讀取計數 → 未命中則 PG 查詢回填 → 附加候選人後設資料
+    五區彙總結果（GET /votes/results/{round_id}）
+    回傳型別：ResultsResponse（divisions: list[DivisionResult 扁平型）
     """
     rnd = db.get(Round, round_id)
     if rnd is None:
         raise HTTPException(status_code=404, detail="輪次不存在")
 
-    # 所有分區
     divisions = db.query(Division).filter(Division.is_active == True).order_by(Division.sort_order).all()
 
     results = []
     for div in divisions:
-        # 本分區候選人（經輪次關聯）
+        # 本分區候選人
         cands = (
             db.query(Candidate)
             .join(RoundCandidate, RoundCandidate.candidate_id == Candidate.id)
-            .filter(RoundCandidate.round_id == round_id, RoundCandidate.division_id == div.id)
+            .filter(
+                RoundCandidate.round_id == round_id,
+                RoundCandidate.division_id == div.id,
+            )
             .order_by(RoundCandidate.sort_order)
             .all()
         )
 
-        # Redis MGET 計數
-        cand_votes = {}
+        # Redis MGET
+        cand_votes: dict[int, int] = {}
+        div_cast = 0
         try:
             keys = [vote_count_key(round_id, div.id, c.id) for c in cands]
             if keys:
                 vals = redis_client.mget(keys)
                 for c, v in zip(cands, vals):
                     cand_votes[c.id] = int(v) if v is not None else 0
-            div_cast = redis_client.get(division_cast_key(round_id, div.id))
-            div_cast = int(div_cast) if div_cast is not None else 0
+            div_cast_raw = redis_client.get(division_cast_key(round_id, div.id))
+            div_cast = int(div_cast_raw) if div_cast_raw is not None else 0
         except Exception:
             cand_votes, div_cast = {}, 0
 
-        # 若 Redis 全 0 但有 PG 投票 → PG 回填
+        # PG 回填
         total_redis = sum(cand_votes.values())
         if total_redis == 0:
-            pg_votes = db.query(Vote).filter(Vote.round_id == round_id, Vote.division_id == div.id).count()
+            pg_votes = db.query(Vote).filter(
+                Vote.round_id == round_id, Vote.division_id == div.id
+            ).count()
             if pg_votes > 0:
-                # 從 PG 重算計數並回填 Redis
                 _recount_from_pg(db, round_id, div.id, cands)
-                cand_votes = {
-                    c.id: _pg_candidate_votes(db, round_id, div.id, c.id) for c in cands
-                }
+                cand_votes = {c.id: _pg_candidate_votes(db, round_id, div.id, c.id) for c in cands}
                 div_cast = pg_votes
 
-        # 本分區會員總數
-        total_members = db.query(Member).filter(Member.division_id == div.id, Member.is_active == True).count()
+        total_members = db.query(Member).filter(
+            Member.division_id == div.id, Member.is_active == True
+        ).count()
 
         results.append({
             "division_id": div.id,
@@ -272,12 +421,13 @@ def get_results(db: Session, round_id: int) -> dict:
             "color": div.color,
             "total_members": total_members,
             "votes_cast": div_cast,
+            "status": rnd.status,
             "candidates": [
                 {
                     "candidate_id": c.id,
                     "name": c.name,
                     "title": c.title,
-                    "avatar_url": c.avatar_url,
+                    "avatar_url": c.avatar_url or "",
                     "votes": cand_votes.get(c.id, 0),
                 }
                 for c in cands
@@ -292,11 +442,45 @@ def get_results(db: Session, round_id: int) -> dict:
     }
 
 
+def get_single_division_result(db: Session, round_id: int, division_id: int) -> dict:
+    """
+    單分區結果（GET /votes/results?round_id=N&division_id=M）
+    回傳型別：FrontendDivisionResult（嵌套 division 物件）
+    """
+    rnd = db.get(Round, round_id)
+    if rnd is None:
+        raise HTTPException(status_code=404, detail="輪次不存在")
+    div = db.get(Division, division_id)
+    if div is None:
+        raise HTTPException(status_code=404, detail="分區不存在")
+    return _division_result_dict(db, rnd, div, round_id)
+
+
+def get_overview_results(db: Session, round_id: int) -> dict:
+    """
+    五區彙總（GET /votes/results?round_id=N）
+    回傳型別：OverviewResult（divisions: list[FrontendDivisionResult 嵌套型）
+    """
+    rnd = db.get(Round, round_id)
+    if rnd is None:
+        raise HTTPException(status_code=404, detail="輪次不存在")
+
+    divisions = db.query(Division).filter(Division.is_active == True).order_by(Division.sort_order).all()
+    return {
+        "round_id": round_id,
+        "divisions": [_division_result_dict(db, rnd, div, round_id) for div in divisions],
+    }
+
+
 def _pg_candidate_votes(db: Session, round_id: int, division_id: int, candidate_id: int) -> int:
     return (
         db.query(VoteCandidate)
         .join(Vote, Vote.id == VoteCandidate.vote_id)
-        .filter(Vote.round_id == round_id, Vote.division_id == division_id, VoteCandidate.candidate_id == candidate_id)
+        .filter(
+            Vote.round_id == round_id,
+            Vote.division_id == division_id,
+            VoteCandidate.candidate_id == candidate_id,
+        )
         .count()
     )
 
@@ -308,7 +492,9 @@ def _recount_from_pg(db: Session, round_id: int, division_id: int, cands: list[C
         for c in cands:
             cnt = _pg_candidate_votes(db, round_id, division_id, c.id)
             pipe.set(vote_count_key(round_id, division_id, c.id), cnt)
-        div_cast = db.query(Vote).filter(Vote.round_id == round_id, Vote.division_id == division_id).count()
+        div_cast = db.query(Vote).filter(
+            Vote.round_id == round_id, Vote.division_id == division_id
+        ).count()
         pipe.set(division_cast_key(round_id, division_id), div_cast)
         pipe.execute()
     except Exception:

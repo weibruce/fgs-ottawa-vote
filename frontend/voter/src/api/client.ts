@@ -1,6 +1,7 @@
 /**
  * 投票端 API client
  * Axios 實例 + 錯誤碼攔截器（HTTP code → 中文訊息）
+ * 對齊後端 app/routers/votes.py 路由
  */
 import axios, { AxiosError } from 'axios'
 import type { ApiError } from '../types'
@@ -34,47 +35,61 @@ export const api = axios.create({
   timeout: 10000,
 })
 
-// 請求攔截器：可在此附加 voter_token（本專案用 query/body 帶 token，暫不加 header）
-// 回應攔截器：統一錯誤處理
 api.interceptors.response.use(
   (res) => res,
   (err: AxiosError<ApiError>) => {
-    // 401 token 過期 → 跳 verify（由頁面層處理，此處僅標記）
     return Promise.reject(err)
   }
 )
 
-/** 讀取輪次狀態 + 分區列表 */
-export function getRound(roundId: number) {
-  return api.get<import('../types').Round>(`/round/${roundId}`)
+/** 身份確認（POST /votes/confirm） */
+export function confirmVoter(req: {
+  name: string
+  member_no: string
+  proxy: boolean
+  proxy_voter_name?: string
+}) {
+  return api.post<import('../types').ConfirmResponse>('/confirm', {
+    name: req.name,
+    member_no: req.member_no,
+    round_id: 1,
+    is_proxy: req.proxy,
+    proxy_note: req.proxy ? (req.proxy_voter_name || '') : '',
+  })
 }
 
-/** 讀取分區候選人名單 + 票數 */
+/** 候選人名單（GET /votes/round/{roundId}/division/{divisionId}） */
 export function getDivisionCandidates(roundId: number, divisionId: number) {
   return api.get<import('../types').DivisionCandidates>(
     `/round/${roundId}/division/${divisionId}`
   )
 }
 
-/** 身份確認 */
-export function confirmVoter(req: import('../types').ConfirmRequest) {
-  return api.post<import('../types').ConfirmResponse>('/confirm', req)
+/** 提交投票（POST /votes/submit） */
+export function submitVote(req: {
+  voter_token: string
+  round_id: number
+  candidate_ids: number[]
+  proxy: boolean
+  proxy_voter_name?: string
+}) {
+  return api.post<{ success: boolean; message: string; votes_cast: number }>('/submit', {
+    voter_token: req.voter_token,
+    round_id: req.round_id,
+    candidate_ids: req.candidate_ids,
+    proxy: req.proxy,
+    proxy_voter_name: req.proxy_voter_name || null,
+  })
 }
 
-/** 提交投票 */
-export function submitVote(req: import('../types').SubmitRequest) {
-  return api.post<{ ok: boolean }>('/submit', req)
-}
-
-/** 單分區即時結果 */
+/** 單分區即時結果（GET /votes/results?round_id&division_id） */
 export function getDivisionResults(roundId: number, divisionId: number) {
-  return api.get<import('../types').DivisionResult>(
-    '/results',
-    { params: { round_id: roundId, division_id: divisionId } }
-  )
+  return api.get<import('../types').DivisionResult>('/results', {
+    params: { round_id: roundId, division_id: divisionId },
+  })
 }
 
-/** 五區彙總結果 */
+/** 五區彙總結果（GET /votes/results?round_id） */
 export function getOverviewResults(roundId: number) {
   return api.get<import('../types').OverviewResult>('/results', {
     params: { round_id: roundId },
