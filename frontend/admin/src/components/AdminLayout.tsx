@@ -1,35 +1,61 @@
 /**
  * 管理後台佈局：側欄 + 頂欄 + 內容區
- * UI 1:1 對齊參考稿 voting-admin-system.preview.emergentagent.com
+ * 幾何依參考稿量測：側欄 255px｜頂欄 62px｜內容 padding 32px
  */
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { clearToken } from '../api/client'
 import type { ReactNode } from 'react'
+import {
+  IconDashboard,
+  IconMapPin,
+  IconCandidate,
+  IconMembers,
+  IconVoteConfig,
+  IconTally,
+  IconRounds,
+  IconAppointments,
+  IconExport,
+  IconSettings,
+  IconSearch,
+  IconBell,
+} from './icons'
 
 const NAV = [
-  { to: '/', label: '儀表板', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' },
-  { to: '/divisions', label: '分區管理', icon: 'M12 21s-7-5.1-7-11a7 7 0 1114 0c0 5.9-7 11-7 11zm0-8a3 3 0 100-6 3 3 0 000 6z' },
-  { to: '/candidates', label: '候選人管理', icon: 'M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-5 0-9 2.5-9 5.5V21h18v-1.5c0-3-4-5.5-9-5.5z' },
-  { to: '/members', label: '會員名單', icon: 'M16 11a4 4 0 10-8 0 4 4 0 008 0zM2 19c0-2.8 4-5 10-5s10 2.2 10 5v1H2v-1z' },
-  { to: '/vote-config', label: '投票配置', icon: 'M4 6h10M18 6h2M4 12h2M10 12h10M4 18h13M21 18h-2M14 4v4M8 10v4M17 16v4' },
-  { to: '/tally', label: '實時計票', icon: 'M4 20V10M10 20V4M16 20v-7M22 20H2' },
-  { to: '/rounds', label: '輪次管理', icon: 'M17 2l4 4-4 4M3 11v-1a4 4 0 014-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 01-4 4H3' },
-  { to: '/appointments', label: '幹部指派', icon: 'M16 11a4 4 0 10-8 0 4 4 0 008 0zM2 19c0-2.8 4-5 10-5 1 0 2 .1 3 .2M18 8l4 4M22 8l-4 4' },
-  { to: '/export', label: '資料匯出', icon: 'M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2' },
-  { to: '/settings', label: '系統設定', icon: 'M12 15a3 3 0 100-6 3 3 0 000 6zm7.4-3a7.4 7.4 0 00-.1-1.2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 00-2-1.2L14.5 3h-5l-.4 2.5a7.6 7.6 0 00-2 1.2l-2.5-1-2 3.5 2.1 1.6a7.4 7.4 0 000 2.4L2.6 14.8l2 3.5 2.5-1a7.6 7.6 0 002 1.2l.4 2.5h5l.4-2.5a7.6 7.6 0 002-1.2l2.5 1 2-3.5-2.1-1.6c.1-.4.1-.8.1-1.2z' },
+  { to: '/', label: '儀表板', Icon: IconDashboard },
+  { to: '/divisions', label: '分區管理', Icon: IconMapPin },
+  { to: '/candidates', label: '候選人管理', Icon: IconCandidate },
+  { to: '/members', label: '會員名單', Icon: IconMembers },
+  { to: '/vote-config', label: '投票配置', Icon: IconVoteConfig },
+  { to: '/tally', label: '實時計票', Icon: IconTally },
+  { to: '/rounds', label: '輪次管理', Icon: IconRounds },
+  { to: '/appointments', label: '幹部指派', Icon: IconAppointments },
+  { to: '/export', label: '資料匯出', Icon: IconExport },
+  { to: '/settings', label: '系統設定', Icon: IconSettings },
 ]
 
-function NavIcon({ d }: { d: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="w-[18px] h-[18px] shrink-0">
-      <path d={d} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-export function AdminLayout({ children, title }: { children: ReactNode; title?: string }) {
+export function AdminLayout({
+  children,
+  title,
+}: {
+  children: ReactNode
+  title?: string
+}) {
   const navigate = useNavigate()
   const username = localStorage.getItem('admin_username') || 'admin'
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [menuOpen])
 
   const logout = () => {
     clearToken()
@@ -37,81 +63,121 @@ export function AdminLayout({ children, title }: { children: ReactNode; title?: 
   }
 
   return (
-    <div className="min-h-screen bg-cream flex">
+    <div className="h-full flex bg-page">
       {/* ── 側欄 ── */}
-      <aside className="w-64 shrink-0 bg-white border-r border-border flex flex-col">
-        <div className="px-5 pt-5 pb-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-white font-serif text-lg">
+      <aside className="w-[256px] shrink-0 bg-shell border-r border-border flex flex-col">
+        <div className="h-[88px] shrink-0 px-6 flex items-center gap-[14px] border-b border-border">
+          <div className="w-[39px] h-[39px] rounded-[10px] bg-primary flex items-center justify-center text-white font-serif text-[20px] leading-none">
             佛
           </div>
-          <div>
-            <div className="font-bold text-ink text-[15px] leading-tight">佛光山投票系統</div>
-            <div className="text-[12px] text-gray">後台管理</div>
+          <div className="min-w-0">
+            <div className="font-serif font-bold text-ink text-[16px] leading-tight whitespace-nowrap">
+              佛光山投票系統
+            </div>
+            <div className="text-[12px] text-gray leading-tight mt-[3px]">
+              後台管理
+            </div>
           </div>
         </div>
 
-        <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
-          {NAV.map((item) => (
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {NAV.map(({ to, label, Icon }) => (
             <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
+              key={to}
+              to={to}
+              end={to === '/'}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-[14px] transition-colors ${
+                `flex items-center gap-[10px] h-10 px-[14px] rounded-lg text-[14px] transition-colors ${
                   isActive
-                    ? 'bg-primary text-white font-medium'
-                    : 'text-ink/80 hover:bg-cream'
+                    ? 'bg-primary text-white'
+                    : 'text-ink-soft hover:bg-light-bg'
                 }`
               }
             >
-              <NavIcon d={item.icon} />
-              <span>{item.label}</span>
+              {({ isActive }) => (
+                <>
+                  <Icon size={16} className={isActive ? 'text-white' : 'text-ink-soft'} />
+                  <span className="whitespace-nowrap">{label}</span>
+                </>
+              )}
             </NavLink>
           ))}
         </nav>
 
-        <div className="px-5 py-4 border-t border-border">
-          <div className="flex items-center gap-2 text-[13px] text-ink">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+        <div className="shrink-0 px-[18px] pt-[18px] pb-[10px] border-t border-border">
+          <div className="flex items-center gap-[9px] text-[13px] leading-none text-ink-soft">
+            <span className="w-[7px] h-[7px] rounded-full bg-[#22a06b]" />
             系統運行中
           </div>
-          <div className="text-[12px] text-gray mt-1">v1.1 · 2026</div>
+          <div className="text-[13px] leading-none text-gray mt-[10px]">v1.1 · 2026</div>
         </div>
       </aside>
 
       {/* ── 主區 ── */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* 頂欄 */}
-        <header className="h-16 bg-white border-b border-border flex items-center px-6 gap-4">
-          <h1 className="text-xl font-bold text-ink font-serif">{title || '儀表板總覽'}</h1>
-          <div className="ml-auto flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-2 bg-cream border border-border rounded-lg px-3 py-1.5 w-56">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4 text-gray">
-                <circle cx="11" cy="11" r="7" />
-                <path d="M21 21l-4.3-4.3" strokeLinecap="round" />
-              </svg>
-              <input placeholder="搜尋..." className="bg-transparent outline-none text-[13px] w-full placeholder:text-gray" />
+        <header className="h-[63px] shrink-0 bg-shell border-b border-border flex items-center pl-8 pr-8 gap-4">
+          <h1 className="text-[20px] font-serif font-bold text-ink whitespace-nowrap">
+            {title || '儀表板總覽'}
+          </h1>
+
+          <div className="ml-auto flex items-center">
+            <div className="hidden md:flex items-center gap-2 w-[224px] h-[38px] px-3 rounded-lg bg-page border border-border">
+              <IconSearch size={16} className="text-gray shrink-0" />
+              <input
+                placeholder="搜尋..."
+                className="bg-transparent outline-none text-[14px] w-full placeholder:text-gray text-ink"
+              />
             </div>
-            <button className="relative p-2 text-gray hover:text-ink" title="通知">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="w-5 h-5">
-                <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary" />
+
+            <button
+              className="relative ml-[19px] w-[23px] h-[23px] flex items-center justify-center text-ink-soft hover:text-primary"
+              title="通知"
+            >
+              <IconBell size={20} />
+              <span className="absolute top-[-1px] right-[-1px] w-[7px] h-[7px] rounded-full bg-[#c0392b]" />
             </button>
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-full bg-[#B8935A] text-white flex items-center justify-center text-sm font-medium">
-                {username.charAt(0).toUpperCase()}
-              </div>
-              <div className="hidden lg:block">
-                <div className="text-[13px] font-medium text-ink leading-tight">{username}</div>
-                <div className="text-[11px] text-gray">系統管理員</div>
-              </div>
+
+            <span className="w-px h-[30px] bg-border ml-[15px]" />
+
+            <div className="relative ml-[14px]" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                className="flex items-center gap-[9px]"
+              >
+                <span className="w-[32px] h-[32px] rounded-full bg-[#B8935A] text-white flex items-center justify-center text-[14px] font-medium">
+                  {username.charAt(0).toUpperCase()}
+                </span>
+                <span className="hidden lg:block text-left">
+                  <span className="block text-[14px] font-bold text-ink leading-tight">
+                    {username}
+                  </span>
+                  <span className="block text-[12px] text-gray leading-tight mt-[2px]">
+                    系統管理員
+                  </span>
+                </span>
+              </button>
+
+              {menuOpen && (
+                <div className="absolute right-0 top-[46px] w-[140px] bg-card border border-border rounded-lg py-1 shadow-lg z-50">
+                  <button
+                    onClick={() => navigate('/settings')}
+                    className="w-full text-left px-4 py-2 text-[14px] text-ink hover:bg-light-bg"
+                  >
+                    系統設定
+                  </button>
+                  <button
+                    onClick={logout}
+                    className="w-full text-left px-4 py-2 text-[14px] text-primary hover:bg-light-bg"
+                  >
+                    登出
+                  </button>
+                </div>
+              )}
             </div>
-            <button onClick={logout} className="text-[12px] text-gray hover:text-primary">退出</button>
           </div>
         </header>
 
-        <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto bg-page p-8">{children}</main>
       </div>
     </div>
   )

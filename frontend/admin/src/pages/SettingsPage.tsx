@@ -1,101 +1,252 @@
 /**
- * 系統設定 — 1:1 對齊參考稿（mock 數據）
+ * 系統設定 — 1:1 對齊參考稿 docs/ui/admin/voting_system_dashboard_10.png
+ *
+ * 幾何量測（參考稿為 1920×940 CSS px，DPR=1）：
+ *   內容區 padding 32px｜卡片滿版 x 288→1887｜卡片間距 24px
+ *   卡片內距 24px｜表單兩欄 grid gap 16px｜輸入框 38px 高、白底、圓角 6px
+ *   卡片標題 18px 襯線體 + 16px 圖示；副標 12px gray-deep
+ *   底部操作列在卡片之外、右緣與卡片右緣對齊（鈕距 8px、px-5）
+ * 註：CardHeader / Field 的預設內距與字級與本頁參考稿不同，
+ *     故於此以 className / ReactNode 覆寫（不動共用檔）。
  */
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
+import { Button, Card, CardHeader, Field, PageIntro } from '../components/ui'
+import { IconBell, IconUser } from '../components/icons'
 
-const TABS = ['帳戶安全', '預設投票視窗', '輪詢與通知', '資料保留策略', '安全設定']
+/* ── 文案與預設值（之後由 API 覆寫） ── */
+
+const PAGE_INTRO_SEGMENTS = ['系統全局設定', '安全', '鐘屏', '監控']
+
+const ACCOUNT = {
+  username: 'admin',
+  passwordPlaceholder: '至少 8 位，含英數',
+  minPasswordLength: 8,
+}
+
+const POLLING_DEFAULTS = {
+  intervalSec: 2,
+  healthCheckSec: 30,
+  intervalHint: '建議 2-5 秒',
+}
+
+/* ── 頁面專用圖示（icons.tsx 沒有的，於此自繪） ── */
+
+interface MiniIconProps {
+  size?: number
+}
+
+function IconKey({ size = 16 }: MiniIconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="7.6" cy="16.4" r="3.7" />
+      <path d="M10.3 13.7L19.6 4.4" />
+      <path d="M16.1 7.9l2.7 2.7" />
+      <path d="M18.7 5.3l2.7 2.7" />
+    </svg>
+  )
+}
+
+function IconSave({ size = 16 }: MiniIconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5.4 3.6h9.7l4.5 4.5v10.9a1.4 1.4 0 0 1-1.4 1.4H5.4A1.4 1.4 0 0 1 4 19V5a1.4 1.4 0 0 1 1.4-1.4z" />
+      <path d="M8.3 3.6v4.6h6.2V3.6" />
+      <path d="M8.1 13.4h7.8v6.9H8.1z" />
+    </svg>
+  )
+}
+
+/* ── 卡片標題（襯線 18px + 前置圖示） ── */
+
+function CardTitle({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <span className="flex items-center gap-2 font-serif text-[18px] leading-none">
+      <span className="shrink-0">{icon}</span>
+      <span className="leading-none">{children}</span>
+    </span>
+  )
+}
+
+/** 表單欄位標籤（14px ink，行高收緊以對齊參考稿節奏） */
+function FieldLabel({ children }: { children: ReactNode }) {
+  return <span className="block text-[14px] leading-none text-ink">{children}</span>
+}
+
+/** 欄位下方提示（12px gray-deep） */
+function FieldHint({ children }: { children: ReactNode }) {
+  return <span className="block text-[12px] leading-none text-gray-deep">{children}</span>
+}
+
+/** 卡片副標（12px gray-deep） */
+function CardSub({ children }: { children: ReactNode }) {
+  return <span className="block text-[12px] leading-none text-gray-deep">{children}</span>
+}
+
+/**
+ * 本頁參考稿的卡片標題列內距為 px-6 / pt-30 / pb-24（與共用 CardHeader 的 px-5 / pt-18 / pb-18
+ * 不同），故以外層 wrapper 的子選擇器覆寫（特異性高於共用 utility，不受 Tailwind 排序影響）；
+ * 副標 mt 一併釘成 10px，避免共用檔後續調整時本頁跑掉。
+ */
+const CARD_HEADER_WRAP = '[&>div]:px-6 [&>div]:pt-[30px] [&>div]:pb-6'
+const CARD_HEADER_CLASS = '[&>div>p]:mt-[10px]'
+
+const inputClass = 'ui-input bg-white rounded-md'
 
 export function SettingsPage() {
-  const [tab, setTab] = useState(TABS[0])
+  const [username] = useState(ACCOUNT.username)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [intervalSec, setIntervalSec] = useState(String(POLLING_DEFAULTS.intervalSec))
+  const [healthCheckSec, setHealthCheckSec] = useState(String(POLLING_DEFAULTS.healthCheckSec))
   const [toast, setToast] = useState<string | null>(null)
-  const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
 
   const flash = (msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
   }
 
+  const handleUpdatePassword = () => {
+    if (newPassword.length < ACCOUNT.minPasswordLength) {
+      flash(`密碼至少 ${ACCOUNT.minPasswordLength} 位`)
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      flash('兩次輸入的密碼不一致')
+      return
+    }
+    flash('密碼已更新（mock）')
+    setNewPassword('')
+    setConfirmPassword('')
+  }
+
+  const handleSaveAll = () => {
+    flash(`設定已儲存：輪詢 ${intervalSec} 秒／健康檢查 ${healthCheckSec} 秒（mock）`)
+  }
+
   return (
     <AdminLayout title="系統設定">
-      <p className="text-sm text-gray">系統全局設定 · 安全 · 時區 · 監控</p>
-
-      {/* 分頁 tab */}
-      <div className="flex gap-2 mt-4 flex-wrap">
-        {TABS.map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-lg text-sm transition-colors border ${
-              tab === t
-                ? 'bg-primary text-white border-primary font-medium'
-                : 'bg-white text-ink border-border hover:bg-cream'
-            }`}>
-            {t}
-          </button>
-        ))}
+      {/* 說明列（參考稿此頁無右側操作鈕，且高度較共用元件小、文字靠上） */}
+      <div className="[&>div]:min-h-[24px] [&>div]:items-start">
+        <PageIntro>{PAGE_INTRO_SEGMENTS.join('·')}</PageIntro>
       </div>
 
-      {/* 帳戶安全 */}
-      <div className="bg-card rounded-xl border border-border shadow-sm p-5 mt-5">
-        <h3 className="text-[16px] font-bold text-ink">帳戶安全</h3>
-        <div className="text-[12px] text-gray mt-0.5">修改管理員密碼（至少 8 位，含英數）</div>
-        <div className="grid md:grid-cols-3 gap-4 mt-4 max-w-3xl">
-          <div>
-            <label className="block text-[13px] text-ink mb-1">目前帳號</label>
-            <input value="admin" disabled
-              className="w-full h-11 rounded-lg bg-cream/50 border border-border px-4 text-sm outline-none text-gray" />
+      <div className="space-y-6">
+        {/* 帳戶安全 */}
+        <Card>
+          <div className={CARD_HEADER_WRAP}>
+            <CardHeader
+              divider={false}
+              className={CARD_HEADER_CLASS}
+              title={
+                <CardTitle icon={<IconUser size={16} className="text-primary" />}>帳戶安全</CardTitle>
+              }
+              sub={<CardSub>修改管理員密碼，建議定期更新</CardSub>}
+            />
           </div>
-          <div>
-            <label className="block text-[13px] text-ink mb-1">新密碼</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="至少 8 位，含英數"
-              className="w-full h-11 rounded-lg bg-cream/50 border border-border px-4 text-sm outline-none focus:border-primary" />
+          <div className="px-6 pb-6">
+            <Field label={<FieldLabel>管理員帳號</FieldLabel>}>
+              <input className={inputClass} value={username} readOnly />
+            </Field>
+
+            <div className="mt-[19px] grid grid-cols-2 gap-4">
+              <Field label={<FieldLabel>新密碼</FieldLabel>}>
+                <input
+                  type="password"
+                  className={inputClass}
+                  placeholder={ACCOUNT.passwordPlaceholder}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </Field>
+              <Field label={<FieldLabel>確認新密碼</FieldLabel>}>
+                <input
+                  type="password"
+                  className={inputClass}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+              </Field>
+            </div>
+
+            <div className="mt-4">
+              <Button onClick={handleUpdatePassword}>
+                <IconKey size={16} />
+                更新密碼
+              </Button>
+            </div>
           </div>
-          <div>
-            <label className="block text-[13px] text-ink mb-1">確認新密碼</label>
-            <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
-              className="w-full h-11 rounded-lg bg-cream/50 border border-border px-4 text-sm outline-none focus:border-primary" />
+        </Card>
+
+        {/* 輪詢與鐘屏 */}
+        <Card>
+          <div className={CARD_HEADER_WRAP}>
+            <CardHeader
+              divider={false}
+              className={CARD_HEADER_CLASS}
+              title={
+                <CardTitle icon={<IconBell size={16} className="text-div-south" />}>輪詢與鐘屏</CardTitle>
+              }
+              sub={<CardSub>實時計票面板的更新頻率設定</CardSub>}
+            />
           </div>
-          <div className="flex items-end">
-            <button onClick={() => {
-              if (password.length < 8) { flash('密碼至少 8 位'); return }
-              flash('密碼已更新（mock）')
-              setPassword(''); setConfirm('')
-            }}
-              className="bg-primary text-white rounded-lg px-5 py-2.5 text-sm font-medium hover:bg-primary-hover transition-colors">
-              更新密碼
-            </button>
+          <div className="px-6 pb-6">
+            <div className="grid grid-cols-2 gap-4">
+              <Field
+                label={<FieldLabel>輪詢間隔（秒）</FieldLabel>}
+                hint={<FieldHint>{POLLING_DEFAULTS.intervalHint}</FieldHint>}
+              >
+                <input
+                  type="number"
+                  min={1}
+                  className={inputClass}
+                  value={intervalSec}
+                  onChange={(e) => setIntervalSec(e.target.value)}
+                />
+              </Field>
+              <Field label={<FieldLabel>健康檢查間隔（秒）</FieldLabel>}>
+                <input
+                  type="number"
+                  min={1}
+                  className={inputClass}
+                  value={healthCheckSec}
+                  onChange={(e) => setHealthCheckSec(e.target.value)}
+                />
+              </Field>
+            </div>
           </div>
+        </Card>
+
+        {/* 底部操作（卡片之外、右對齊） */}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" className="px-5" onClick={() => flash('已取消修改（mock）')}>
+            取消
+          </Button>
+          <Button className="px-5" onClick={handleSaveAll}>
+            <IconSave size={16} />
+            儲存所有設定
+          </Button>
         </div>
-      </div>
-
-      {/* 輪詢與時區 */}
-      <div className="bg-card rounded-xl border border-border shadow-sm p-5 mt-4">
-        <h3 className="text-[16px] font-bold text-ink">輪詢與時區</h3>
-        <div className="text-[12px] text-gray mt-0.5">前端實時數據拉取頻率與系統時區</div>
-        <div className="grid md:grid-cols-2 gap-4 mt-4 max-w-2xl">
-          <div>
-            <label className="block text-[13px] text-ink mb-1">計票輪詢間隔（秒）</label>
-            <input type="number" defaultValue={2} min={1}
-              className="w-full h-11 rounded-lg bg-cream/50 border border-border px-4 text-sm outline-none focus:border-primary" />
-          </div>
-          <div>
-            <label className="block text-[13px] text-ink mb-1">時區</label>
-            <select className="w-full h-11 rounded-lg bg-cream/50 border border-border px-4 text-sm outline-none focus:border-primary">
-              <option>Asia/Taipei (UTC+8)</option>
-              <option>America/Toronto (UTC-5)</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* 底部操作 */}
-      <div className="flex justify-end gap-3 mt-5 flex-wrap">
-        <button onClick={() => flash('已取消修改')} className="px-4 py-2.5 rounded-lg border border-border text-sm text-ink hover:bg-cream transition-colors">
-          取消
-        </button>
-        <button onClick={() => flash('所有設定已儲存（mock）')} className="px-5 py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover transition-colors">
-          儲存所有設定
-        </button>
       </div>
 
       {toast && (

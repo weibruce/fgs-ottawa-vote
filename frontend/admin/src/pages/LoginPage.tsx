@@ -21,7 +21,7 @@ export function LoginPage() {
       setToken(res.data.access_token)
       localStorage.setItem('admin_username', res.data.username || username.trim())
       navigate('/')
-    } catch (e) {
+    } catch {
       setError('帳號或密碼錯誤')
     } finally {
       setLoading(false)

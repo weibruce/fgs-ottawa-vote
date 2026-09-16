@@ -8,9 +8,9 @@
 export const DIVISION_COLORS: Record<string, string> = {
   東: '#8B1A1A',
   南: '#B8935A',
-  西: '#5C3A21',
-  北: '#8B7355',
-  中: '#A0917B',
+  西: '#6B4423',
+  北: '#8A6D3B',
+  中: '#A8896C',
 }
 
 export interface MockDivision {
@@ -28,9 +28,9 @@ export interface MockDivision {
 export const mockDivisions: MockDivision[] = [
   { id: 1, code: 'east', name: '東區', color: '#8B1A1A', members: 68, candidates: 6, voted: 52, status: '進行中', address: '佛光山總會 東區' },
   { id: 2, code: 'south', name: '南區', color: '#B8935A', members: 54, candidates: 5, voted: 41, status: '進行中', address: '佛光山總會 南區' },
-  { id: 3, code: 'west', name: '西區', color: '#5C3A21', members: 72, candidates: 7, voted: 48, status: '進行中', address: '佛光山總會 西區' },
-  { id: 4, code: 'north', name: '北區', color: '#8B7355', members: 58, candidates: 5, voted: 33, status: '進行中', address: '佛光山總會 北區' },
-  { id: 5, code: 'center', name: '中區', color: '#A0917B', members: 48, candidates: 6, voted: 29, status: '進行中', address: '佛光山總會 中區' },
+  { id: 3, code: 'west', name: '西區', color: '#6B4423', members: 72, candidates: 7, voted: 48, status: '進行中', address: '佛光山總會 西區' },
+  { id: 4, code: 'north', name: '北區', color: '#8A6D3B', members: 58, candidates: 5, voted: 33, status: '進行中', address: '佛光山總會 北區' },
+  { id: 5, code: 'center', name: '中區', color: '#A8896C', members: 48, candidates: 6, voted: 29, status: '進行中', address: '佛光山總會 中區' },
 ]
 
 /** 儀表板 */
@@ -38,7 +38,7 @@ export const mockDashboard = {
   roundLabel: 'CURRENT ROUND · 進行中',
   roundTitle: '第一輪 · 五分區同步選舉',
   windowText: '投票視窗：2026-09-04 10:00 – 2026-09-04 12:00',
-  progressLabel: '總維度',
+  progressLabel: '總進度',
   progressPct: 68,
   progressText: '203 / 300 人',
   stats: [
@@ -48,10 +48,10 @@ export const mockDashboard = {
     { label: '代理投票', value: 12, sub: '佔已投票 5.9%', tone: 'gold' },
   ] as { label: string; value: number; sub: string; tone: string }[],
   logs: [
-    { text: '東區 林明德 完成投票', time: '10:45' },
-    { text: '南區 吳文雄 完成投票（代理）', time: '10:43' },
+    { text: '第一輪投票結束', time: '10:45' },
+    { text: '管理員 admin 修改數據刷新時間為1秒', time: '10:43' },
     { text: '管理員 admin 修改投票視窗', time: '10:40' },
-    { text: '西區 郭信宏 完成投票', time: '10:35' },
+    { text: '第一輪投票開始', time: '10:35' },
     { text: '匯入會員名單 300 筆', time: '10:30' },
   ],
 }
@@ -140,8 +140,8 @@ export const mockAppointments = {
   count: 3,
   items: [
     { name: '劉秀英', surname: '劉', role: '祕書', by: '林明德', term: '2026-2028' },
-    { name: '陳嘉欣', surname: '陳', role: '財務', by: '林明德', term: '2026-2028' },
-    { name: '黃國雄', surname: '黃', role: '總務', by: '林明德', term: '2026-2028' },
+    { name: '陳建閎', surname: '陳', role: '財務', by: '林明德', term: '2026-2028' },
+    { name: '黃志偉', surname: '黃', role: '總務', by: '林明德', term: '2026-2028' },
   ],
 }
 

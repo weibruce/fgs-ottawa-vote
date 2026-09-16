@@ -1,33 +1,198 @@
 @import "tailwindcss";
 
+/*
+ * 設計 Token —— 由參考稿 docs/ui/admin/*.png 逐像素量測得出
+ * 量測基準：viewport 1920×940（CSS px）
+ *   側欄 255px｜頂欄 62px｜內容 padding 32px｜卡片間距 28px
+ *   page bg #F5F1E8｜card/shell bg #FBF6EA｜border #E5DDC9
+ */
 @theme {
+  /* 字型：標題／數字用襯線（Source Han Serif），其餘用黑體（Source Han Sans） */
+  --font-sans: "Noto Sans CJK TC", "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
+  --font-serif: "Noto Serif CJK TC", "Noto Serif TC", "Songti TC", "PMingLiU",
+    serif;
+
+  /* 主色（佛光山紅） */
   --color-primary: #8b1a1a;
-  --color-primary-hover: #701414;
-  --color-ink: #2d2a26;
-  --color-gray: #6b7280;
-  --color-cream: #f7f4ef;
-  --color-sidebar: #fbf9f5;
-  --color-card: #ffffff;
-  --color-border: #e8e2d9;
+  --color-primary-hover: #6b1414;
+  --color-primary-deep: #6b1414;
+
+  /* 文字 */
+  --color-ink: #2d1f1a;
+  --color-ink-soft: #4a403a;
+  --color-gray: #a79c88;
+  --color-gray-deep: #8a7f6e;
+
+  /* 背景 */
+  --color-page: #f5f1e8;
+  --color-cream: #f5f1e8;
+  --color-shell: #fbf6ea;
+  --color-card: #fbf6ea;
+  --color-light-bg: #f0ead9;
+  --color-track: #ede6d6;
+
+  /* 線 */
+  --color-border: #e5ddc9;
+  --color-border-soft: #efe5d0;
+
+  /* 語意色 */
   --color-success: #16a34a;
   --color-success-bg: #dcfce7;
   --color-warning: #d97706;
   --color-warning-bg: #fef3c7;
-  --color-danger: #dc2626;
+  --color-danger: #c0392b;
   --color-danger-bg: #fee2e2;
-  --color-light-bg: #f3f4f6;
+
+  /* 五區標識色 */
+  --color-div-east: #8b1a1a;
+  --color-div-south: #b8935a;
+  --color-div-west: #6b4423;
+  --color-div-north: #8a6d3b;
+  --color-div-center: #a8896c;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+/* 注意：自訂樣式必須放在 layer 內，否則會蓋掉 Tailwind utilities（unlayered CSS 優先） */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--color-page);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }
 
-body {
-  font-family: "Noto Serif TC", "Source Han Serif TC", "PMingLiU",
-    -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC",
-    "Microsoft JhengHei", serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* ── 共用元件樣式（頁面請優先複用，確保 10 個模組外觀一致） ── */
+
+@layer components {
+
+
+  /* 卡片 */
+  .ui-card {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+  }
+
+  /* 表單（參考稿實測：輸入框為純白底 #FFFFFF） */
+  .ui-input,
+  .ui-select {
+    width: 100%;
+    height: 38px;
+    padding: 0 12px;
+    font-size: 14px;
+    color: var(--color-ink);
+    background: #ffffff;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    outline: none;
+    font-family: inherit;
+  }
+  .ui-input::placeholder {
+    color: var(--color-gray);
+  }
+  .ui-input:focus,
+  .ui-select:focus {
+    border-color: var(--color-primary);
+  }
+  .ui-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%232d1f1a' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M2.5 4.5L6 8l3.5-3.5'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    padding-right: 26px;
+  }
+
+  /* 按鈕 */
+  .ui-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 38px;
+    padding: 0 16px;
+    font-size: 14px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .ui-btn-primary {
+    background: var(--color-primary);
+    color: #fff;
+  }
+  .ui-btn-primary:hover {
+    background: var(--color-primary-hover);
+  }
+  .ui-btn-outline {
+    background: var(--color-card);
+    border-color: var(--color-border);
+    color: var(--color-ink);
+  }
+  .ui-btn-outline:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+  .ui-btn-ghost {
+    background: transparent;
+    color: var(--color-ink-soft);
+  }
+  .ui-btn-ghost:hover {
+    background: var(--color-light-bg);
+  }
+  .ui-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  /* 表格 */
+  .ui-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  .ui-table thead th {
+    text-align: left;
+    background: var(--color-page);
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--color-gray-deep);
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--color-border);
+    white-space: nowrap;
+  }
+  .ui-table tbody td {
+    padding: 12px;
+    border-bottom: 1px solid var(--color-border-soft);
+    color: var(--color-ink);
+    vertical-align: middle;
+  }
+  .ui-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .ui-table tbody tr:hover {
+    background: rgba(139, 26, 26, 0.03);
+  }
+}
+
+/* 捲軸 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #ded4bd;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }

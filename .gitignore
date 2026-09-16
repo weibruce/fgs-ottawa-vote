@@ -27,3 +27,6 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# UI 對照工具（本機）
+.ui-check/
