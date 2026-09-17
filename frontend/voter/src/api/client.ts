@@ -42,17 +42,43 @@ api.interceptors.response.use(
   }
 )
 
+/** 公開輪次資訊（GET /votes/round/active）— 統一入口用，不需參數 */
+export interface RoundPublicInfo {
+  id: number
+  name: string
+  round_no: number
+  status: 'draft' | 'active' | 'closed' | 'locked'
+  min_votes: number
+  max_votes: number
+  opens_at: string | null
+  closes_at: string | null
+  divisions: {
+    id: number
+    name: string
+    code: string
+    color: string
+    min_votes: number
+    max_votes: number
+    status: string
+  }[]
+}
+
+export function getActiveRound() {
+  return api.get<RoundPublicInfo>('/round/active')
+}
+
 /** 身份確認（POST /votes/confirm） */
 export function confirmVoter(req: {
   name: string
   member_no: string
+  round_id: number
   proxy: boolean
   proxy_voter_name?: string
 }) {
   return api.post<import('../types').ConfirmResponse>('/confirm', {
     name: req.name,
     member_no: req.member_no,
-    round_id: 1,
+    round_id: req.round_id,
     is_proxy: req.proxy,
     proxy_note: req.proxy ? (req.proxy_voter_name || '') : '',
   })

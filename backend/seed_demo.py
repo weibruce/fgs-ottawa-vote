@@ -70,6 +70,15 @@ CANDIDATES: dict[str, list[tuple[str, str, str, int, int]]] = {
 # 各區已投票數（設計稿）
 VOTED = {"東區": 52, "南區": 41, "西區": 48, "北區": 33, "中區": 29}
 
+# 候選人英文名（設計稿 03_1 / 04_1 顯示於姓名下方；DB 有 name_en 欄位）
+NAME_EN = {
+    "林明德": "Richard", "陳慧儀": "Amanda", "王志遠": "Vincent",
+    "李淑芬": "Fiona", "張文昌": "Marcus", "黃美玲": "Elaine",
+    "蔡婉君": "Joyce", "吳文雄": "Steven", "趙淑芬": "Grace",
+    "郭信宏": "Howard", "李美華": "Michelle", "徐德安": "Daniel",
+    "周雅琳": "Lydia", "許志明": "Simon", "楊惠芳": "Cindy",
+}
+
 SURNAMES = list("陳林黃張李王吳劉蔡楊許鄭謝郭洪曾廖賴徐周葉蘇莊呂江何蕭羅高潘")
 GIVEN = [
     "明德", "慧儀", "志遠", "淑芬", "文昌", "美玲", "婉君", "文雄", "信宏", "美華",
@@ -133,14 +142,19 @@ def main() -> None:
             members[name] = rows
         db.commit()
 
-        # --- 候選人 ---
+        # --- 候選人（頭像輪流使用 photo01~04，供投票端照片版卡片顯示） ---
         cands: dict[str, list[Candidate]] = {}
+        photo_seq = 0
         for _code, name, _color, _count in DIVISIONS:
             rows = []
             for order, (cname, title, slogan, terms, _w) in enumerate(CANDIDATES[name]):
+                avatar = f"/candidates/photo0{photo_seq % 4 + 1}.jpg"
+                photo_seq += 1
                 c = Candidate(
-                    division_id=divisions[name].id, name=cname, title=title,
-                    slogan=slogan, description=f"{cname}，{slogan}。", term_count=terms,
+                    division_id=divisions[name].id, name=cname,
+                    name_en=NAME_EN.get(cname, ""), title=title,
+                    avatar_url=avatar, slogan=slogan,
+                    description=f"{cname}，{slogan}。", term_count=terms,
                     sort_order=order, is_active=True,
                 )
                 db.add(c)

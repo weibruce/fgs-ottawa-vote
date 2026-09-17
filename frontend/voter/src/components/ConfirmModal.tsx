@@ -1,6 +1,6 @@
 /**
- * ConfirmModal — 二次確認彈窗
- * 對齊設計稿 layout_03 提交前確認
+ * ConfirmModal — 二次確認彈窗（P3 送出投票前）
+ * 沿用投票端設計語言：白卡 + 襯線標題 + 主紅主按鈕 / 描邊次按鈕
  */
 import type { ReactNode } from 'react'
 
@@ -28,18 +28,18 @@ export function ConfirmModal({
 }: ConfirmModalProps) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
-      <div className="bg-card rounded-2xl w-full max-w-sm card-shadow">
-        <div className="p-5">
-          <h3 className="font-bold text-base mb-2 text-ink">{title}</h3>
-          <div className="text-sm text-gray leading-relaxed">{children}</div>
-        </div>
-        <div className="flex gap-3 p-5 pt-0">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2b2925]/45 px-[32px]">
+      <div className="vote-card w-full max-w-[356px] px-[22px] pb-[22px] pt-[24px]">
+        <h3 className="text-center font-serif text-[20px] font-bold leading-[28px] text-ink">
+          {title}
+        </h3>
+        <div className="mt-[14px] text-center text-[14px] leading-[22px] text-gray">{children}</div>
+        <div className="mt-[22px] flex gap-[10px]">
           <button
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="flex-1 h-11 rounded-xl border border-border text-ink font-medium disabled:opacity-50"
+            className="h-[46px] flex-1 rounded-[10px] border border-border bg-card text-[15px] font-bold text-ink disabled:opacity-50"
           >
             {cancelText}
           </button>
@@ -47,9 +47,9 @@ export function ConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className="flex-1 h-11 rounded-xl bg-primary text-white font-bold disabled:opacity-60"
+            className="vote-btn h-[46px] flex-1"
           >
-            {loading ? '處理中...' : confirmText}
+            {loading ? '提交中…' : confirmText}
           </button>
         </div>
       </div>

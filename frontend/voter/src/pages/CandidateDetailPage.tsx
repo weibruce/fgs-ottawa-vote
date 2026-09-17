@@ -1,131 +1,204 @@
 /**
- * P4 候選人詳情頁（layout_04 → /vote/candidate/{id}）
- * 頭像 + 現任屆數 + 競選理念 + 候選人介紹 + 返回
+ * P4 候選人詳情頁 — 1:1 對齊設計稿
+ *   docs/ui/voting/voting_system_04_1.png（照片版，主依據）
+ *   docs/ui/voting/voting_system_04.png  （無頭像時退回姓氏圓形）
+ *
+ * route: /vote/candidate/:id
+ * 版面（單張 vote-card，設計稿量測）：
+ *   方形圓角照片 160×200（2px 淡金框、圓角 8、置中）
+ *   → 大名 30px 襯線粗體 → 英文名 13px 灰 → 1px 淡金分隔線
+ *   → 淺米資訊列 47px（現任屆數 / 所屬）
+ *   → 競選理念（slogan）→ 介紹框（description，金色左側緞帶）
+ *   → 主按鈕「返回候選人名單」
+ *
+ * 資料：優先取 location.state 帶過來的 candidate；否則用 session 的
+ *       round_id / voter.division_id 呼叫
+ *       GET /votes/round/{roundId}/division/{divisionId} 後依 :id 找出候選人。
  */
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { NavBar } from '../components/NavBar'
-import { Card } from '../components/Card'
-import { LoadingSpinner } from '../components/LoadingSpinner'
-import { getDivisionCandidates } from '../api/client'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { VoteShell } from '../components/VoteShell'
+import { getActiveRound, getDivisionCandidates } from '../api/client'
+import { useVoteStore } from '../hooks/useVoteStore'
 import type { Candidate } from '../types'
+
+/** ChoosePage 以 navigate(path, { state }) 帶入的資料（可選） */
+interface DetailLocationState {
+  candidate?: Candidate
+  divisionName?: string
+}
 
 export function CandidateDetailPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { id } = useParams<{ id: string }>()
   const [params] = useSearchParams()
-  const divisionId = Number(params.get('division') || 1)
-  const roundId = Number(params.get('round') || 1)
+  const { session } = useVoteStore()
 
-  const [candidate, setCandidate] = useState<Candidate | null>(null)
-  const [divisionName, setDivisionName] = useState('')
-  const [loading, setLoading] = useState(true)
+  const state = (location.state ?? {}) as DetailLocationState
+  const targetId = Number(id)
+  const queryRound = params.get('round')
+  const queryDivision = params.get('division')
+
+  const [candidate, setCandidate] = useState<Candidate | null>(state.candidate ?? null)
+  const [divisionName, setDivisionName] = useState(
+    state.divisionName ?? session?.voter.division_name ?? ''
+  )
+  const [loading, setLoading] = useState(!state.candidate)
 
   useEffect(() => {
-    let cancelled = false
+    if (state.candidate) return
+    let alive = true
+
     async function load() {
       try {
-        const res = await getDivisionCandidates(roundId, divisionId)
-        if (!cancelled) {
-          const found = res.data.candidates.find((c) => c.id === Number(id)) || null
-          setCandidate(found)
-          setDivisionName(res.data.division.name)
-          setLoading(false)
+        let roundId = session?.round_id ?? Number(queryRound || 0)
+        // 已知分區（session 優先，其次選擇頁帶的 query）
+        let divisionIds: number[] = []
+        if (session) divisionIds = [session.voter.division_id]
+        else if (Number(queryDivision || 0)) divisionIds = [Number(queryDivision)]
+
+        // 直接開啟連結（無 session、無 query）→ 用當前輪次逐區找出該候選人
+        if (!roundId || divisionIds.length === 0) {
+          const active = await getActiveRound()
+          if (!roundId) roundId = active.data.id
+          if (divisionIds.length === 0) divisionIds = active.data.divisions.map((d) => d.id)
         }
+
+        for (const divisionId of divisionIds) {
+          const res = await getDivisionCandidates(roundId, divisionId)
+          const found = res.data.candidates.find((c) => c.id === targetId)
+          if (found) {
+            if (!alive) return
+            setCandidate(found)
+            if (!state.divisionName) {
+              setDivisionName(session?.voter.division_name || res.data.division.name)
+            }
+            setLoading(false)
+            return
+          }
+        }
+        if (alive) setLoading(false)
       } catch {
-        if (!cancelled) setLoading(false)
+        if (alive) setLoading(false)
       }
     }
+
     load()
     return () => {
-      cancelled = true
+      alive = false
     }
-  }, [roundId, divisionId, id])
+  }, [state.candidate, state.divisionName, session, targetId, queryRound, queryDivision])
 
   if (loading) {
     return (
-      <div className="min-h-full bg-cream">
-        <NavBar title="候選人詳情" back />
-        <LoadingSpinner />
-      </div>
+      <VoteShell>
+        <section className="vote-card px-[22px] pt-[23px] pb-[23px]">
+          <div className="flex justify-center">
+            <div className="h-[200px] w-[160px] animate-pulse rounded-[8px] bg-light-bg" />
+          </div>
+          <div className="mx-auto mt-[10px] h-[36px] w-[180px] animate-pulse rounded bg-light-bg" />
+          <div className="mx-auto mt-[11px] h-[18px] w-[90px] animate-pulse rounded bg-light-bg" />
+          <div className="mt-[16px] border-t border-border" />
+          <div className="mt-[18px] h-[47px] animate-pulse rounded-[10px] bg-light-bg" />
+          <div className="mt-[17px] h-[18px] w-[80px] animate-pulse rounded bg-light-bg" />
+        </section>
+      </VoteShell>
     )
   }
 
   if (!candidate) {
     return (
-      <div className="min-h-full bg-cream">
-        <NavBar title="候選人詳情" back />
-        <div className="max-w-[480px] mx-auto px-5 py-12 text-center">
-          <p className="text-gray">未找到該候選人。</p>
-        </div>
-      </div>
+      <VoteShell>
+        <section className="vote-card px-[22px] py-[40px] text-center">
+          <p className="text-[14px] leading-[25px] text-gray">未找到該候選人資料。</p>
+          <button
+            type="button"
+            onClick={() => navigate('/vote/choose')}
+            className="vote-btn mt-[24px]"
+          >
+            返回候選人名單
+          </button>
+        </section>
+      </VoteShell>
     )
   }
 
   const initial = candidate.name.charAt(0)
+  // 候選人名單頁（P3）以 ?division= 決定要載入哪一區，故返回時必須帶上本區 id
+  const backToChoose = `/vote/choose?division=${candidate.division_id}`
 
   return (
-    <div className="min-h-full bg-cream">
-      <NavBar title="候選人詳情" back />
-
-      <div className="max-w-[480px] mx-auto px-5 py-6">
-        {/* 頭像 */}
+    <VoteShell>
+      {/* ── 單張主卡片（設計稿 04_1） ── */}
+      <section className="vote-card px-[22px] pt-[23px] pb-[23px]">
+        {/* 1. 頂部照片：方形圓角 + 淡金細框；無 avatar_url 時退回姓氏圓形 */}
         <div className="flex justify-center">
-          <div className="w-28 h-28 rounded-2xl overflow-hidden flex items-center justify-center bg-gold-light border-2 border-gold">
-            {candidate.avatar_url ? (
-              <img src={candidate.avatar_url} alt={candidate.name} className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-4xl font-bold text-primary-dark">{initial}</span>
-            )}
-          </div>
+          {candidate.avatar_url ? (
+            <img
+              src={candidate.avatar_url}
+              alt={candidate.name}
+              className="h-[200px] w-[160px] rounded-[8px] border-2 border-gold object-cover"
+            />
+          ) : (
+            <div className="flex h-[82px] w-[82px] items-center justify-center rounded-full border-2 border-gold bg-avatar">
+              <span className="font-serif text-[34px] font-bold leading-none text-primary">
+                {initial}
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* 姓名 */}
-        <h2 className="text-center text-2xl font-bold text-ink mt-4">{candidate.name}</h2>
+        {/* 2. 大名 */}
+        <h1 className="mt-[10px] text-center font-serif text-[30px] font-bold leading-[36px] text-ink">
+          {candidate.name}
+        </h1>
+
+        {/* 3. 英文名 */}
         {candidate.name_en && (
-          <p className="text-center text-sm text-gray mt-1">{candidate.name_en}</p>
+          <p className="mt-[11px] text-center text-[13px] leading-[18px] text-gray">
+            {candidate.name_en}
+          </p>
         )}
 
-        <div className="border-t border-border my-5" />
+        {/* 4. 分隔線 */}
+        <div className="mt-[16px] border-t border-gold-pale" />
 
-        {/* 基本資訊（兩欄並排） */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-light-bg rounded-xl px-4 py-3">
-            <p className="text-xs text-gray">現任屆數</p>
-            <p className="text-lg font-bold text-ink mt-1">{candidate.term_count} 屆</p>
-          </div>
-          <div className="bg-light-bg rounded-xl px-4 py-3">
-            <p className="text-xs text-gray">所屬分區</p>
-            <p className="text-lg font-bold text-ink mt-1">{divisionName}</p>
-          </div>
+        {/* 5. 淺米底資訊列 */}
+        <div className="mt-[18px] flex h-[47px] items-center justify-between rounded-[10px] bg-light-bg px-[12px]">
+          <p className="flex items-baseline gap-[16px]">
+            <span className="text-[14px] leading-[20px] text-ink">現任屆數</span>
+            <span className="text-[14px] font-bold leading-[20px] text-ink">
+              {candidate.term_count} 屆
+            </span>
+          </p>
+          <p className="flex items-baseline gap-[16px]">
+            <span className="text-[14px] leading-[20px] text-ink">所屬</span>
+            <span className="text-[14px] font-bold leading-[20px] text-ink">{divisionName}</span>
+          </p>
         </div>
 
-        {/* 競選理念 */}
-        <Card className="mt-5">
-          <h3 className="font-bold text-base text-primary mb-2">競選理念</h3>
-          <p className="text-sm text-ink leading-relaxed">{candidate.description}</p>
-        </Card>
+        {/* 6. 競選理念（後端 slogan） */}
+        <h2 className="mt-[17px] text-[13px] font-bold leading-[18px] text-primary">競選理念</h2>
+        <p className="mt-[4px] text-[14px] leading-[25px] text-ink">
+          {candidate.slogan || <span className="text-gray-light">尚未提供</span>}
+        </p>
 
-        {/* 候選人介紹 */}
-        {candidate.slogan && (
-          <Card className="mt-4">
-            <h3 className="font-bold text-base text-gold mb-2 flex items-center">
-              <span className="w-1 h-4 bg-gold rounded-full mr-2" />
-              候選人介紹
-            </h3>
-            <p className="text-sm text-ink leading-relaxed">{candidate.slogan}</p>
-          </Card>
-        )}
+        {/* 7. 介紹框（後端 description；金色左側緞帶） */}
+        <div className="mt-[18px] rounded-[10px] border-l-[3px] border-gold bg-intro px-[14px] py-[14px]">
+          <h3 className="text-[13px] font-bold leading-[18px] text-primary">候選人介紹</h3>
+          <p className="mt-[4px] text-[12px] leading-[18px] text-ink">{candidate.description}</p>
+        </div>
 
-        {/* 返回按鈕 */}
+        {/* 8. 返回候選人名單 */}
         <button
           type="button"
-          onClick={() => navigate(-1)}
-          className="w-full h-14 rounded-2xl bg-primary text-white text-lg font-bold mt-8"
+          onClick={() => navigate(backToChoose)}
+          className="vote-btn mt-[19px]"
         >
           返回候選人名單
         </button>
-      </div>
-    </div>
+      </section>
+    </VoteShell>
   )
 }

@@ -175,10 +175,25 @@ def submit_vote(
         if c.division_id != member.division_id:
             raise HTTPException(status_code=403, detail="不可投票其他分區的候選人")
 
-    # 7. 防重（Redis SETNX 快速檢查 + PG 唯一約束兜底）
+    # 7. 防重：Redis 只當快速路徑，**PG 才是唯一判據**
+    #
+    # 注意：Redis key 有 7 天 TTL 且在 PG 寫入「之前」就設下，若中間發生
+    # 例外／人工回滾，會留下「PG 沒有票、Redis 卻說投過」的殘留狀態，
+    # 讓投票人通過身份驗證卻永遠投不了票。因此 Redis 說重複時必須回查 PG：
+    #   - PG 確有票 → 409（真重複）
+    #   - PG 沒有票 → key 為殘留，刪掉後照常投票
     cast_key = vote_cast_key(round_id, token_member_no)
     if redis_client.set(cast_key, "1", nx=True, ex=86400 * 7) is None:
-        raise HTTPException(status_code=409, detail="您已投過票，無需重複投票")
+        already = (
+            db.query(Vote)
+            .filter(Vote.round_id == round_id, Vote.member_no == token_member_no)
+            .first()
+        )
+        if already is not None:
+            raise HTTPException(status_code=409, detail="您已投過票，無需重複投票")
+        # 殘留 key → 清除後繼續
+        redis_client.delete(cast_key)
+        redis_client.set(cast_key, "1", nx=True, ex=86400 * 7)
 
     # 8. 事務寫 PG
     try:
@@ -271,7 +286,7 @@ def get_division_candidates(db: Session, round_id: int, division_id: int) -> dic
                 "id": c.id,
                 "division_id": c.division_id,
                 "name": c.name,
-                "name_en": None,
+                "name_en": c.name_en or None,
                 "position": c.title,
                 "avatar_url": c.avatar_url or None,
                 "description": c.description or "",

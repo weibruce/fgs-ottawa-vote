@@ -1,58 +1,137 @@
 @import "tailwindcss";
 
 /* ============================================================
-   佛光山投票系統 — 設計令牌（Design Tokens）
-   依 img/voting_system_layout_01~06 設計稿 + draw_pages.py 常量
+   佛光山投票系統（投票端）— 設計令牌
+   全部由 docs/ui/voting/*.png 逐像素取樣（420×800 行動裝置稿）
    ============================================================ */
 @theme {
   /* 主色（佛光山紅金主題） */
-  --color-primary: #b22222;        /* 主紅：按鈕、導覽列、強調 */
-  --color-primary-dark: #8c1818;   /* 深紅：hover、文字強調 */
-  --color-gold: #c69a3c;           /* 金：副標、裝飾線 */
-  --color-gold-light: #e8c878;     /* 淺金 */
-  --color-cream: #faf6ec;          /* 頁面底色 */
-  --color-card: #ffffff;           /* 卡片底 */
-  --color-light-bg: #f5f2eb;       /* 淺底卡 */
-  --color-ink: #28282c;            /* 主文字 */
-  --color-gray: #78787e;           /* 次要文字 */
-  --color-border: #d6d4d0;         /* 分隔線 */
-  --color-success: #228b22;        /* 成功（驗證通過） */
-  --color-success-bg: #e2f5e2;     /* 成功淺底 */
+  --color-primary: #8c1d25;        /* 主紅：按鈕、勾選、強調（設計稿實測 #8C1D25） */
+  --color-primary-dark: #6e161c;   /* 深紅：hover / 按下 */
+  --color-primary-deep: #5a1218;   /* 更深：文字強調 */
+  --color-gold: #b38a45;           /* 金：圓環、進度條、裝飾線 */
+  --color-gold-light: #c9a86a;     /* 淺金：次要進度條 */
+  --color-gold-pale: #e8d9b8;      /* 極淺金：軌道 */
 
-  /* 五區代表色 */
-  --color-div-east: #b22222;       /* 東：紅 */
-  --color-div-south: #c85a1e;      /* 南：橙 */
-  --color-div-west: #286eb4;       /* 西：藍 */
-  --color-div-north: #5a3c96;      /* 北：紫 */
-  --color-div-central: #28825a;    /* 中：綠 */
+  /* 底色 */
+  --color-cream: #f7f2e8;          /* 頁面底色 */
+  --color-card: #fffdf8;           /* 卡片底 */
+  --color-light-bg: #f4ede0;       /* 淺米底：資訊列、banner */
+  --color-panel: #f4ede0;          /* 同 light-bg（語意別名） */
+  --color-panel-soft: #fff7e7;     /* 更淺米底：結果卡內區塊 */
+  --color-intro: #fff9ee;          /* 介紹框底 */
+  --color-track: #eae9e4;          /* 進度條軌道 */
+  --color-avatar: #eadfcb;         /* 姓氏圓形頭像底 */
+  --color-field: #fffdf8;          /* 輸入框底 */
 
-  /* 字體 */
-  --font-sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
-    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* 文字 */
+  --color-ink: #2b2925;            /* 主文字 */
+  --color-gray: #8a7f73;           /* 次要文字 */
+  --color-gray-light: #a59f94;     /* 更淡的說明文字 */
+
+  /* 線 */
+  --color-border: #e8e2d6;
+  --color-border-soft: #efe8dc;
+
+  /* 語意 */
+  --color-success: #228b22;
+  --color-success-bg: #e2f5e2;
+  --color-danger: #c0392b;
+  --color-danger-bg: #fdecea;
+
+  /* 五區（投票端用於標籤底色，非設計稿重點） */
+  --color-div-east: #8c1d25;
+  --color-div-south: #b38a45;
+  --color-div-west: #6b4423;
+  --color-div-north: #8a6d3b;
+  --color-div-central: #a8896c;
+
+  /* 字體：標題／數字用襯線（與設計稿一致），其餘黑體 */
+  --font-sans: "Noto Sans CJK TC", "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-serif: "Noto Serif CJK TC", "Noto Serif TC", "Songti TC", "PMingLiU", serif;
 }
 
 /* ============================================================
    基礎重置 + 移動端適配
    ============================================================ */
-html,
-body,
-#root {
-  height: 100%;
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background-color: var(--color-cream);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* 觸控友善：禁止雙擊縮放 */
+    touch-action: manipulation;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font-family: inherit;
+  }
 }
 
-body {
-  margin: 0;
-  font-family: var(--font-sans);
-  background-color: var(--color-cream);
-  color: var(--color-ink);
-  -webkit-font-smoothing: antialiased;
-  /* 觸控友善：禁止雙擊縮放 */
-  touch-action: manipulation;
-}
+@layer components {
+  /* 卡片（設計稿：白底、極淡邊框、圓角 14px、幾乎無陰影） */
+  .vote-card {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+  }
 
-/* 卡片陰影（輕量） */
-.card-shadow {
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  /* 輸入框（設計稿：白底、圓角 10px、1px 米色邊框、高 46px） */
+  .vote-input {
+    width: 100%;
+    height: 46px;
+    padding: 0 14px;
+    font-size: 15px;
+    color: var(--color-ink);
+    background: var(--color-field);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    outline: none;
+  }
+  .vote-input::placeholder {
+    color: var(--color-gray-light);
+  }
+  .vote-input:focus {
+    border-color: var(--color-gold);
+  }
+
+  /* 主按鈕（設計稿：深紅底、白字、圓角 10px、高 48px、字重 700） */
+  .vote-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    height: 48px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.15s;
+  }
+  .vote-btn:hover:not(:disabled) {
+    background: var(--color-primary-dark);
+  }
+  .vote-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
 }
 
 /* 底部安全區留白（iPhone 瀏海/Home 指示） */

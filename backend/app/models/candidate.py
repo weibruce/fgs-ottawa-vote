@@ -11,6 +11,7 @@ class Candidate(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     division_id: Mapped[int] = mapped_column(ForeignKey("divisions.id"), index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
+    name_en: Mapped[str] = mapped_column(String(128), default="")  # 英文名（投票端卡片副標）
     title: Mapped[str] = mapped_column(String(128), default="")  # 職位
     avatar_url: Mapped[str] = mapped_column(String(512), default="")
     slogan: Mapped[str] = mapped_column(String(200), default="")  # 宣言 ≤200 字

@@ -17,17 +17,16 @@ from app.models.division import Division
 router = APIRouter(prefix="/votes", tags=["votes"])
 
 
-@router.get("/round/{round_id}", response_model=RoundInfoOut)
-def get_round_info(round_id: int, db: Session = Depends(get_db)):
-    """
-    輪次資訊（投票人用）：狀態、票數配置、分區列表
-    前端用於顯示投票視窗狀態（未開始/進行中/已結束）
-    """
-    r = db.get(Round, round_id)
-    if r is None:
-        raise HTTPException(status_code=404, detail="輪次不存在")
-    divisions = db.query(Division).filter(Division.is_active == True).order_by(Division.sort_order, Division.id).all()
+def _round_info(db: Session, r: Round) -> RoundInfoOut:
+    """把 Round ORM 轉成投票人端需要的 RoundInfoOut（含五分區設定）"""
     from app.schemas.vote import DivisionOut
+
+    divisions = (
+        db.query(Division)
+        .filter(Division.is_active == True)  # noqa: E712
+        .order_by(Division.sort_order, Division.id)
+        .all()
+    )
     divs = [
         DivisionOut(
             id=d.id, name=d.name, code=d.code, color=d.color,
@@ -45,6 +44,39 @@ def get_round_info(round_id: int, db: Session = Depends(get_db)):
         closes_at=str(r.closes_at) if r.closes_at else None,
         divisions=divs,
     )
+
+
+@router.get("/round/active", response_model=RoundInfoOut)
+def get_active_round(db: Session = Depends(get_db)):
+    """
+    當前輪次（統一投票入口用，**公開無需參數**）。
+
+    - 優先回傳 status=active 的最新輪次
+    - 若無 active，回傳最新建立的輪次（前端據 status 顯示「尚未開始／已結束」）
+    - 完全沒有輪次 → 404
+    """
+    r = (
+        db.query(Round)
+        .filter(Round.status == "active")
+        .order_by(Round.id.desc())
+        .first()
+        or db.query(Round).order_by(Round.id.desc()).first()
+    )
+    if r is None:
+        raise HTTPException(status_code=404, detail="尚未建立投票輪次")
+    return _round_info(db, r)
+
+
+@router.get("/round/{round_id}", response_model=RoundInfoOut)
+def get_round_info(round_id: int, db: Session = Depends(get_db)):
+    """
+    輪次資訊（投票人用）：狀態、票數配置、分區列表
+    前端用於顯示投票視窗狀態（未開始/進行中/已結束）
+    """
+    r = db.get(Round, round_id)
+    if r is None:
+        raise HTTPException(status_code=404, detail="輪次不存在")
+    return _round_info(db, r)
 
 
 @router.post("/confirm", response_model=ConfirmResponse)

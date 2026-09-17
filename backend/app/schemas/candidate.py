@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class CandidateBase(BaseModel):
     division_id: int = Field(..., description="所屬分區 ID")
     name: str = Field(..., min_length=1, max_length=128)
+    name_en: str = Field("", max_length=128)
     title: str = Field("", max_length=128)
     avatar_url: str = Field("", max_length=512)
     slogan: str = Field("", max_length=200)
@@ -21,6 +22,7 @@ class CandidateCreate(CandidateBase):
 
 class CandidateUpdate(BaseModel):
     name: str | None = None
+    name_en: str | None = None
     title: str | None = None
     avatar_url: str | None = None
     slogan: str | None = None

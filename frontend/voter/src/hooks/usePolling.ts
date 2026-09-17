@@ -28,10 +28,13 @@ export function usePolling<T>(
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
   const visible = useRef(true)
   const fetching = useRef(false)
+  // 以 effect 同步（避免在 render 期間寫 ref）
   const fetcherRef = useRef(fetcher)
-  fetcherRef.current = fetcher
   const shouldStopRef = useRef(shouldStop)
-  shouldStopRef.current = shouldStop
+  useEffect(() => {
+    fetcherRef.current = fetcher
+    shouldStopRef.current = shouldStop
+  }, [fetcher, shouldStop])
 
   const tick = useCallback(async () => {
     if (fetching.current) return // 防止重疊
