@@ -57,9 +57,6 @@ const zhHant: Dict = {
   'app.orgLine2': '各分會會務幹部改選',
 
   // ── P1 身份驗證 ──
-  'verify.brandLine': '佛光山幹部改選投票系統',
-  'verify.pageTitle': '投票人端操作流程',
-  'verify.pageSub': '統一入口。分區自動識別。即時查看結果',
   'verify.heading': '身份驗證',
   'verify.intro': '請輸入會員資料，以識別您的所屬分區。',
   'verify.nameLabel': '會員姓名',
@@ -187,9 +184,6 @@ const zhHans: Dict = {
   'app.orgLine1': '2026 国际佛光会渥太华协会',
   'app.orgLine2': '各分会会务干部改选',
 
-  'verify.brandLine': '佛光山干部改选投票系统',
-  'verify.pageTitle': '投票人端操作流程',
-  'verify.pageSub': '统一入口。分区自动识别。即时查看结果',
   'verify.heading': '身份验证',
   'verify.intro': '请输入会员资料，以识别您的所属分区。',
   'verify.nameLabel': '会员姓名',
@@ -308,9 +302,6 @@ const en: Dict = {
   'app.orgLine1': '2026 BLIA Ottawa Chapter',
   'app.orgLine2': 'Chapter Officer Election',
 
-  'verify.brandLine': 'FGS Officer Election Voting System',
-  'verify.pageTitle': 'Voter Guide',
-  'verify.pageSub': 'One link · Auto division detection · Live results',
   'verify.heading': 'Identity Verification',
   'verify.intro': 'Enter your membership details so we can identify your division.',
   'verify.nameLabel': 'Member name',

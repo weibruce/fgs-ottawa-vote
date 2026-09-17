@@ -118,19 +118,8 @@ export function VerifyPage() {
 
   return (
     <VoteShell>
-      {/* ── 頁首（設計稿：置中三行） ── */}
-      <div className="pt-2 text-center">
-        <p className="text-[12px] font-bold tracking-[0.08em] text-primary">
-          {t('verify.brandLine')}
-        </p>
-        <h1 className="mt-[10px] font-serif text-[30px] font-bold leading-tight text-ink">
-          {t('verify.pageTitle')}
-        </h1>
-        <p className="mt-[10px] text-[14px] leading-[20px] text-gray">{t('verify.pageSub')}</p>
-      </div>
-
-      {/* ── 表單卡 ── */}
-      <section className="vote-card mt-[54px] px-[22px] pt-[34px] pb-[30px]">
+      {/* ── 表單卡（頁首三行已移除；卡片直接從頂端開始） ── */}
+      <section className="vote-card px-[22px] pt-[34px] pb-[30px]">
         <div className="flex flex-col items-center">
           <img src={logo} alt={t('app.logoAlt')} className="h-[80px] w-[80px] object-contain" />
           <p className="mt-[8px] text-center text-[12px] font-bold leading-[14px] text-primary">
