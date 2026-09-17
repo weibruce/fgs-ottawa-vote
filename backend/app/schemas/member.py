@@ -31,6 +31,10 @@ class MemberOut(BaseModel):
     is_active: bool = True
     has_voted: bool = False
     voted_at: datetime | None = None
+    # 該票是否由他人代投；是的話附上代投人姓名與卡號
+    voted_by_proxy: bool = False
+    proxy_name: str = ""
+    proxy_member_no: str = ""
 
     model_config = {"from_attributes": True}
 

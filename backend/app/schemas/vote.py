@@ -8,7 +8,10 @@ class ConfirmRequest(BaseModel):
     member_no: str = Field(..., min_length=1, max_length=64, description="佛光會員卡號")
     round_id: int = Field(1, description="輪次 ID")
     is_proxy: bool = Field(False, description="是否代投")
-    proxy_note: str = Field("", max_length=255, description="代投備註（代投人姓名等）")
+    proxy_note: str = Field("", max_length=255, description="代投備註（保留相容）")
+    # 代投人（is_proxy=true 時必填，需與會員名單比對）
+    proxy_name: str = Field("", max_length=128, description="代投人姓名（簡/繁皆可）")
+    proxy_member_no: str = Field("", max_length=64, description="代投人佛光會員卡號")
 
 
 class VoterInfo(BaseModel):
@@ -18,6 +21,8 @@ class VoterInfo(BaseModel):
     division_name: str
     is_proxy: bool
     proxy_voter_name: str | None = None
+    proxy_name: str | None = None
+    proxy_member_no: str | None = None
 
 
 class ConfirmResponse(BaseModel):
@@ -35,6 +40,8 @@ class SubmitVoteRequest(BaseModel):
     round_id: int
     candidate_ids: list[int] = Field(..., min_length=1, description="所選候選人 ID 清單")
     proxy: bool = Field(False, description="是否代投")
+    proxy_name: str = Field("", max_length=128)
+    proxy_member_no: str = Field("", max_length=64)
     proxy_voter_name: str | None = Field(None, max_length=128, description="代投人姓名")
 
 

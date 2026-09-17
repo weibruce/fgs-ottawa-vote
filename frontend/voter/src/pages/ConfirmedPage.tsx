@@ -9,17 +9,43 @@
  *   資訊框 y268–420（1px #E3D8C2 框、圓角 12、內距 x14 / pt36 pb34、列距 33）、
  *   按鈕 y440–487（h48）、卡片 pt75 / pb76。
  *   列 1/2 label 欄 74px + ink #2B2925；列 3「代理投票」為 12px 淡灰（值緊接其後）。
+ *
+ * 第 3 點：voter.is_proxy 為 true 時，於資訊框下方額外顯示淡金底代投提示框。
+ * 第 6 點：輪次非 active → 轉往 /vote/window。
  */
+import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { VoteShell } from '../components/VoteShell'
 import { useVoteStore } from '../hooks/useVoteStore'
+import { useI18n } from '../i18n'
+import { getActiveRound } from '../api/client'
 
 export function ConfirmedPage() {
   const navigate = useNavigate()
   const { session } = useVoteStore()
+  const { t } = useI18n()
+
+  // 第 6 點閘門：null = 查詢中（先照常顯示），false = 非 active（轉往視窗頁）
+  const [windowActive, setWindowActive] = useState<boolean | null>(null)
+  useEffect(() => {
+    let alive = true
+    getActiveRound()
+      .then((res) => {
+        if (alive) setWindowActive(res.data.status === 'active')
+      })
+      .catch(() => {
+        /* 查詢失敗不擋，避免使用者卡死 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   // 無 session（重新整理 / 直接輸入網址）→ 回身份驗證頁
   if (!session) return <Navigate to="/vote/verify" replace />
+
+  // 投票視窗未開啟 → 轉往視窗狀態頁
+  if (windowActive === false) return <Navigate to="/vote/window" replace />
 
   const { voter } = session
 
@@ -44,18 +70,42 @@ export function ConfirmedPage() {
 
         {/* ── 小標 + 姓名 ── */}
         <p className="mt-[17px] text-center text-[12px] font-bold leading-[18px] text-primary">
-          身份核驗完成
+          {t('confirmed.heading')}
         </p>
         <h1 className="mt-[16px] text-center font-serif text-[22px] font-bold leading-[30px] text-ink">
           {voter.name}
         </h1>
 
-        {/* ── 淺米底資訊框 ── */}
+        {/* ── 淺米底資訊框（設計稿既有元素，保留） ── */}
         <dl className="mt-[18px] w-full rounded-[12px] border border-[#e3d8c2] bg-cream px-[14px] pt-[36px] pb-[34px]">
-          <InfoRow label="會員卡號" value={voter.member_no} />
-          <InfoRow label="所屬分區" value={voter.division_name} />
-          <InfoRow label="代理投票" value={voter.is_proxy ? '是' : '否'} muted />
+          <InfoRow label={t('confirmed.cardLabel')} value={voter.member_no} />
+          <InfoRow label={t('confirmed.divisionLabel')} value={voter.division_name} />
+          <InfoRow
+            label={t('confirmed.proxyLabel')}
+            value={voter.is_proxy ? t('common.yes') : t('common.no')}
+            muted
+          />
         </dl>
+
+        {/* ── 代投提示框（第 3 點：淡金底 + 淡金邊，僅代投時額外顯示） ── */}
+        {voter.is_proxy && (
+          <div className="mt-[16px] w-full rounded-[12px] border border-[#E3D8C2] bg-intro px-[16px] py-[16px]">
+            <p className="text-[13px] leading-[22px] text-ink">
+              {t('confirmed.proxyNoticeTitle', {
+                division: voter.division_name,
+                name: voter.name,
+                no: voter.member_no,
+              })}
+            </p>
+            <p className="text-[13px] leading-[22px] text-ink">
+              {t('confirmed.proxyNoticeBy', { proxyName: voter.proxy_name ?? '' })}
+            </p>
+            <p className="text-[13px] leading-[22px] text-ink">
+              {t('confirmed.proxyNoticeCard', { proxyNo: voter.proxy_member_no ?? '' })}
+            </p>
+            <p className="text-[13px] leading-[22px] text-gray">{t('confirmed.proxyNoticeWarn')}</p>
+          </div>
+        )}
 
         {/* ── 主按鈕 ── */}
         <button
@@ -63,7 +113,7 @@ export function ConfirmedPage() {
           onClick={() => navigate(`/vote/choose?division=${voter.division_id}`)}
           className="vote-btn mt-[19px]"
         >
-          開始{voter.division_name}投票
+          {t('confirmed.startVote', { division: voter.division_name })}
         </button>
       </section>
     </VoteShell>

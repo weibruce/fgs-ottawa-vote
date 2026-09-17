@@ -40,7 +40,9 @@ export interface VoterInfo {
   division_id: number
   division_name: string
   is_proxy: boolean
-  proxy_voter_name: string | null
+  /** 代投人（後端已驗證姓名＋卡號） */
+  proxy_name: string | null
+  proxy_member_no: string | null
 }
 
 /** 身份確認請求（對齊後端 ConfirmRequest） */
@@ -68,7 +70,8 @@ export interface SubmitRequest {
   round_id: number
   candidate_ids: number[]
   proxy: boolean
-  proxy_voter_name: string | null
+  proxy_name?: string | null
+  proxy_member_no?: string | null
 }
 
 /** 候選人名單（分區級，GET /votes/round/{id}/division/{div_id}） */

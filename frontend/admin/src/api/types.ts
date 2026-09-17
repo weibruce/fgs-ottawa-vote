@@ -82,6 +82,10 @@ export interface MemberOut {
   is_active: boolean
   has_voted: boolean
   voted_at: string | null
+  /** 該票是否由他人代投（voted_by_proxy=true 時 proxy_name 為代投人） */
+  voted_by_proxy: boolean
+  proxy_name: string
+  proxy_member_no: string
 }
 
 export interface MemberStats {

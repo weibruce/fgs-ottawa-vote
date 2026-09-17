@@ -73,14 +73,17 @@ export function confirmVoter(req: {
   member_no: string
   round_id: number
   proxy: boolean
-  proxy_voter_name?: string
+  proxy_name?: string
+  proxy_member_no?: string
 }) {
   return api.post<import('../types').ConfirmResponse>('/confirm', {
     name: req.name,
     member_no: req.member_no,
     round_id: req.round_id,
     is_proxy: req.proxy,
-    proxy_note: req.proxy ? (req.proxy_voter_name || '') : '',
+    proxy_note: '',
+    proxy_name: req.proxy ? (req.proxy_name || '') : '',
+    proxy_member_no: req.proxy ? (req.proxy_member_no || '') : '',
   })
 }
 
@@ -97,14 +100,16 @@ export function submitVote(req: {
   round_id: number
   candidate_ids: number[]
   proxy: boolean
-  proxy_voter_name?: string
+  proxy_name?: string
+  proxy_member_no?: string
 }) {
   return api.post<{ success: boolean; message: string; votes_cast: number }>('/submit', {
     voter_token: req.voter_token,
     round_id: req.round_id,
     candidate_ids: req.candidate_ids,
     proxy: req.proxy,
-    proxy_voter_name: req.proxy_voter_name || null,
+    proxy_name: req.proxy ? (req.proxy_name || '') : '',
+    proxy_member_no: req.proxy ? (req.proxy_member_no || '') : '',
   })
 }
 

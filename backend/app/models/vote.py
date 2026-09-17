@@ -22,7 +22,10 @@ class Vote(Base):
     division_id: Mapped[int] = mapped_column(ForeignKey("divisions.id"), index=True, nullable=False)
     # 是否代投
     is_proxy: Mapped[bool] = mapped_column(Boolean, default=False)
-    proxy_note: Mapped[str] = mapped_column(String(255), default="")  # 代投備註
+    proxy_note: Mapped[str] = mapped_column(String(255), default="")  # 代投備註（保留相容）
+    # 代投人（代投時記錄，需通過姓名＋卡號驗證）
+    proxy_name: Mapped[str] = mapped_column(String(128), default="")
+    proxy_member_no: Mapped[str] = mapped_column(String(64), default="")
     # 投票時輪次快照（min/max 票數，防事後改配置影響歷史）
     min_votes_at_vote: Mapped[int] = mapped_column(Integer, default=1)
     max_votes_at_vote: Mapped[int] = mapped_column(Integer, default=2)

@@ -11,6 +11,7 @@
  *   候選人列 13px（第一名主紅、其餘灰）、進度條高 6px（設計稿無可見軌道）
  */
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { AxiosError } from 'axios'
 import { VoteShell } from '../components/VoteShell'
 import { ErrorBanner } from '../components/ErrorBanner'
@@ -21,6 +22,7 @@ import {
   type RoundPublicInfo,
 } from '../api/client'
 import { usePolling } from '../hooks/usePolling'
+import { useI18n } from '../i18n'
 import type { ApiError, DivisionResult, OverviewResult } from '../types'
 
 /** 前三名序號（圓圈數字） */
@@ -29,6 +31,7 @@ const RANKS = ['①', '②', '③'] as const
 const BAR_TONE = ['bg-primary', 'bg-gold', 'bg-gold-light/70'] as const
 
 export function ScreenOverview() {
+  const { t, translateError, roundShort } = useI18n()
   // 輪次（公開端點）
   const [round, setRound] = useState<RoundPublicInfo | null>(null)
   const [roundError, setRoundError] = useState<string | null>(null)
@@ -40,24 +43,29 @@ export function ScreenOverview() {
         if (alive) setRound(res.data)
       })
       .catch((e: AxiosError<ApiError>) => {
-        if (alive) setRoundError(messageForError(e))
+        if (alive) setRoundError(translateError(messageForError(e)))
       })
     return () => {
       alive = false
     }
-  }, [])
+  }, [translateError])
 
   /** 重新取得輪次（錯誤橫幅的重試鍵用） */
   const retryRound = useCallback(() => {
     setRoundError(null)
     getActiveRound()
       .then((res) => setRound(res.data))
-      .catch((e: AxiosError<ApiError>) => setRoundError(messageForError(e)))
-  }, [])
+      .catch((e: AxiosError<ApiError>) => setRoundError(translateError(messageForError(e))))
+  }, [translateError])
 
   // 五區彙總（3 秒輪詢；usePolling 於失敗時保留上次 data，不清空畫面）
   const { data, error, refresh } = usePolling<OverviewResult>(
-    () => getOverviewResults(round!.id).then((r) => r.data),
+    () =>
+      getOverviewResults(round!.id)
+        .then((r) => r.data)
+        .catch((e: AxiosError<ApiError>) => {
+          throw new Error(translateError(messageForError(e)))
+        }),
     {
       interval: 3000,
       enabled: round !== null,
@@ -67,8 +75,8 @@ export function ScreenOverview() {
     }
   )
 
-  // 小字用輪次名（「第一輪 · 分區選舉」→「第一輪」）
-  const roundLabel = round?.name.split(/[·・.。]/)[0].trim() || `第 ${round?.round_no ?? 1} 輪`
+  // 小字用輪次短名（「第一輪 · 分區選舉」→「第一輪」；简中/English → 「第 1 輪」/「Round 1」）
+  const roundText = roundShort(round?.name, round?.round_no)
   const divisions = data?.divisions ?? []
 
   return (
@@ -76,14 +84,12 @@ export function ScreenOverview() {
       <section className="vote-card px-4 pt-[26px] pb-6">
         {/* ── 頁首 ── */}
         <p className="text-[12px] leading-[16px] font-bold text-primary">
-          {roundLabel} · 五區即時總覽
+          {t('screen.roundOverview', { round: roundText })}
         </p>
         <h1 className="mt-[5px] font-serif text-[30px] leading-[36px] font-bold text-ink">
-          各分區投票狀態
+          {t('screen.heading')}
         </h1>
-        <p className="mt-[9px] text-[12px] leading-[16px] text-gray">
-          僅顯示各區目前排名前三的候選人
-        </p>
+        <p className="mt-[9px] text-[12px] leading-[16px] text-gray">{t('screen.sub')}</p>
 
         <div className="mt-[13px] h-px w-full bg-gold/50" />
 
@@ -96,14 +102,14 @@ export function ScreenOverview() {
 
         {divisions.length === 0 && !roundError && !error && (
           <p className="mt-[16px] text-center text-[12px] leading-[18px] text-gray">
-            正在載入各分區投票狀態…
+            {t('screen.loading')}
           </p>
         )}
 
         {(roundError || (error && divisions.length === 0)) && (
           <div className="mt-[16px]">
             <ErrorBanner
-              message={roundError ?? '即時結果載入失敗，請重試'}
+              message={roundError ?? error ?? t('results.error')}
               onRetry={roundError ? retryRound : refresh}
             />
           </div>
@@ -111,7 +117,7 @@ export function ScreenOverview() {
 
         {/* ── 頁腳（設計稿：12px 灰、置中、兩行） ── */}
         <p className="mt-[16px] text-center text-[12px] leading-[18px] text-gray">
-          資料依各區投票進度同步更新；最終結果以投票結束後公告為準。
+          {t('screen.footer')}
         </p>
       </section>
     </VoteShell>
@@ -122,19 +128,37 @@ export function ScreenOverview() {
  * 單一分區區塊 — 淡金底 + 淡金框 + 圓角 12 + 內距 13
  * 上列：區名（16px 粗體深墨）＋ 右側「已投 / 總人數 人」
  * 下列：前三名（序號 + 姓名 + 票數 + 進度條）
+ * 整塊可點擊 → /vote/results?division={id}（Enter / Space 亦可）
  */
 function DivisionBlock({ data }: { data: DivisionResult }) {
+  const { t } = useI18n()
+  const navigate = useNavigate()
   const { division, voted_count, total_count, results } = data
   const top3 = results.slice(0, 3)
   const maxVotes = top3.reduce((m, r) => Math.max(m, r.votes), 0)
 
+  const openResults = () => navigate('/vote/results?division=' + division.id)
+
   return (
-    <div className="rounded-[12px] border border-gold-light bg-panel-soft px-[13px] py-[13px]">
+    <div
+      role="button"
+      tabIndex={0}
+      data-division-card={division.id}
+      aria-label={t('screen.openDivision', { division: division.name })}
+      onClick={openResults}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          openResults()
+        }
+      }}
+      className="cursor-pointer rounded-[12px] border border-gold-light bg-panel-soft px-[13px] py-[13px] transition-colors hover:border-gold"
+    >
       {/* 上列 */}
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[16px] leading-[24px] font-bold text-ink">{division.name}</span>
         <span className="shrink-0 text-[12px] leading-[24px] text-gray">
-          <b className="font-bold">{voted_count}</b> / {total_count} 人
+          {t('common.people', { voted: voted_count, total: total_count })}
         </span>
       </div>
 
@@ -151,7 +175,7 @@ function DivisionBlock({ data }: { data: DivisionResult }) {
                 <span className={i === 0 ? 'text-primary/60' : 'text-gray/75'}>{RANKS[i]}</span>{' '}
                 {r.name}
               </span>
-              <span className="shrink-0">{r.votes} 票</span>
+              <span className="shrink-0">{t('common.votes', { n: r.votes })}</span>
             </div>
             {/* 進度條：長度 = 該候選人票數 / 該區最高票（設計稿無可見軌道） */}
             <div className="mt-[6px] h-[6px] w-full overflow-hidden rounded-full">
@@ -162,7 +186,9 @@ function DivisionBlock({ data }: { data: DivisionResult }) {
             </div>
           </div>
         ))}
-        {top3.length === 0 && <p className="text-[12px] leading-[18px] text-gray">尚無投票資料</p>}
+        {top3.length === 0 && (
+          <p className="text-[12px] leading-[18px] text-gray">{t('screen.empty')}</p>
+        )}
       </div>
     </div>
   )

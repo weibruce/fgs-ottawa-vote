@@ -17,17 +17,33 @@ import {
   IconCheckCircle,
   IconDownload,
   IconSearch,
+  IconUser,
 } from '../components/icons'
 import { Button, Card, DivisionTag, PageIntro } from '../components/ui'
 import { apiError } from '../api/client'
-import { fetchMemberStats, importMembers, listMembers } from '../api/members'
-import type { MemberStats } from '../api/types'
+import {
+  fetchMemberStats,
+  importMembers,
+  listMembers,
+  type MemberQuery,
+} from '../api/members'
+import type { MemberOut, MemberStats } from '../api/types'
 import { useAsync } from '../hooks/useAsync'
 
 const PAGE_SIZE = 10
 
 /** 已投票狀態色（參考稿 emerald-700） */
 const VOTED_GREEN = '#047857'
+
+/**
+ * 代投欄位（後端 MemberOut 已回傳，但共用型別檔尚未補；
+ * 依規範不改共用檔，於本頁以區域型別擴充）。
+ */
+type MemberRow = MemberOut & {
+  voted_by_proxy?: boolean
+  proxy_name?: string
+  proxy_member_no?: string
+}
 
 /** 載入中的小卡佔位（維持 5 卡版面，避免載入時跳動） */
 const PLACEHOLDER_STATS: MemberStats[] = Array.from({ length: 5 }, (_, i) => ({
@@ -74,7 +90,32 @@ function NotVotedIcon() {
   )
 }
 
-function VoteStatus({ voted }: { voted: boolean }) {
+function VoteStatus({
+  voted,
+  votedByProxy,
+  proxyName,
+}: {
+  voted: boolean
+  votedByProxy?: boolean
+  proxyName?: string
+}) {
+  // 已被代投：金色樣式 +（若有）代投人小字
+  if (voted && votedByProxy) {
+    return (
+      <div className="flex flex-col items-start gap-[3px]">
+        <span className="inline-flex items-center gap-[2px] px-[6px] py-[2px] rounded-[4px] border border-[#E3D8C2] text-[12px] leading-none bg-[#FBF3E4] text-[#8A6D3B]">
+          <IconUser size={14} strokeWidth={1.4} />
+          已被代投
+        </span>
+        {proxyName ? (
+          <span className="text-[12px] leading-none text-gray">
+            代投人：{proxyName}
+          </span>
+        ) : null}
+      </div>
+    )
+  }
+
   return voted ? (
     <span
       className="inline-flex items-center gap-[2px] text-[12px] leading-none"
@@ -136,16 +177,26 @@ export function MembersPage() {
   }, [keyword])
 
   const statsQuery = useAsync(() => fetchMemberStats(), [])
+  // MemberQuery 的 status 聯集尚未含 proxy_voted（共用檔不可改），以斷言放行
+  const statusParam = (
+    status === 'all'
+      ? ''
+      : status === 'voted'
+        ? 'voted'
+        : status === 'proxy-voted'
+          ? 'proxy_voted'
+          : 'not_voted'
+  ) as MemberQuery['status']
   const membersQuery = useAsync(
     () =>
       listMembers({
         division_id: division === 'all' ? null : Number(division),
-        status: status === 'all' ? '' : status === 'voted' ? 'voted' : 'not_voted',
+        status: statusParam,
         q: debouncedKeyword,
         page,
         page_size: PAGE_SIZE,
       }),
-    [division, status, debouncedKeyword, page],
+    [division, statusParam, debouncedKeyword, page],
   )
 
   const stats = statsQuery.data ?? PLACEHOLDER_STATS
@@ -155,7 +206,7 @@ export function MembersPage() {
     return map
   }, [statsQuery.data])
 
-  const rows = membersQuery.data?.items ?? []
+  const rows: MemberRow[] = membersQuery.data?.items ?? []
   const total = membersQuery.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -303,6 +354,7 @@ export function MembersPage() {
         >
           <option value="all">全部狀態</option>
           <option value="voted">已投票</option>
+          <option value="proxy-voted">已被代投</option>
           <option value="not-voted">未投票</option>
         </select>
       </div>
@@ -343,7 +395,11 @@ export function MembersPage() {
                   </td>
                   <td className="text-gray-deep">{m.phone || '—'}</td>
                   <td>
-                    <VoteStatus voted={m.has_voted} />
+                    <VoteStatus
+                      voted={m.has_voted}
+                      votedByProxy={m.voted_by_proxy}
+                      proxyName={m.proxy_name}
+                    />
                   </td>
                   <td className="text-gray-deep">{formatVotedAt(m.voted_at)}</td>
                 </tr>

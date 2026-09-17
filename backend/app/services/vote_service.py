@@ -30,9 +30,12 @@ def confirm_identity(
     round_id: int,
     is_proxy: bool = False,
     proxy_note: str = "",
+    proxy_name: str = "",
+    proxy_member_no: str = "",
 ) -> dict:
     """
     姓名 + 卡號 → 簡繁匹配 → 確定分區 → 生成 voter_token
+    代投時**同時驗證代投人**的姓名 + 卡號（兩組都要正確）
     錯誤：404 卡號不存在 / 400 姓名不匹配 / 409 已投票 / 403 無權限(白名單)
     """
     # 1. 查輪次
@@ -51,9 +54,27 @@ def confirm_identity(
     if not match_member_name(name, member.name_trad, member.name_simp):
         raise HTTPException(status_code=400, detail="姓名與卡號不匹配")
 
-    # 4. 防重：已投票
+    # 3.5 代投人驗證（勾選代投時，兩組姓名＋卡號都要通過）
+    proxy_member = None
+    if is_proxy:
+        if not proxy_name.strip() or not proxy_member_no.strip():
+            raise HTTPException(status_code=400, detail="請填寫代投人姓名與佛光會員卡號")
+        if proxy_member_no.strip() == member_no:
+            raise HTTPException(status_code=400, detail="代投人不可與會員本人相同")
+        proxy_member = db.query(Member).filter(Member.member_no == proxy_member_no.strip()).first()
+        if proxy_member is None:
+            raise HTTPException(status_code=404, detail="未找到代投人的會員卡號，請核實")
+        if not match_member_name(proxy_name, proxy_member.name_trad, proxy_member.name_simp):
+            raise HTTPException(status_code=400, detail="代投人姓名與卡號不匹配，請核實")
+
+    # 4. 防重：已投票（被代投時明確告知是誰代投的）
     already = db.query(Vote).filter(Vote.round_id == round_id, Vote.member_no == member_no).first()
     if already:
+        if already.is_proxy and already.proxy_name:
+            raise HTTPException(
+                status_code=409,
+                detail=f"您的投票已被{already.proxy_name}代投，無需重複投票",
+            )
         raise HTTPException(status_code=409, detail="您已投過票，無需重複投票")
 
     # 5. 第二輪白名單校驗
@@ -90,6 +111,8 @@ def confirm_identity(
             "division_name": division.name,
             "is_proxy": is_proxy,
             "proxy_voter_name": proxy_note if is_proxy else None,
+            "proxy_name": (proxy_member.name_trad if (is_proxy and proxy_member) else None),
+            "proxy_member_no": (proxy_member.member_no if (is_proxy and proxy_member) else None),
         },
     }
 
@@ -124,6 +147,8 @@ def submit_vote(
     candidate_ids: list[int],
     proxy: bool = False,
     proxy_note: str = "",
+    proxy_name: str = "",
+    proxy_member_no: str = "",
 ) -> dict:
     """
     防重 + 票數校驗 + 分區校驗 + 輪次狀態校驗 → 事務寫 PG + Redis 計數
@@ -204,6 +229,8 @@ def submit_vote(
             division_id=member.division_id,
             is_proxy=proxy,
             proxy_note=proxy_note or "",
+            proxy_name=(proxy_name or "") if proxy else "",
+            proxy_member_no=(proxy_member_no or "") if proxy else "",
             min_votes_at_vote=min_votes,
             max_votes_at_vote=max_votes,
         )

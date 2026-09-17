@@ -4,7 +4,7 @@ import type { MemberOut, MemberInput, MemberStats, ImportResult, Page } from './
 
 export interface MemberQuery {
   division_id?: number | null
-  status?: 'voted' | 'not_voted' | ''
+  status?: 'voted' | 'not_voted' | 'proxy_voted' | ''
   q?: string
   page?: number
   page_size?: number

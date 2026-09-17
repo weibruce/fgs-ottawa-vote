@@ -55,9 +55,16 @@ def get_active_round(db: Session = Depends(get_db)):
     - 若無 active，回傳最新建立的輪次（前端據 status 顯示「尚未開始／已結束」）
     - 完全沒有輪次 → 404
     """
+    # 優先順序：active → 已結束/已鎖定（最近一次真的辦過的輪次）→ 草稿
+    # 這樣「第一輪結束、第二輪還是草稿」時，會正確顯示第一輪已結束，
+    # 而不是誤指到還沒開始的第二輪。
     r = (
         db.query(Round)
         .filter(Round.status == "active")
+        .order_by(Round.id.desc())
+        .first()
+        or db.query(Round)
+        .filter(Round.status.in_(["closed", "locked"]))
         .order_by(Round.id.desc())
         .first()
         or db.query(Round).order_by(Round.id.desc()).first()
@@ -89,7 +96,8 @@ def confirm_identity(
     錯誤：404 卡號不存在 / 400 姓名不匹配 / 409 已投票 / 403 白名單外
     """
     result = vote_service.confirm_identity(
-        db, body.name, body.member_no, body.round_id, body.is_proxy, body.proxy_note
+        db, body.name, body.member_no, body.round_id, body.is_proxy, body.proxy_note,
+        proxy_name=body.proxy_name, proxy_member_no=body.proxy_member_no,
     )
     return result
 
@@ -106,6 +114,7 @@ def submit_vote(
     result = vote_service.submit_vote(
         db, body.voter_token, body.round_id, body.candidate_ids,
         proxy=body.proxy, proxy_note=body.proxy_voter_name or "",
+        proxy_name=body.proxy_name or "", proxy_member_no=body.proxy_member_no or "",
     )
     return result
 

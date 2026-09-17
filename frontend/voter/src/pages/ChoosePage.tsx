@@ -16,21 +16,15 @@ import { CandidateCard } from '../components/CandidateCard'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { getActiveRound, getDivisionCandidates, submitVote, messageForError } from '../api/client'
+import { useI18n } from '../i18n'
 import { useVoteStore } from '../hooks/useVoteStore'
 import type { ApiError, DivisionCandidates } from '../types'
-
-/** 輪次名 → 卡片頂部小字（設計稿「第一輪。東區」→ 實作「第一輪 · 東區」） */
-function roundLabelOf(name: string | undefined, roundNo: number | undefined): string {
-  const head = (name ?? '').split('·')[0]?.trim()
-  if (head) return head
-  if (roundNo) return `第${roundNo}輪`
-  return '第一輪'
-}
 
 export function ChoosePage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const { session } = useVoteStore()
+  const { t, translateError, roundShort } = useI18n()
 
   // 分區一律以 session 為準（query 僅作為退路）
   const divisionId = session?.voter.division_id ?? Number(params.get('division') || 0)
@@ -42,23 +36,29 @@ export function ChoosePage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [roundLabel, setRoundLabel] = useState('第一輪')
+  const [roundInfo, setRoundInfo] = useState<{ name?: string; roundNo?: number }>({})
+  /** 投票視窗閘門：輪次非 active → 導到 /vote/window（第 6 點） */
+  const [windowActive, setWindowActive] = useState<boolean | null>(null)
 
   const [selected, setSelected] = useState<number[]>([])
   const [showConfirm, setShowConfirm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
+  // 提示只存「來源」不存已翻譯字串 → 語言切換時 render 期間即時重譯
+  const [notice, setNotice] = useState<{ kind: 'min' | 'api'; text?: string } | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  // 輪次名（公開端點，僅用於卡片頂部小字；失敗時沿用預設值）
+  // 輪次名（公開端點：卡片頂部小字 + 投票視窗閘門；失敗時沿用預設輪次、不擋）
   useEffect(() => {
     let alive = true
     getActiveRound()
       .then((res) => {
-        if (alive) setRoundLabel(roundLabelOf(res.data.name, res.data.round_no))
+        if (!alive) return
+        setRoundInfo({ name: res.data.name, roundNo: res.data.round_no })
+        setWindowActive(res.data.status === 'active')
       })
       .catch(() => {
-        /* 標題小字非關鍵，失敗時保留預設「第一輪」 */
+        /* 標題小字非關鍵，失敗時沿用預設輪次；閘門遇錯誤不擋（後續 API 自會報錯） */
+        if (alive) setWindowActive(true)
       })
     return () => {
       alive = false
@@ -82,6 +82,7 @@ export function ChoosePage() {
       })
       .catch((e: AxiosError<ApiError>) => {
         if (!alive) return
+        // 只存原始中文 detail，render 期間才翻成當前語言
         setLoadError(messageForError(e))
         setLoading(false)
       })
@@ -90,9 +91,18 @@ export function ChoosePage() {
     }
   }, [session, roundId, divisionId, reloadKey])
 
+  // 提示／錯誤一律在 render 期間翻譯（state 只存來源），語言切換即時換字
   const candidates = data?.candidates ?? []
   const atMax = selected.length >= maxVotes
   const belowMin = selected.length < minVotes
+  const noticeText =
+    notice === null
+      ? null
+      : notice.kind === 'min'
+        ? t('choose.errMin', { n: minVotes })
+        : translateError(notice.text ?? '')
+  const submitErrorText = submitError === null ? null : translateError(submitError)
+  const loadErrorText = loadError === null ? null : translateError(loadError)
 
   const toggleCandidate = useCallback(
     (id: number) => {
@@ -116,7 +126,7 @@ export function ChoosePage() {
   /** 設計稿主按鈕恆為實心 → 點擊時才檢查票數下限（不以 disabled 淡化） */
   function handleConfirmClick() {
     if (belowMin) {
-      setNotice(`請至少選擇 ${minVotes} 位候選人`)
+      setNotice({ kind: 'min' })
       return
     }
     setNotice(null)
@@ -134,7 +144,8 @@ export function ChoosePage() {
         round_id: roundId,
         candidate_ids: selected,
         proxy: session.voter.is_proxy,
-        proxy_voter_name: session.voter.proxy_voter_name ?? undefined,
+        proxy_name: session.voter.proxy_name ?? undefined,
+      proxy_member_no: session.voter.proxy_member_no ?? undefined,
       })
       navigate('/vote/success')
     } catch (e) {
@@ -142,8 +153,8 @@ export function ChoosePage() {
       setSubmitting(false)
       setShowConfirm(false)
       if (err.response?.status === 409) {
-        // 已投票 → 直接看本區結果
-        setNotice('您已投過票，無需重複投票')
+        // 已投票（含被代投）→ 顯示後端訊息（render 期間翻成當前語言），不重複投票
+        setNotice({ kind: 'api', text: messageForError(err) })
         return
       }
       setSubmitError(messageForError(err))
@@ -152,7 +163,10 @@ export function ChoosePage() {
 
   // 無 session → 回身份驗證
   if (!session) return <Navigate to="/vote/verify" replace />
+  // 輪次非 active → 轉往投票視窗狀態頁（第 6 點閘門）
+  if (windowActive === false) return <Navigate to="/vote/window" replace />
 
+  const roundLabel = roundShort(roundInfo.name, roundInfo.roundNo)
   const divisionName = data?.division.name ?? session.voter.division_name
   const selectedNames = selected
     .map((id) => candidates.find((c) => c.id === id)?.name)
@@ -169,22 +183,21 @@ export function ChoosePage() {
 
         {/* ── 大標（襯線 23px 粗體；設計稿實測 ink 寬 221 / 高 21px） ── */}
         <h1 className="mt-[3px] font-serif text-[23px] font-bold leading-[32px] text-ink">
-          {divisionName}會長／副會長選舉
+          {t('choose.heading', { division: divisionName })}
         </h1>
 
         {/* ── 副標：投票人 + 卡號（12px 灰；設計稿實測這行比簡報所述 14px 小一級） ── */}
         <p className="mt-[3px] text-[12px] leading-[18px] text-gray">
-          投票人：{session.voter.name}
-          <span className="ml-[10px]">{session.voter.member_no}</span>
+          {t('choose.voterLine', { name: session.voter.name, no: session.voter.member_no })}
         </p>
 
         <div className="mt-[12px] border-t border-border" />
 
         {/* ── 提示列（淺米底、圓角 10、高 44） ── */}
         <div className="mt-[16px] flex h-[44px] items-center justify-between rounded-[10px] bg-light-bg px-[12px]">
-          <span className="relative top-[3px] text-[15px] leading-[20px] text-ink">請選擇候選人</span>
+          <span className="relative top-[3px] text-[15px] leading-[20px] text-ink">{t('choose.bannerLabel')}</span>
           <span className="relative top-[3px] text-[15px] font-bold leading-[20px] text-primary">
-            已選 {selected.length}/{maxVotes} 票
+            {t('choose.selectedCount', { n: selected.length, max: maxVotes })}
           </span>
         </div>
 
@@ -207,13 +220,13 @@ export function ChoosePage() {
           </div>
         )}
 
-        {!loading && loadError && (
+        {!loading && loadErrorText && (
           <div className="mt-[17px]">
-            <ErrorBanner message={loadError} onRetry={() => setReloadKey((k) => k + 1)} />
+            <ErrorBanner message={loadErrorText} onRetry={() => setReloadKey((k) => k + 1)} />
           </div>
         )}
 
-        {!loading && !loadError && (
+        {!loading && !loadErrorText && (
           <div className="mt-[15px] space-y-[10px]">
             {candidates.map((c) => (
               <CandidateCard
@@ -229,46 +242,46 @@ export function ChoosePage() {
         )}
 
         {/* 已達上限提示（僅在滿票時出現，不影響預設版面） */}
-        {!loading && !loadError && atMax && (
+        {!loading && !loadErrorText && atMax && (
           <p className="mt-[10px] text-center text-[12px] leading-[18px] text-gray">
-            已達 {maxVotes} 票上限，如需變更請先取消已選候選人
+            {t('choose.errMax', { n: maxVotes })}
           </p>
         )}
 
         {/* 未達下限／已投票提示 */}
-        {notice && (
-          <p className="mt-[10px] text-center text-[13px] leading-[20px] text-primary">{notice}</p>
+        {noticeText && (
+          <p className="mt-[10px] text-center text-[13px] leading-[20px] text-primary">{noticeText}</p>
         )}
-        {submitError && (
+        {submitErrorText && (
           <div className="mt-[12px]">
-            <ErrorBanner message={submitError} />
+            <ErrorBanner message={submitErrorText} />
           </div>
         )}
 
         {/* ── 底部說明（12–13px 灰、置中） ── */}
         <p className="mt-[18px] text-center text-[12px] leading-[18px] text-gray">
-          至少選擇 {minVotes} 位，最多可選 {maxVotes} 位。提交後將無法修改。
+          {t('choose.footer', { min: minVotes, max: maxVotes })}
         </p>
 
         {/* ── 主按鈕 ── */}
         <button type="button" onClick={handleConfirmClick} disabled={submitting} className="vote-btn mt-[16px]">
-          確認投票
+          {t('choose.submit')}
         </button>
       </section>
 
       {/* ── 二次確認彈窗 ── */}
       <ConfirmModal
         open={showConfirm}
-        title="確認投票"
-        confirmText="確認提交"
-        cancelText="再想想"
+        title={t('choose.modalTitle')}
+        confirmText={t('choose.modalConfirm')}
+        cancelText={t('choose.modalCancel')}
         loading={submitting}
         onConfirm={handleSubmit}
         onCancel={() => setShowConfirm(false)}
       >
-        您將把票投給
+        {t('choose.modalBody')}
         <span className="mt-[6px] block font-bold text-ink">{selectedNames}</span>
-        <span className="mt-[6px] block">提交後將無法修改。</span>
+        <span className="mt-[6px] block">{t('choose.modalNote')}</span>
       </ConfirmModal>
     </VoteShell>
   )

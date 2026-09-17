@@ -12,16 +12,19 @@
  */
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import type { AxiosError } from 'axios'
 import { VoteShell } from '../components/VoteShell'
 import { ErrorBanner } from '../components/ErrorBanner'
 import {
   getActiveRound,
   getDivisionResults,
+  messageForError,
   type RoundPublicInfo,
 } from '../api/client'
 import { usePolling } from '../hooks/usePolling'
 import { useVoteStore } from '../hooks/useVoteStore'
-import type { CandidateResult, DivisionResult } from '../types'
+import { useI18n } from '../i18n'
+import type { ApiError, CandidateResult, DivisionResult } from '../types'
 
 /** 進度條（設計稿：高 8px、圓角、軌道為極淺金；填色主紅或金） */
 function Bar({ ratio, tone = 'gold' }: { ratio: number; tone?: 'primary' | 'gold' }) {
@@ -48,18 +51,19 @@ function LeadingRow({
   votes: number
   ratio: number
 }) {
+  const { t } = useI18n()
   return (
     <div className="rounded-[12px] border border-gold-light bg-panel-soft px-[13px] pt-[12px] pb-[10px]">
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[17px] leading-[24px] font-bold text-ink">{name}</span>
         <span className="shrink-0 text-[17px] leading-[24px] font-bold text-primary">
-          {votes} 票
+          {t('common.votes', { n: votes })}
         </span>
       </div>
       <div className="mt-[6px]">
         <Bar ratio={ratio} tone="primary" />
       </div>
-      <p className="mt-[8px] text-[12px] leading-[16px] text-gold">目前最高票</p>
+      <p className="mt-[8px] text-[12px] leading-[16px] text-gold">{t('results.leading')}</p>
     </div>
   )
 }
@@ -74,11 +78,14 @@ function ResultRow({
   votes: number
   ratio: number
 }) {
+  const { t } = useI18n()
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[16px] leading-[22px] text-ink">{name}</span>
-        <span className="shrink-0 text-[16px] leading-[22px] text-ink">{votes} 票</span>
+        <span className="shrink-0 text-[16px] leading-[22px] text-ink">
+          {t('common.votes', { n: votes })}
+        </span>
       </div>
       <div className="mt-[6px]">
         <Bar ratio={ratio} />
@@ -90,6 +97,7 @@ function ResultRow({
 export function DivisionResultsPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
+  const { t, translateError, roundShort } = useI18n()
   const { session } = useVoteStore()
   const paramDivision = Number(params.get('division') || 0)
 
@@ -119,7 +127,12 @@ export function DivisionResultsPage() {
 
   // 輪詢：2 秒。失敗時 usePolling 保留上次 data，不清空畫面
   const { data, error, refresh } = usePolling<DivisionResult>(
-    () => getDivisionResults(roundId as number, divisionId).then((r) => r.data),
+    () =>
+      getDivisionResults(roundId as number, divisionId)
+        .then((r) => r.data)
+        .catch((e: AxiosError<ApiError>) => {
+          throw new Error(translateError(messageForError(e)))
+        }),
     { interval: 2000, enabled: ready }
   )
 
@@ -137,37 +150,34 @@ export function DivisionResultsPage() {
     data?.division.name ||
     session?.voter.division_name ||
     round?.divisions.find((d) => d.id === divisionId)?.name ||
-    '本區'
+    t('results.thisDivision')
 
   const activeRoundName =
-    round && (session === null || round.id === session.round_id) ? round.name : ''
-  const roundLabel =
-    activeRoundName.split(/[·・.。]/)[0].trim() || `第 ${round?.round_no ?? 1} 輪`
+    round && (session === null || round.id === session.round_id) ? round.name : null
+  const roundText = roundShort(activeRoundName, round?.round_no)
 
   return (
     <VoteShell>
       <section className="vote-card px-[21px] pt-[27px] pb-[28px]">
         {/* ── 頁首 ── */}
         <p className="text-[12px] leading-[16px] font-bold text-primary">
-          {roundLabel}。{divisionName}即時統計
+          {t('results.roundStat', { round: roundText, division: divisionName })}
         </p>
         <h1 className="mt-[4px] font-serif text-[30px] leading-[36px] font-bold text-ink">
-          投票結果
+          {t('results.heading')}
         </h1>
 
         {/* 更新提示（小紅點 + 灰字） */}
         <div className="mt-[10px] flex items-center gap-[7px]">
           <span className="h-[8px] w-[8px] shrink-0 rounded-full bg-primary" />
-          <span className="text-[12px] leading-[16px] text-gray">
-            正在更新，每 2 秒同步一次
-          </span>
+          <span className="text-[12px] leading-[16px] text-gray">{t('results.live')}</span>
         </div>
 
         <div className="mt-[15px] h-px w-full bg-gold/40" />
 
         {error && !data ? (
           <div className="mt-[19px]">
-            <ErrorBanner message="即時結果載入失敗，請重試" onRetry={refresh} />
+            <ErrorBanner message={error ?? t('results.error')} onRetry={refresh} />
           </div>
         ) : (
           <>
@@ -175,17 +185,17 @@ export function DivisionResultsPage() {
             <div className="mt-[18px] rounded-[12px] bg-light-bg px-[15px] pt-[16px] pb-[16px]">
               <div className="flex items-baseline justify-between gap-3">
                 <span className="text-[14px] leading-[20px] font-bold text-ink">
-                  {divisionName}投票進度
+                  {t('results.progressTitle', { division: divisionName })}
                 </span>
                 <span className="shrink-0 text-[14px] leading-[20px] text-primary">
-                  <b className="font-bold">{voted}</b> / {total} 人
+                  {t('common.people', { voted, total })}
                 </span>
               </div>
               <div className="mt-[10px]">
                 <Bar ratio={total > 0 ? voted / total : 0} tone="primary" />
               </div>
               <p className="mt-[10px] text-[12px] leading-[16px] text-gray">
-                投票率 {turnout.toFixed(1)}%
+                {t('results.turnout', { pct: turnout.toFixed(1) })}
               </p>
             </div>
 
@@ -213,12 +223,12 @@ export function DivisionResultsPage() {
 
         {/* ── 主按鈕 ── */}
         <button type="button" onClick={() => navigate('/screen')} className="vote-btn mt-[23px]">
-          查看其他分區投票
+          {t('results.otherDivisions')}
         </button>
 
         {/* ── 頁腳（設計稿為單行置中灰字） ── */}
         <p className="mt-[20px] text-center text-[12px] leading-[16px] text-gray">
-          結果僅供投票期間即時查閱；投票結束後將顯示最終統計。
+          {t('results.footer')}
         </p>
       </section>
     </VoteShell>

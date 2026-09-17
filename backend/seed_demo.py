@@ -120,6 +120,7 @@ def main() -> None:
         db.commit()
 
         # --- 會員 ---
+        all_members: list[Member] = []
         members: dict[str, list[Member]] = {}
         seq = 1
         for _code, name, _color, count in DIVISIONS:
@@ -138,6 +139,7 @@ def main() -> None:
                 )
                 db.add(m)
                 rows.append(m)
+                all_members.append(m)
                 seq += 1
             members[name] = rows
         db.commit()
@@ -212,11 +214,24 @@ def main() -> None:
             for v, picks in zip(voters, plans):
                 if not picks:
                     continue
+                # 約 6% 為代投：從其他會員中挑一位當代投人並記錄其姓名/卡號
+                is_proxy = random.random() < 0.06
+                proxy_name = ""
+                proxy_no = ""
+                if is_proxy:
+                    others = [x for x in all_members if x.member_no != v.member_no]
+                    if others:
+                        pm = random.choice(others)
+                        proxy_name, proxy_no = pm.name_trad, pm.member_no
+                    else:
+                        is_proxy = False
                 vote = Vote(
                     round_id=r1.id, member_no=v.member_no, member_name=v.name_trad,
                     division_id=v.division_id,
-                    is_proxy=random.random() < 0.06,
+                    is_proxy=is_proxy,
                     proxy_note="",
+                    proxy_name=proxy_name,
+                    proxy_member_no=proxy_no,
                     min_votes_at_vote=1, max_votes_at_vote=2,
                 )
                 db.add(vote)

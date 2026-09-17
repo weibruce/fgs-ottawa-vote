@@ -3,10 +3,11 @@
  *                                     voting_system_01_1.png（勾選代投）
  *
  * 流程：GET /votes/round/active 取得當前輪次 → POST /votes/confirm 驗證身份
- * 勾選「代他人投票」時額外輸入代投人姓名與卡號（對齊 01_1）
+ * 勾選「是否由他人代理投票」時額外輸入代投人姓名與卡號（對齊 01_1）
+ * 輪次非 active → 轉往 /vote/window（第 6 點閘門）
  */
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import type { AxiosError } from 'axios'
 import { VoteShell } from '../components/VoteShell'
 import { Checkbox } from '../components/Checkbox'
@@ -14,20 +15,26 @@ import { Field, TextInput } from '../components/Field'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { confirmVoter, getActiveRound, messageForError, type RoundPublicInfo } from '../api/client'
 import { useVoteStore } from '../hooks/useVoteStore'
+import { useI18n } from '../i18n'
 import type { ApiError } from '../types'
 import logo from '../assets/blia-logo.png'
 
-/** 輪次狀態 → 提示文字（視窗外不允許投票） */
-const WINDOW_NOTICE: Record<string, string | null> = {
-  draft: '投票尚未開始，請稍候',
-  active: null,
-  closed: '投票已結束',
-  locked: '投票已結束',
+/** 後端代投人驗證錯誤（detail 精確比對）→ 顯示在代投欄位區附近 */
+const PROXY_ERROR_DETAILS = new Set([
+  '未找到代投人的會員卡號，請核實',
+  '代投人姓名與卡號不匹配，請核實',
+  '代投人不可與會員本人相同',
+  '請填寫代投人姓名與佛光會員卡號',
+])
+
+function isProxyFieldError(err: AxiosError<ApiError>): boolean {
+  return PROXY_ERROR_DETAILS.has(err.response?.data?.detail ?? '')
 }
 
 export function VerifyPage() {
   const navigate = useNavigate()
   const { save } = useVoteStore()
+  const { t, translateError } = useI18n()
 
   const [name, setName] = useState('')
   const [memberNo, setMemberNo] = useState('')
@@ -36,56 +43,58 @@ export function VerifyPage() {
   const [proxyCard, setProxyCard] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [proxyError, setProxyError] = useState<string | null>(null)
 
   // 統一入口：自動取得當前輪次（公開端點）
   const [round, setRound] = useState<RoundPublicInfo | null>(null)
   const [roundError, setRoundError] = useState<string | null>(null)
-  const [windowNotice, setWindowNotice] = useState<string | null>(null)
+  const [roundReload, setRoundReload] = useState(0)
 
   useEffect(() => {
     let alive = true
     getActiveRound()
       .then((res) => {
-        if (!alive) return
-        setRound(res.data)
-        setWindowNotice(WINDOW_NOTICE[res.data.status] ?? null)
+        if (alive) setRound(res.data)
       })
       .catch((e: AxiosError<ApiError>) => {
-        if (alive) setRoundError(messageForError(e))
+        if (alive) setRoundError(translateError(messageForError(e)))
       })
     return () => {
       alive = false
     }
-  }, [])
+  }, [translateError, roundReload])
+
+  // 第 6 點：投票視窗非 active → 轉往視窗狀態頁
+  if (round && round.status !== 'active') return <Navigate to="/vote/window" replace />
 
   /** 送出前驗證（設計稿的按鈕恆為實心，故在點擊時檢查而非用 disabled 淡化） */
-  function validate(): string | null {
-    if (!round) return roundError ?? '尚未取得投票輪次，請稍後再試'
-    if (!name.trim() || !memberNo.trim()) return '請輸入會員姓名與佛光會員卡號'
+  function validate(): { field?: 'proxy'; message: string } | null {
+    if (!round) return { message: roundError ?? t('verify.errNoRound') }
+    if (!name.trim() || !memberNo.trim()) return { message: t('verify.errNeedFields') }
     if (proxy && (!proxyName.trim() || !proxyCard.trim()))
-      return '代投時請填寫代投人姓名與佛光會員卡號'
+      return { field: 'proxy', message: t('verify.errNeedProxy') }
     return null
   }
 
   async function handleSubmit() {
+    setError(null)
+    setProxyError(null)
     const problem = validate()
     if (problem) {
-      setError(problem)
+      if (problem.field === 'proxy') setProxyError(problem.message)
+      else setError(problem.message)
       return
     }
     if (!round) return
     setLoading(true)
-    setError(null)
     try {
       const res = await confirmVoter({
         name: name.trim(),
         member_no: memberNo.trim(),
         round_id: round.id,
         proxy,
-        // 代投人姓名 + 卡號一起記在備註（後端 proxy_note 為單一欄位）
-        proxy_voter_name: proxy
-          ? [proxyName.trim(), proxyCard.trim()].filter(Boolean).join(' / ')
-          : undefined,
+        proxy_name: proxy ? proxyName.trim() : undefined,
+        proxy_member_no: proxy ? proxyCard.trim() : undefined,
       })
       const data = res.data
       save({
@@ -97,7 +106,11 @@ export function VerifyPage() {
       })
       navigate('/vote/confirmed')
     } catch (e) {
-      setError(messageForError(e as AxiosError<ApiError>))
+      const err = e as AxiosError<ApiError>
+      const message = translateError(messageForError(err))
+      // 後端對「代投人」的驗證錯誤顯示在代投欄位區附近
+      if (proxy && isProxyFieldError(err)) setProxyError(message)
+      else setError(message)
     } finally {
       setLoading(false)
     }
@@ -108,100 +121,104 @@ export function VerifyPage() {
       {/* ── 頁首（設計稿：置中三行） ── */}
       <div className="pt-2 text-center">
         <p className="text-[12px] font-bold tracking-[0.08em] text-primary">
-          佛光山幹部改選投票系統
+          {t('verify.brandLine')}
         </p>
         <h1 className="mt-[10px] font-serif text-[30px] font-bold leading-tight text-ink">
-          投票人端操作流程
+          {t('verify.pageTitle')}
         </h1>
-        <p className="mt-[10px] text-[14px] leading-[20px] text-gray">
-          統一入口。分區自動識別。即時查看結果
-        </p>
+        <p className="mt-[10px] text-[14px] leading-[20px] text-gray">{t('verify.pageSub')}</p>
       </div>
 
       {/* ── 表單卡 ── */}
       <section className="vote-card mt-[54px] px-[22px] pt-[34px] pb-[30px]">
         <div className="flex flex-col items-center">
-          <img src={logo} alt="國際佛光會" className="h-[80px] w-[80px] object-contain" />
+          <img src={logo} alt={t('app.logoAlt')} className="h-[80px] w-[80px] object-contain" />
           <p className="mt-[8px] text-center text-[12px] font-bold leading-[14px] text-primary">
-            2026 國際佛光會渥太華協會
+            {t('app.orgLine1')}
             <br />
-            各分會會務幹部改選
+            {t('app.orgLine2')}
           </p>
           <h2 className="mt-[8px] font-serif text-[30px] font-bold leading-tight text-ink">
-            身份驗證
+            {t('verify.heading')}
           </h2>
         </div>
 
         <div className="mt-[4px] border-t border-border" />
 
         <p className="mt-[4px] text-center text-[14px] leading-[20px] text-gray">
-          請輸入會員資料，以識別您的所屬分區。
+          {t('verify.intro')}
         </p>
 
         <div className="mt-[34px] space-y-[15px]">
-          <Field label="會員姓名" required htmlFor="voter-name">
+          <Field label={t('verify.nameLabel')} required htmlFor="voter-name">
             <TextInput
               id="voter-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="請輸入姓名（簡、繁體均可）"
+              placeholder={t('verify.namePlaceholder')}
               autoComplete="off"
             />
           </Field>
 
-          <Field label="佛光會員卡號" required htmlFor="voter-card">
+          <Field label={t('verify.cardLabel')} required htmlFor="voter-card">
             <TextInput
               id="voter-card"
               value={memberNo}
               onChange={(e) => setMemberNo(e.target.value)}
-              placeholder="例：FGS-2026-0819"
+              placeholder={t('verify.cardPlaceholder')}
               autoComplete="off"
             />
           </Field>
         </div>
 
-        {/* 代投勾選（勾選色用主題深紅，非設計稿的天藍） */}
+        {/* 代投勾選（勾選色用主題深紅，非設計稿的天藍）；文字固定不隨勾選切換 */}
         <div className="mt-[16px]">
           <Checkbox
             id="proxy"
             checked={proxy}
-            onChange={setProxy}
-            label={proxy ? '我是代他人投票' : '是否由他人代理投票'}
+            onChange={(v) => {
+              setProxy(v)
+              setProxyError(null)
+            }}
+            label={t('verify.proxyLabel')}
           />
         </div>
 
         {proxy && (
           <div className="mt-[15px] space-y-[15px]">
-            <Field label="代投人姓名" required htmlFor="proxy-name">
+            <Field label={t('verify.proxyNameLabel')} required htmlFor="proxy-name">
               <TextInput
                 id="proxy-name"
                 value={proxyName}
                 onChange={(e) => setProxyName(e.target.value)}
-                placeholder="請輸入姓名（簡、繁體均可）"
+                placeholder={t('verify.namePlaceholder')}
                 autoComplete="off"
               />
             </Field>
-            <Field label="代投人佛光會員卡號" required htmlFor="proxy-card">
+            <Field label={t('verify.proxyCardLabel')} required htmlFor="proxy-card">
               <TextInput
                 id="proxy-card"
                 value={proxyCard}
                 onChange={(e) => setProxyCard(e.target.value)}
-                placeholder="例：FGS-2026-0819"
+                placeholder={t('verify.cardPlaceholder')}
                 autoComplete="off"
               />
             </Field>
+
+            {/* 代投人驗證錯誤（必填檢查 / 後端回傳）顯示在欄位區附近 */}
+            {proxyError && (
+              <p className="text-[13px] leading-[20px] text-danger">{proxyError}</p>
+            )}
           </div>
         )}
 
-        {/* 視窗狀態 / 錯誤 */}
-        {windowNotice && (
-          <div className="mt-[18px] rounded-[10px] bg-light-bg px-4 py-3 text-[13px] leading-[20px] text-gray">
-            {windowNotice}
-          </div>
-        )}
+        {/* 輪次載入 / 送出錯誤 */}
         {(error || roundError) && (
           <div className="mt-[18px]">
-            <ErrorBanner message={error ?? roundError ?? ''} onRetry={() => setError(null)} />
+            <ErrorBanner
+              message={error ?? roundError ?? ''}
+              onRetry={!error && roundError ? () => setRoundReload((k) => k + 1) : undefined}
+            />
           </div>
         )}
 
@@ -211,11 +228,11 @@ export function VerifyPage() {
           disabled={loading}
           className="vote-btn mt-[16px]"
         >
-          {loading ? '確認中…' : '確認身份資料'}
+          {loading ? t('common.confirming') : t('verify.submit')}
         </button>
 
         <p className="mt-[22px] text-center text-[12px] leading-[18px] text-gray">
-          系統將依姓名與會員卡號比對資料，僅可投本分區選舉。
+          {t('verify.footer')}
         </p>
       </section>
     </VoteShell>

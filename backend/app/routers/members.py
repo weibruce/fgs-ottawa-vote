@@ -60,27 +60,40 @@ def _current_round(db: Session) -> Round | None:
     return _active_round(db) or db.query(Round).order_by(Round.id.desc()).first()
 
 
-def _voted_map(db: Session, round_id: int | None) -> dict[str, object]:
-    """當前輪次已投票：member_no -> voted_at"""
+def _voted_map(db: Session, round_id: int | None) -> dict[str, tuple[object, bool, str, str]]:
+    """當前輪次已投票：member_no -> (voted_at, is_proxy, proxy_name, proxy_member_no)"""
     if round_id is None:
         return {}
     rows = (
-        db.query(Vote.member_no, Vote.created_at)
+        db.query(
+            Vote.member_no, Vote.created_at, Vote.is_proxy,
+            Vote.proxy_name, Vote.proxy_member_no,
+        )
         .filter(Vote.round_id == round_id)
         .all()
     )
-    return {no: ts for no, ts in rows}
+    return {no: (ts, bool(px), pn or "", pno or "") for no, ts, px, pn, pno in rows}
 
 
 def _division_names(db: Session) -> dict[int, str]:
     return {d.id: d.name for d in db.query(Division).all()}
 
 
-def _to_out(m: Member, div_names: dict[int, str], voted: dict[str, object]) -> MemberOut:
+def _to_out(
+    m: Member,
+    div_names: dict[int, str],
+    voted: dict[str, tuple[object, bool, str, str]],
+) -> MemberOut:
     out = MemberOut.model_validate(m)
     out.division_name = div_names.get(m.division_id, "")
-    out.has_voted = m.member_no in voted
-    out.voted_at = voted.get(m.member_no) if out.has_voted else None  # type: ignore[assignment]
+    info = voted.get(m.member_no)
+    out.has_voted = info is not None
+    if info is not None:
+        ts, is_proxy, proxy_name, proxy_no = info
+        out.voted_at = ts  # type: ignore[assignment]
+        out.voted_by_proxy = is_proxy
+        out.proxy_name = proxy_name
+        out.proxy_member_no = proxy_no
     return out
 
 
@@ -101,7 +114,7 @@ def _normalize_name(name: str) -> tuple[str, str]:
 @router.get("", response_model=MemberPage)
 def list_members(
     division_id: int | None = Query(None, description="按分區篩選"),
-    status: str | None = Query(None, description="voted / not_voted"),
+    status: str | None = Query(None, description="voted / not_voted / proxy_voted"),
     q: str | None = Query(None, description="比對卡號或姓名（繁簡皆可）"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
@@ -129,10 +142,22 @@ def list_members(
         query = query.filter(or_(*conds))
 
     if status == "voted":
-        query = query.filter(Member.member_no.in_(list(voted.keys()))) if voted else query.filter(false())
+        query = (
+            query.filter(Member.member_no.in_(list(voted.keys())))
+            if voted
+            else query.filter(false())
+        )
     elif status == "not_voted":
         if voted:
             query = query.filter(~Member.member_no.in_(list(voted.keys())))
+    elif status == "proxy_voted":
+        # 只列「被他人代投」的會員
+        proxy_keys = [no for no, (_ts, is_proxy, _pn, _pno) in voted.items() if is_proxy]
+        query = (
+            query.filter(Member.member_no.in_(proxy_keys))
+            if proxy_keys
+            else query.filter(false())
+        )
 
     total = query.count()
     rows = (

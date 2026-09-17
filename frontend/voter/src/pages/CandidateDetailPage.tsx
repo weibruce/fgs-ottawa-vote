@@ -16,10 +16,11 @@
  *       GET /votes/round/{roundId}/division/{divisionId} 後依 :id 找出候選人。
  */
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { VoteShell } from '../components/VoteShell'
 import { getActiveRound, getDivisionCandidates } from '../api/client'
 import { useVoteStore } from '../hooks/useVoteStore'
+import { useI18n } from '../i18n'
 import type { Candidate } from '../types'
 
 /** ChoosePage 以 navigate(path, { state }) 帶入的資料（可選） */
@@ -34,6 +35,23 @@ export function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [params] = useSearchParams()
   const { session } = useVoteStore()
+  const { t } = useI18n()
+
+  /** 投票視窗閘門：輪次非 active → 一律導到 /vote/window（第 6 點） */
+  const [windowActive, setWindowActive] = useState<boolean | null>(null)
+  useEffect(() => {
+    let alive = true
+    getActiveRound()
+      .then((res) => {
+        if (alive) setWindowActive(res.data.status === 'active')
+      })
+      .catch(() => {
+        if (alive) setWindowActive(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const state = (location.state ?? {}) as DetailLocationState
   const targetId = Number(id)
@@ -90,7 +108,9 @@ export function CandidateDetailPage() {
     }
   }, [state.candidate, state.divisionName, session, targetId, queryRound, queryDivision])
 
-  if (loading) {
+  if (windowActive === false) return <Navigate to="/vote/window" replace />
+
+  if (windowActive === null || loading) {
     return (
       <VoteShell>
         <section className="vote-card px-[22px] pt-[23px] pb-[23px]">
@@ -111,13 +131,13 @@ export function CandidateDetailPage() {
     return (
       <VoteShell>
         <section className="vote-card px-[22px] py-[40px] text-center">
-          <p className="text-[14px] leading-[25px] text-gray">未找到該候選人資料。</p>
+          <p className="text-[14px] leading-[25px] text-gray">{t('detail.notFound')}</p>
           <button
             type="button"
             onClick={() => navigate('/vote/choose')}
             className="vote-btn mt-[24px]"
           >
-            返回候選人名單
+            {t('detail.back')}
           </button>
         </section>
       </VoteShell>
@@ -167,26 +187,30 @@ export function CandidateDetailPage() {
         {/* 5. 淺米底資訊列 */}
         <div className="mt-[18px] flex h-[47px] items-center justify-between rounded-[10px] bg-light-bg px-[12px]">
           <p className="flex items-baseline gap-[16px]">
-            <span className="text-[14px] leading-[20px] text-ink">現任屆數</span>
+            <span className="text-[14px] leading-[20px] text-ink">{t('detail.termsLabel')}</span>
             <span className="text-[14px] font-bold leading-[20px] text-ink">
-              {candidate.term_count} 屆
+              {t('detail.termsValue', { n: candidate.term_count })}
             </span>
           </p>
           <p className="flex items-baseline gap-[16px]">
-            <span className="text-[14px] leading-[20px] text-ink">所屬</span>
+            <span className="text-[14px] leading-[20px] text-ink">{t('detail.divisionLabel')}</span>
             <span className="text-[14px] font-bold leading-[20px] text-ink">{divisionName}</span>
           </p>
         </div>
 
         {/* 6. 競選理念（後端 slogan） */}
-        <h2 className="mt-[17px] text-[13px] font-bold leading-[18px] text-primary">競選理念</h2>
+        <h2 className="mt-[17px] text-[13px] font-bold leading-[18px] text-primary">
+          {t('detail.sloganTitle')}
+        </h2>
         <p className="mt-[4px] text-[14px] leading-[25px] text-ink">
-          {candidate.slogan || <span className="text-gray-light">尚未提供</span>}
+          {candidate.slogan || <span className="text-gray-light">{t('common.notProvided')}</span>}
         </p>
 
         {/* 7. 介紹框（後端 description；金色左側緞帶） */}
         <div className="mt-[18px] rounded-[10px] border-l-[3px] border-gold bg-intro px-[14px] py-[14px]">
-          <h3 className="text-[13px] font-bold leading-[18px] text-primary">候選人介紹</h3>
+          <h3 className="text-[13px] font-bold leading-[18px] text-primary">
+            {t('detail.descTitle')}
+          </h3>
           <p className="mt-[4px] text-[12px] leading-[18px] text-ink">{candidate.description}</p>
         </div>
 
@@ -196,7 +220,7 @@ export function CandidateDetailPage() {
           onClick={() => navigate(backToChoose)}
           className="vote-btn mt-[19px]"
         >
-          返回候選人名單
+          {t('detail.back')}
         </button>
       </section>
     </VoteShell>

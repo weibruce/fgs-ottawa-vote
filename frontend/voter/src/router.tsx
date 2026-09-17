@@ -4,6 +4,7 @@
  */
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { VerifyPage } from './pages/VerifyPage'
+import { VoteWindowPage } from './pages/VoteWindowPage'
 import { ConfirmedPage } from './pages/ConfirmedPage'
 import { ChoosePage } from './pages/ChoosePage'
 import { CandidateDetailPage } from './pages/CandidateDetailPage'
@@ -20,6 +21,8 @@ export function AppRouter() {
 
         {/* 投票流程 */}
         <Route path="/vote/verify" element={<VerifyPage />} />
+        {/* 投票未開始 / 已結束 */}
+        <Route path="/vote/window" element={<VoteWindowPage />} />
         <Route path="/vote/confirmed" element={<ConfirmedPage />} />
         <Route path="/vote/choose" element={<ChoosePage />} />
         <Route path="/vote/candidate/:id" element={<CandidateDetailPage />} />

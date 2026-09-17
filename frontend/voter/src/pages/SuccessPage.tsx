@@ -6,15 +6,37 @@
  * → 淺米底資訊框（所屬分區 / 代理投票）→ 主紅主按鈕 + 描邊次按鈕 → 底部小字。
  * 無 session 一律回 /vote/verify。
  */
+import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { VoteShell } from '../components/VoteShell'
+import { getActiveRound } from '../api/client'
 import { useVoteStore } from '../hooks/useVoteStore'
+import { useI18n } from '../i18n'
 
 export function SuccessPage() {
   const navigate = useNavigate()
   const { session } = useVoteStore()
+  const { t } = useI18n()
+
+  /** 投票視窗閘門：輪次非 active → 一律導到 /vote/window（第 6 點） */
+  const [windowActive, setWindowActive] = useState<boolean | null>(null)
+  useEffect(() => {
+    let alive = true
+    getActiveRound()
+      .then((res) => {
+        if (alive) setWindowActive(res.data.status === 'active')
+      })
+      .catch(() => {
+        if (alive) setWindowActive(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   if (!session) return <Navigate to="/vote/verify" replace />
+  if (windowActive === false) return <Navigate to="/vote/window" replace />
+  if (windowActive === null) return <VoteShell>{null}</VoteShell>
 
   const { voter } = session
 
@@ -38,7 +60,9 @@ export function SuccessPage() {
           </div>
 
           {/* ── 主紅小字 ── */}
-          <p className="mt-[18px] text-[13px] font-bold leading-[18px] text-primary">投票成功</p>
+          <p className="mt-[18px] text-[13px] font-bold leading-[18px] text-primary">
+            {t('success.heading')}
+          </p>
 
           {/* ── 襯線大名 ── */}
           <h1 className="mt-[14px] text-center font-serif text-[22px] font-bold leading-[30px] text-ink">
@@ -48,13 +72,16 @@ export function SuccessPage() {
 
         {/* ── 資訊框（對齊設計稿 02：與頁面同色底 + 淡金邊） ── */}
         <div className="mt-[24px] space-y-[13px] rounded-[12px] border border-[#E3D8C2] bg-cream px-[16px] py-[26px]">
-          <InfoRow label="所屬分區" value={voter.division_name} />
-          <InfoRow label="代理投票" value={voter.is_proxy ? '是' : '否'} />
+          <InfoRow label={t('confirmed.divisionLabel')} value={voter.division_name} />
+          <InfoRow
+            label={t('confirmed.proxyLabel')}
+            value={voter.is_proxy ? t('common.yes') : t('common.no')}
+          />
         </div>
 
         {/* ── 主按鈕 ── */}
         <button type="button" onClick={() => navigate('/vote/results')} className="vote-btn mt-[20px]">
-          查看本區投票結果
+          {t('success.viewResults')}
         </button>
 
         {/* ── 次按鈕（描邊：金邊 + 深墨字） ── */}
@@ -63,12 +90,12 @@ export function SuccessPage() {
           onClick={() => navigate('/screen')}
           className="mt-[12px] flex h-[46px] w-full items-center justify-center rounded-[10px] border border-gold bg-transparent text-[16px] font-bold text-ink transition-colors hover:bg-gold-pale/30"
         >
-          查看五區總覽
+          {t('success.viewOverview')}
         </button>
 
         {/* ── 底部小字 ── */}
         <p className="mt-[20px] text-center text-[12px] leading-[18px] text-gray">
-          感謝您的參與，投票已完成。
+          {t('success.footer')}
         </p>
       </section>
     </VoteShell>

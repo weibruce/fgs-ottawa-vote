@@ -4,9 +4,10 @@
  *                docs/ui/voting/voting_system_03_1.png（已選取，大頭照 + 英文名）
  *
  * 版面（設計稿實測 @420 寬）：324×80、內距 14、頭像 52 圓形、右側選取圓標 26
- * 互動：整張卡點擊 = 切換選取；姓名區點擊 = 前往候選人詳情
+ * 互動：整張卡點擊 = 切換選取；頭像點擊 = 前往候選人詳情
  * 頭像：有 avatar_url 用照片（外圈金色細框），沒有則退回姓氏圓形（bg-avatar + 主紅襯線字）
  */
+import { useI18n } from '../i18n'
 import type { Candidate } from '../types'
 
 export interface CandidateCardProps {
@@ -17,7 +18,7 @@ export interface CandidateCardProps {
   disabled?: boolean
   /** 點擊卡片切換選取 */
   onToggle: () => void
-  /** 點擊姓名區前往詳情 */
+  /** 點擊頭像前往詳情（整張卡仍為切換選取） */
   onDetail?: () => void
 }
 
@@ -28,11 +29,13 @@ export function CandidateCard({
   onToggle,
   onDetail,
 }: CandidateCardProps) {
+  const { t } = useI18n()
   // 姓氏（中文名第一個字）
   const surname = candidate.name.trim().charAt(0)
-  // 次要行：優先英文名；沒有英文名時退回「職位 · 第 N 屆」
+  // 次要行：優先英文名（資料，不翻譯）；沒有英文名時退回職位 · 屆數
   const secondary =
-    candidate.name_en?.trim() || `${candidate.position} · 第 ${candidate.term_count} 屆`
+    candidate.name_en?.trim() ||
+    t('choose.secondaryTerms', { position: candidate.position, n: candidate.term_count })
 
   function handleToggle() {
     if (disabled) return
@@ -64,7 +67,7 @@ export function CandidateCard({
         role="button"
         data-detail-link={onDetail ? 'true' : 'false'}
         disabled={!onDetail}
-        aria-label={`查看 ${candidate.name} 詳情`}
+        aria-label={t('choose.detailAria', { name: candidate.name })}
         onClick={(e) => {
           // 不觸發整卡的切換選取
           e.stopPropagation()
