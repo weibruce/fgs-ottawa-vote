@@ -9,6 +9,8 @@ const apiTarget = process.env.API_PROXY_TARGET || 'http://localhost:8000'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    // 綁定所有網卡 → 同一個區域網路的其他電腦／手機可用 http://<本機IP>:<port> 開啟
+    host: true,
     port: Number(process.env.PORT) || 5173,
     proxy: {
       // 前端開發代理：/api → 後端 FastAPI
