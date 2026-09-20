@@ -57,7 +57,7 @@ const zhHant: Dict = {
   'app.orgLine2': '各分會會務幹部改選',
 
   // ── P1 身份驗證 ──
-  'verify.heading': '身份驗證',
+  'verify.heading': '會員信息',
   'verify.intro': '請輸入會員資料，以識別您的所屬分區。',
   'verify.nameLabel': '會員姓名',
   'verify.namePlaceholder': '請輸入姓名（簡、繁體均可）',
@@ -81,6 +81,7 @@ const zhHant: Dict = {
   'window.closedNoTime': '本次投票已結束，感謝您的參與。',
   'window.timeUnset': '時間未設定',
   'window.roundLabel': '當前輪次',
+  'window.goVote': '前往投票',
 
   // ── P2 身份核驗完成 ──
   'confirmed.heading': '身份核驗完成',
@@ -211,7 +212,7 @@ const zhHans: Dict = {
   'app.orgLine1': '2026 国际佛光会渥太华协会',
   'app.orgLine2': '各分会会务干部改选',
 
-  'verify.heading': '身份验证',
+  'verify.heading': '会员信息',
   'verify.intro': '请输入会员资料，以识别您的所属分区。',
   'verify.nameLabel': '会员姓名',
   'verify.namePlaceholder': '请输入姓名（简、繁体均可）',
@@ -234,6 +235,7 @@ const zhHans: Dict = {
   'window.closedNoTime': '本次投票已结束，感谢您的参与。',
   'window.timeUnset': '时间未设定',
   'window.roundLabel': '当前轮次',
+  'window.goVote': '前往投票',
 
   'confirmed.heading': '身份核验完成',
   'confirmed.cardLabel': '会员卡号',
@@ -356,7 +358,7 @@ const en: Dict = {
   'app.orgLine1': '2026 BLIA Ottawa Chapter',
   'app.orgLine2': 'Chapter Officer Election',
 
-  'verify.heading': 'Identity Verification',
+  'verify.heading': 'Member Information',
   'verify.intro': 'Enter your membership details so we can identify your division.',
   'verify.nameLabel': 'Member name',
   'verify.namePlaceholder': 'Enter your name (Traditional or Simplified)',
@@ -380,6 +382,7 @@ const en: Dict = {
   'window.closedNoTime': 'Voting has ended. Thank you for taking part.',
   'window.timeUnset': 'Time not set',
   'window.roundLabel': 'Current round',
+  'window.goVote': 'Go to voting',
 
   'confirmed.heading': 'Identity verified',
   'confirmed.cardLabel': 'Membership no.',

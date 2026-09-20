@@ -112,7 +112,7 @@ export function VerifyPage() {
               {t('app.orgLine2')}
             </p>
           </div>
-          <h2 className="mt-[16px] font-serif text-[30px] font-bold leading-tight text-ink">
+          <h2 className="mt-[14px] font-serif text-[20px] font-bold leading-[28px] text-ink">
             {t('verify.heading')}
           </h2>
         </div>

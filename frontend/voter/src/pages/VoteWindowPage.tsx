@@ -52,7 +52,7 @@ export function VoteWindowPage() {
         <section className="vote-card mt-[54px] px-[22px] pt-[34px] pb-[30px] text-center">
           <p className="text-[14px] leading-[22px] text-ink">{t('verify.intro')}</p>
           <button type="button" className="vote-btn mt-[20px]" onClick={() => navigate('/vote/verify', { replace: true })}>
-            {t('verify.heading')}
+            {t('window.goVote')}
           </button>
         </section>
       </VoteShell>
