@@ -61,6 +61,11 @@ export interface ConfirmResponse {
   min_votes: number
   max_votes: number
   already_voted: boolean
+  /** 已投票時回傳該票投給哪些候選人（供「查看投票」唯讀顯示） */
+  voted_candidate_ids?: number[]
+  /** 該票是否由他人代投；是的話帶代投人姓名 */
+  voted_by_proxy?: boolean
+  voted_proxy_name?: string
   voter: VoterInfo
 }
 

@@ -31,6 +31,10 @@ class ConfirmResponse(BaseModel):
     min_votes: int
     max_votes: int
     already_voted: bool = False
+    # 已投票時回傳既有投票內容（供「查看投票」唯讀顯示）
+    voted_candidate_ids: list[int] = []
+    voted_by_proxy: bool = False
+    voted_proxy_name: str = ""
     voter: VoterInfo
 
 

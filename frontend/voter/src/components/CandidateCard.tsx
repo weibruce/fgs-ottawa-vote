@@ -16,6 +16,8 @@ export interface CandidateCardProps {
   selected: boolean
   /** 已達票數上限且本卡未選 → 不可再選（圓標淡化） */
   disabled?: boolean
+  /** 唯讀模式（查看投票）：顯示選取狀態但不可切換、不淡化 */
+  readOnly?: boolean
   /** 點擊卡片切換選取 */
   onToggle: () => void
   /** 點擊頭像前往詳情（整張卡仍為切換選取） */
@@ -26,6 +28,7 @@ export function CandidateCard({
   candidate,
   selected,
   disabled = false,
+  readOnly = false,
   onToggle,
   onDetail,
 }: CandidateCardProps) {
@@ -37,8 +40,10 @@ export function CandidateCard({
     candidate.name_en?.trim() ||
     t('choose.secondaryTerms', { position: candidate.position, n: candidate.term_count })
 
+  const interactive = !disabled && !readOnly
+
   function handleToggle() {
-    if (disabled) return
+    if (!interactive) return
     onToggle()
   }
 
@@ -47,9 +52,10 @@ export function CandidateCard({
       role="button"
       data-candidate-card
       data-selected={selected ? 'true' : 'false'}
-      tabIndex={disabled ? -1 : 0}
+      data-readonly={readOnly ? 'true' : 'false'}
+      tabIndex={interactive ? 0 : -1}
       aria-pressed={selected}
-      aria-disabled={disabled}
+      aria-disabled={!interactive}
       onClick={handleToggle}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -58,7 +64,7 @@ export function CandidateCard({
         }
       }}
       className={`vote-card flex h-[80px] items-center gap-[14px] rounded-[12px] px-[14px] outline-none transition-colors focus-visible:border-gold ${
-        disabled ? 'cursor-not-allowed' : 'cursor-pointer'
+        interactive ? 'cursor-pointer' : readOnly ? 'cursor-default' : 'cursor-not-allowed'
       }`}
     >
       {/* ── 頭像 52px（次要動作：點擊 → 候選人詳情；有照片用照片 + 金框，否則姓氏圓形） ── */}

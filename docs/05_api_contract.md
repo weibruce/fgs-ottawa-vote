@@ -218,3 +218,90 @@ query：`?division_id=&round_id=&anonymous=&format=csv|xlsx`
 - 所有頁面用 `src/hooks/useAsync.ts`（或等價）處理 loading / error / refetch
 - **UI 不得改動**：只把 mock 資料換成 API 資料；載入中顯示骨架或沿用原版面，失敗顯示錯誤提示
 - `anonymous` 由後端判定，前端不自行推導
+
+---
+
+## 12. 投票端公開 API `/votes`（投票人用，無需登入）
+
+> 這組端點供 `frontend/voter` 使用；與管理端 `/admin/*` 分開。
+> 錯誤格式同管理端（`{"detail": "<中文訊息>"}`）。
+
+| 方法 | 路徑 | 說明 |
+|------|------|------|
+| GET | `/votes/round/active` | 當前輪次（統一入口）。優先序：`active` → `closed/locked` → `draft` |
+| GET | `/votes/round/{round_id}` | 指定輪次資訊（狀態、票數、五分區） |
+| GET | `/votes/round/{id}/division/{division_id}` | 某區候選人名單（含 `name_en`、`avatar_url`） |
+| POST | `/votes/confirm` | 身份確認（見下方） |
+| POST | `/votes/submit` | 送出投票（真正的防重關卡） |
+| GET | `/votes/results?round_id&division_id` | 單區即時結果 |
+| GET | `/votes/results?round_id` | 五區彙總結果 |
+
+### 12.1 `POST /votes/confirm`
+
+```jsonc
+// request
+{
+  "name": "張三",              // 被投票的會員（簡繁皆可）
+  "member_no": "BGS-2024-0001",
+  "round_id": 23,
+  "is_proxy": true,            // 由他人代投時 true
+  "proxy_name": "李四",         // 代投人（＝實際操作者），is_proxy=true 時必填
+  "proxy_member_no": "BGS-2024-0002",
+  "proxy_note": ""             // 保留相容，未使用
+}
+```
+
+```jsonc
+// 200
+{
+  "voter_token": "<JWT>",
+  "round_id": 23, "min_votes": 1, "max_votes": 2,
+  "already_voted": true,          // 該會員本輪是否已投票
+  "voted_candidate_ids": [111],   // 已投票 → 既有選票內容（供「查看投票」唯讀顯示）
+  "voted_by_proxy": true,         // 該票是否由他人代投
+  "voted_proxy_name": "王五",
+  "voter": {
+    "name": "張三", "member_no": "BGS-2024-0001",
+    "division_id": 51, "division_name": "東區分會",
+    "is_proxy": true,
+    "proxy_name": "李四", "proxy_member_no": "BGS-2024-0002"
+  }
+}
+```
+
+**重要行為（2026-09 調整）**
+- 身份確認**只驗證身份，不擋「已投票」**；`already_voted=true` 時仍回 200，
+  由前端在「身份核驗完成」頁決定後續（開始投票／查看投票）。
+- **真正的防重仍在 `POST /votes/submit`**：同一輪次同一卡號重複送出 → `409`。
+
+錯誤碼：
+
+| 情況 | 狀態 | detail |
+|------|------|--------|
+| 輪次不存在 | 404 | 輪次不存在 |
+| 輪次非 active | 400 | 投票未開放（狀態：…） |
+| 會員卡號不存在 | 404 | 未找到該會員卡號 |
+| 姓名與卡號不符 | 400 | 姓名與卡號不匹配 |
+| 代投欄位未填 | 400 | 請填寫代投人姓名與佛光會員卡號 |
+| 代投人卡號不存在 | 404 | 未找到代投人的會員卡號，請核實 |
+| 代投人姓名不符 | 400 | 代投人姓名與卡號不匹配，請核實 |
+| 代投人＝本人 | 400 | 代投人不可與會員本人相同 |
+| 不在第二輪白名單 | 403 | 您不在本輪投票白名單內 |
+
+### 12.2 投票端流程（頁面 ↔ 端點）
+
+```
+/vote/verify  (身份驗證)
+   └─ POST /votes/confirm ─────────────► /vote/confirmed（身份核驗完成；中控頁）
+                                          ├─「開始投票」  → /vote/choose            （未投票時可點）
+                                          ├─「查看投票」  → /vote/choose?view=1     （已投票時可點，唯讀）
+                                          ├─「修改資料」  → /vote/edit
+                                          └─「代他人投票」→ /vote/proxy
+/vote/edit    修改姓名/卡號 → 再 POST /votes/confirm → 回 /vote/confirmed
+/vote/proxy   輸入他人姓名+卡號 → POST /votes/confirm(is_proxy=true,
+              proxy_name/proxy_member_no = 當前會員) → 確認 popup → /vote/choose
+/vote/choose  選候選人 → POST /votes/submit → /vote/done
+/vote/done    「您已成功完成投票，請等待分會投票結束。」→「返回查看投票」→ /vote/choose?view=1
+/vote/window  輪次非 active 時的「尚未開始／已結束」頁（verify/confirmed/choose/proxy/detail/success 皆有閘門）
+/vote/results、/screen  即時結果（投票期間與結束後皆可看，不受閘門限制）
+```

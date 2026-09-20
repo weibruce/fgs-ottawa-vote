@@ -6,7 +6,10 @@
  * 資料：session（useVoteStore）→ round_id / voter.division_id / min_votes / max_votes
  *       GET /votes/round/active                            → 輪次名（卡片頂部小字）
  *       GET /votes/round/{round_id}/division/{division_id} → 候選人名單
- *       POST /votes/submit                                 → 成功導向 /vote/success
+ *       POST /votes/submit                                 → 成功更新 session 並導向 /vote/done
+ *
+ * 唯讀模式（第 8 點）：`?view=1` → 標題用 view.heading、卡片預選 session.voted_candidate_ids
+ *   且不可切換、隱藏「確認投票」改顯示 view.note + 「返回」（→ /vote/confirmed），不呼叫 submit。
  */
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
@@ -23,8 +26,11 @@ import type { ApiError, DivisionCandidates } from '../types'
 export function ChoosePage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const { session } = useVoteStore()
+  const { session, save } = useVoteStore()
   const { t, translateError, roundShort } = useI18n()
+
+  // 唯讀模式：已投票後從「查看投票」進入（第 8 點）
+  const isView = params.get('view') === '1'
 
   // 分區一律以 session 為準（query 僅作為退路）
   const divisionId = session?.voter.division_id ?? Number(params.get('division') || 0)
@@ -40,7 +46,10 @@ export function ChoosePage() {
   /** 投票視窗閘門：輪次非 active → 導到 /vote/window（第 6 點） */
   const [windowActive, setWindowActive] = useState<boolean | null>(null)
 
-  const [selected, setSelected] = useState<number[]>([])
+  // 唯讀模式預選先前投的候選人；正常模式一律從空開始（第 8 點）
+  const [selected, setSelected] = useState<number[]>(() =>
+    isView ? (session?.voted_candidate_ids ?? []) : []
+  )
   const [showConfirm, setShowConfirm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   // 提示只存「來源」不存已翻譯字串 → 語言切換時 render 期間即時重譯
@@ -125,6 +134,7 @@ export function ChoosePage() {
 
   /** 設計稿主按鈕恆為實心 → 點擊時才檢查票數下限（不以 disabled 淡化） */
   function handleConfirmClick() {
+    if (isView) return
     if (belowMin) {
       setNotice({ kind: 'min' })
       return
@@ -135,7 +145,7 @@ export function ChoosePage() {
   }
 
   async function handleSubmit() {
-    if (!session || belowMin || submitting) return
+    if (isView || !session || belowMin || submitting) return
     setSubmitting(true)
     setSubmitError(null)
     try {
@@ -147,7 +157,13 @@ export function ChoosePage() {
         proxy_name: session.voter.proxy_name ?? undefined,
       proxy_member_no: session.voter.proxy_member_no ?? undefined,
       })
-      navigate('/vote/success')
+      // 送出成功先更新 session（已投票 + 本次投的候選人），再導向完成頁（第 10 點）
+      save({
+        ...session,
+        already_voted: true,
+        voted_candidate_ids: selected,
+      })
+      navigate('/vote/done')
     } catch (e) {
       const err = e as AxiosError<ApiError>
       setSubmitting(false)
@@ -183,7 +199,7 @@ export function ChoosePage() {
 
         {/* ── 大標（襯線 23px 粗體；設計稿實測 ink 寬 221 / 高 21px） ── */}
         <h1 className="mt-[3px] font-serif text-[23px] font-bold leading-[32px] text-ink">
-          {t('choose.heading', { division: divisionName })}
+          {isView ? t('view.heading') : t('choose.heading', { division: divisionName })}
         </h1>
 
         {/* ── 副標：投票人 + 卡號（12px 灰；設計稿實測這行比簡報所述 14px 小一級） ── */}
@@ -233,7 +249,8 @@ export function ChoosePage() {
                 key={c.id}
                 candidate={c}
                 selected={selected.includes(c.id)}
-                disabled={atMax && !selected.includes(c.id)}
+                disabled={!isView && atMax && !selected.includes(c.id)}
+                readOnly={isView}
                 onToggle={() => toggleCandidate(c.id)}
                 onDetail={() => openDetail(c.id)}
               />
@@ -241,8 +258,8 @@ export function ChoosePage() {
           </div>
         )}
 
-        {/* 已達上限提示（僅在滿票時出現，不影響預設版面） */}
-        {!loading && !loadErrorText && atMax && (
+        {/* 已達上限提示（僅在滿票時出現，不影響預設版面；唯讀模式不顯示） */}
+        {!isView && !loading && !loadErrorText && atMax && (
           <p className="mt-[10px] text-center text-[12px] leading-[18px] text-gray">
             {t('choose.errMax', { n: maxVotes })}
           </p>
@@ -258,15 +275,25 @@ export function ChoosePage() {
           </div>
         )}
 
-        {/* ── 底部說明（12–13px 灰、置中） ── */}
+        {/* ── 底部說明（12–13px 灰、置中）；唯讀模式改顯示 view.note ── */}
         <p className="mt-[18px] text-center text-[12px] leading-[18px] text-gray">
-          {t('choose.footer', { min: minVotes, max: maxVotes })}
+          {isView ? t('view.note') : t('choose.footer', { min: minVotes, max: maxVotes })}
         </p>
 
-        {/* ── 主按鈕 ── */}
-        <button type="button" onClick={handleConfirmClick} disabled={submitting} className="vote-btn mt-[16px]">
-          {t('choose.submit')}
-        </button>
+        {/* ── 主按鈕：正常＝確認投票；唯讀＝返回（第 8 點） ── */}
+        {isView ? (
+          <button
+            type="button"
+            onClick={() => navigate('/vote/confirmed')}
+            className="vote-btn mt-[16px]"
+          >
+            {t('view.back')}
+          </button>
+        ) : (
+          <button type="button" onClick={handleConfirmClick} disabled={submitting} className="vote-btn mt-[16px]">
+            {t('choose.submit')}
+          </button>
+        )}
       </section>
 
       {/* ── 二次確認彈窗 ── */}

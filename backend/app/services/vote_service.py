@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import jwt
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -67,15 +68,22 @@ def confirm_identity(
         if not match_member_name(proxy_name, proxy_member.name_trad, proxy_member.name_simp):
             raise HTTPException(status_code=400, detail="代投人姓名與卡號不匹配，請核實")
 
-    # 4. 防重：已投票（被代投時明確告知是誰代投的）
+    # 4. 是否已投票：**不再擋**。
+    #    依需求，無論是否投過票都要能進入「身份核驗完成」頁，由前端依狀態決定
+    #    後續動作（開始投票／查看投票）。真正的防重仍在 submit_vote（409）。
     already = db.query(Vote).filter(Vote.round_id == round_id, Vote.member_no == member_no).first()
-    if already:
-        if already.is_proxy and already.proxy_name:
-            raise HTTPException(
-                status_code=409,
-                detail=f"您的投票已被{already.proxy_name}代投，無需重複投票",
-            )
-        raise HTTPException(status_code=409, detail="您已投過票，無需重複投票")
+    voted_candidate_ids: list[int] = []
+    voted_by_proxy = False
+    voted_proxy_name = ""
+    if already is not None:
+        voted_by_proxy = bool(already.is_proxy)
+        voted_proxy_name = already.proxy_name or ""
+        voted_candidate_ids = [
+            cid
+            for (cid,) in db.query(VoteCandidate.candidate_id)
+            .filter(VoteCandidate.vote_id == already.id)
+            .all()
+        ]
 
     # 5. 第二輪白名單校驗
     if rnd.allowed_member_nos:
@@ -103,7 +111,10 @@ def confirm_identity(
         "round_id": round_id,
         "min_votes": min_votes,
         "max_votes": max_votes,
-        "already_voted": False,
+        "already_voted": already is not None,
+        "voted_candidate_ids": voted_candidate_ids,
+        "voted_by_proxy": voted_by_proxy,
+        "voted_proxy_name": voted_proxy_name,
         "voter": {
             "name": member.name_trad,
             "member_no": member_no,
@@ -239,6 +250,23 @@ def submit_vote(
         for cid in candidate_ids:
             db.add(VoteCandidate(vote_id=vote.id, candidate_id=cid))
         db.commit()
+    except IntegrityError:
+        # PG 唯一約束 (round_id, member_no) 衝突 = 真的重複投票。
+        # 會走到這裡通常是 Redis 的防重 key 遺失（Redis 重啟、資料由 seed 直接寫 PG
+        # 而沒有對應 key…），此時 PG 才是唯一判據 → 回 409 而不是 500。
+        db.rollback()
+        redis_client.delete(cast_key)
+        existing = (
+            db.query(Vote)
+            .filter(Vote.round_id == round_id, Vote.member_no == token_member_no)
+            .first()
+        )
+        if existing is not None and existing.is_proxy and existing.proxy_name:
+            raise HTTPException(
+                status_code=409,
+                detail=f"您的投票已被{existing.proxy_name}代投，無需重複投票",
+            )
+        raise HTTPException(status_code=409, detail="您已投過票，無需重複投票")
     except Exception:
         db.rollback()
         # PG 寫失敗 → Redis 防重 key 清除（讓可重試）+ 拋錯

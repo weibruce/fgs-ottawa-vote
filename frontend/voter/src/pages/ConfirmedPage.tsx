@@ -2,16 +2,21 @@
  * P2 身份核驗完成頁 — 1:1 對齊設計稿 docs/ui/voting/voting_system_02.png
  *
  * 流程：P1 驗證成功後把 ConfirmResponse 存進 useVoteStore（localStorage.vote_session），
- *       本頁只讀 session 顯示投票人資訊 → 點「開始〇區投票」導向 /vote/choose。
+ *       本頁只讀 session 顯示投票人資訊，並作為投票流程的「中控頁」：
+ *       開始投票（未投票）／查看投票（已投票，唯讀）／修改資料／代他人投票。
  *
  * 設計稿量測（411×593，與 01/03 同為 1:1 裁切；卡片 x25–384=360 寬、y29–563）：
  *   圓形圖示 64px（y105–168）、小標 ink y189–199（12px）、姓名 ink y224–244（襯線 22px）、
  *   資訊框 y268–420（1px #E3D8C2 框、圓角 12、內距 x14 / pt36 pb34、列距 33）、
  *   按鈕 y440–487（h48）、卡片 pt75 / pb76。
- *   列 1/2 label 欄 74px + ink #2B2925；列 3「代理投票」為 12px 淡灰（值緊接其後）。
  *
- * 第 3 點：voter.is_proxy 為 true 時，於資訊框下方額外顯示淡金底代投提示框。
- * 第 6 點：輪次非 active → 轉往 /vote/window。
+ * 本批（第 5–8 點）：
+ *   5. 資訊框移除「代理投票」列（只留會員卡號、所屬分區）。
+ *   6. 主按鈕「開始投票」整行 + 下方三顆等寬：「修改資料」「查看投票」「代他人投票」。
+ *   8. 依 session.already_voted 決定「開始投票／查看投票」誰可點；已投票時於按鈕上方
+ *      顯示 confirmed.votedNote，若 voted_by_proxy 再顯示 confirmed.votedByProxyNote。
+ *
+ * 保留：voter.is_proxy 的代投提示框、投票視窗閘門、i18n。
  */
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
@@ -19,6 +24,10 @@ import { VoteShell } from '../components/VoteShell'
 import { useVoteStore } from '../hooks/useVoteStore'
 import { useI18n } from '../i18n'
 import { getActiveRound } from '../api/client'
+
+/** 三顆次要按鈕的共用樣式（金框、深墨字；disabled 淡化） */
+const SECONDARY_BTN =
+  'flex h-[46px] items-center justify-center rounded-[10px] border border-gold bg-transparent px-[4px] text-center text-[12px] font-bold leading-[15px] text-ink transition-colors hover:bg-gold-pale/30 disabled:cursor-not-allowed disabled:opacity-40'
 
 export function ConfirmedPage() {
   const navigate = useNavigate()
@@ -48,6 +57,7 @@ export function ConfirmedPage() {
   if (windowActive === false) return <Navigate to="/vote/window" replace />
 
   const { voter } = session
+  const alreadyVoted = session.already_voted === true
 
   return (
     <VoteShell>
@@ -76,15 +86,11 @@ export function ConfirmedPage() {
           {voter.name}
         </h1>
 
-        {/* ── 淺米底資訊框（設計稿既有元素，保留） ── */}
-        <dl className="mt-[18px] w-full rounded-[12px] border border-[#e3d8c2] bg-cream px-[14px] pt-[36px] pb-[34px]">
+        {/* ── 淺米底資訊框（第 5 點：只留會員卡號、所屬分區） ── */}
+        {/* label 欄以 max-content 撐開（中文最小 74px 與設計稿一致；英文長 label 不換行） */}
+        <dl className="mt-[18px] grid w-full grid-cols-[max-content_1fr] items-center gap-x-[14px] gap-y-[13px] rounded-[12px] border border-[#e3d8c2] bg-cream px-[14px] pt-[36px] pb-[34px]">
           <InfoRow label={t('confirmed.cardLabel')} value={voter.member_no} />
           <InfoRow label={t('confirmed.divisionLabel')} value={voter.division_name} />
-          <InfoRow
-            label={t('confirmed.proxyLabel')}
-            value={voter.is_proxy ? t('common.yes') : t('common.no')}
-            muted
-          />
         </dl>
 
         {/* ── 代投提示框（第 3 點：淡金底 + 淡金邊，僅代投時額外顯示） ── */}
@@ -107,41 +113,56 @@ export function ConfirmedPage() {
           </div>
         )}
 
-        {/* ── 主按鈕 ── */}
+        {/* ── 已投票提示（第 8 點：顯示於按鈕上方） ── */}
+        {alreadyVoted && (
+          <div className="mt-[16px] text-center">
+            <p className="text-[13px] leading-[20px] text-primary">{t('confirmed.votedNote')}</p>
+            {session.voted_by_proxy && (
+              <p className="mt-[4px] text-[13px] leading-[20px] text-gray">
+                {t('confirmed.votedByProxyNote', { proxyName: session.voted_proxy_name ?? '' })}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ── 主按鈕：未投票可開始，已投票則唯讀（第 6、8 點） ── */}
         <button
           type="button"
-          onClick={() => navigate(`/vote/choose?division=${voter.division_id}`)}
+          onClick={() => navigate('/vote/choose')}
+          disabled={alreadyVoted}
           className="vote-btn mt-[19px]"
         >
-          {t('confirmed.startVote', { division: voter.division_name })}
+          {t('confirmed.startVote')}
         </button>
+
+        {/* ── 三顆等寬次要按鈕（第 6、7、8 點） ── */}
+        <div className="mt-[12px] grid grid-cols-3 gap-[10px]">
+          <button type="button" onClick={() => navigate('/vote/edit')} className={SECONDARY_BTN}>
+            {t('confirmed.editData')}
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/vote/choose?view=1')}
+            disabled={!alreadyVoted}
+            className={SECONDARY_BTN}
+          >
+            {t('confirmed.viewVote')}
+          </button>
+          <button type="button" onClick={() => navigate('/vote/proxy')} className={SECONDARY_BTN}>
+            {t('confirmed.proxyVote')}
+          </button>
+        </div>
       </section>
     </VoteShell>
   )
 }
 
-/** 資訊框單列：label 固定寬度（設計稿 76px），列 3 為小字淡灰 */
-function InfoRow({
-  label,
-  value,
-  muted = false,
-}: {
-  label: string
-  value: string
-  muted?: boolean
-}) {
-  if (muted) {
-    return (
-      <div className="mt-[11px] flex items-center first:mt-0">
-        <dt className="w-[60px] shrink-0 text-[12px] leading-[17px] text-gray-light">{label}</dt>
-        <dd className="text-[12px] leading-[17px] text-gray-light">{value}</dd>
-      </div>
-    )
-  }
+/** 資訊框單列：label 最小寬度 74px（設計稿），英文長標籤自動撐開不換行 */
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="mt-[13px] flex items-center first:mt-0">
-      <dt className="w-[74px] shrink-0 text-[15px] leading-[20px] text-ink">{label}</dt>
+    <>
+      <dt className="min-w-[74px] whitespace-nowrap text-[15px] leading-[20px] text-ink">{label}</dt>
       <dd className="text-[15px] leading-[20px] text-ink">{value}</dd>
-    </div>
+    </>
   )
 }

@@ -14,6 +14,13 @@ export interface VoteSession {
   round_id: number
   min_votes: number
   max_votes: number
+  /** 該會員在本輪是否已投票（由 confirm 回傳；決定「開始投票／查看投票」誰可點） */
+  already_voted?: boolean
+  /** 已投票時，該票投給哪些候選人 */
+  voted_candidate_ids?: number[]
+  /** 該票是否由他人代投 */
+  voted_by_proxy?: boolean
+  voted_proxy_name?: string
 }
 
 function read(): VoteSession | null {
