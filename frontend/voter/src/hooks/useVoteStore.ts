@@ -21,6 +21,11 @@ export interface VoteSession {
   /** 該票是否由他人代投 */
   voted_by_proxy?: boolean
   voted_proxy_name?: string
+  /** 代投人姓名的繁／簡／英（顯示時依語言挑選） */
+  voted_proxy_name_trad?: string
+  voted_proxy_name_simp?: string
+  voted_proxy_givenname?: string
+  voted_proxy_surname?: string
 }
 
 function read(): VoteSession | null {

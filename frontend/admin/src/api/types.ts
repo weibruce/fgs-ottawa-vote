@@ -47,12 +47,35 @@ export interface CandidateOut {
   id: number
   division_id: number
   division_name: string
+  /** 佛光會員卡號 */
+  member_no: string
+  /** 姓名（繁）；未提供時由後端自簡體轉出 */
   name: string
+  /** 姓名（簡）；未提供時由後端自繁體轉出 */
+  name_simp: string
+  /** 英文全名；未提供時由後端以 givenname + surname 組合 */
+  name_en: string
+  givenname: string
+  surname: string
+  gender: string
   title: string
   avatar_url: string
   slogan: string
   description: string
   term_count: number
+  phone: string
+  email: string
+  address: string
+  education: string
+  occupation: string
+  /** 是否皈依 */
+  is_refuge: boolean
+  /** 皈依師長 */
+  refuge_master: string
+  /** 受戒狀態 */
+  precept_status: string
+  /** 義工組別 */
+  volunteer_group: string
   sort_order: number
   is_active: boolean
   vote_count?: number
@@ -61,11 +84,26 @@ export interface CandidateOut {
 export interface CandidateInput {
   division_id: number
   name: string
+  name_simp?: string
+  name_en?: string
+  givenname?: string
+  surname?: string
+  member_no?: string
+  gender?: string
   title?: string
   avatar_url?: string
   slogan?: string
   description?: string
   term_count?: number
+  phone?: string
+  email?: string
+  address?: string
+  education?: string
+  occupation?: string
+  is_refuge?: boolean
+  refuge_master?: string
+  precept_status?: string
+  volunteer_group?: string
   sort_order?: number
   is_active?: boolean
 }
@@ -76,9 +114,15 @@ export interface MemberOut {
   member_no: string
   name_trad: string
   name_simp: string
+  /** 英文名（後端 member.givenname / member.surname） */
+  givenname: string
+  surname: string
   division_id: number
   division_name: string
+  gender: string
   phone: string
+  email: string
+  address: string
   is_active: boolean
   has_voted: boolean
   voted_at: string | null
@@ -98,9 +142,16 @@ export interface MemberStats {
 
 export interface MemberInput {
   member_no: string
+  /** 中文姓名：只給繁或只給簡，後端都會自動同步另一邊 */
   name_trad: string
+  name_simp?: string
+  givenname?: string
+  surname?: string
   division_id: number
+  gender?: string
   phone?: string
+  email?: string
+  address?: string
   is_active?: boolean
 }
 

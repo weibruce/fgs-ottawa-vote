@@ -312,7 +312,10 @@ def _members_rows(
     db: Session, rnd: Round | None, division_id: int | None
 ) -> tuple[list[str], list[list]]:
     """會員名單（含該輪次是否已投票）"""
-    headers = ["卡號", "姓名(繁)", "姓名(簡)", "分區", "手機", "已投票", "投票時間", "狀態"]
+    headers = [
+        "佛光會員卡號", "姓名(繁)", "姓名(簡)", "givenname", "surname", "所屬分會",
+        "性別", "手機號", "Email", "地址", "已投票", "投票時間", "狀態",
+    ]
     q = db.query(Member)
     if division_id is not None:
         q = q.filter(Member.division_id == division_id)
@@ -331,8 +334,13 @@ def _members_rows(
             m.member_no,
             m.name_trad,
             m.name_simp,
+            m.givenname,
+            m.surname,
             div_names.get(m.division_id, ""),
+            m.gender,
             m.phone,
+            m.email,
+            m.address,
             "是" if at is not None else "否",
             _fmt_dt(at) if at is not None else "",
             "啟用" if m.is_active else "停用",

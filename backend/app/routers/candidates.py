@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_admin
 from app.models.candidate import Candidate
+from app.services.simp_trad import compose_english_name, sync_name_pair
 from app.models.division import Division
 from app.models.round_ import RoundCandidate
 from app.models.vote import Vote, VoteCandidate
@@ -60,6 +61,29 @@ def list_candidates(
     return [_to_admin_out(c, div_names, votes) for c in rows]
 
 
+def _sync_names(data: dict) -> dict:
+    """
+    姓名同步（需求第 3 點）：
+    - 中文只給繁或只給簡，都自動補出另一邊；兩邊都給則以繁體為準重新轉出簡體
+    - 英文全名未提供時，由 givenname + surname 組合
+    只有在資料裡真的帶了姓名欄位時才動，避免更新時把既有值清空。
+    """
+    has_cn = "name" in data or "name_simp" in data
+    if has_cn:
+        trad, simp = sync_name_pair(data.get("name") or "", data.get("name_simp") or "")
+        data["name"] = trad
+        data["name_simp"] = simp
+    gn = (data.get("givenname") or "").strip()
+    sn = (data.get("surname") or "").strip()
+    if "givenname" in data:
+        data["givenname"] = gn
+    if "surname" in data:
+        data["surname"] = sn
+    if not (data.get("name_en") or "").strip() and (gn or sn):
+        data["name_en"] = compose_english_name(gn, sn)
+    return data
+
+
 @router.post("", response_model=CandidateAdminOut)
 def create_candidate(
     body: CandidateCreate, db: Session = Depends(get_db), _admin=Depends(get_current_admin)
@@ -67,7 +91,7 @@ def create_candidate(
     """新增候選人（校驗分區存在）"""
     if db.get(Division, body.division_id) is None:
         raise HTTPException(status_code=400, detail="分區不存在")
-    cand = Candidate(**body.model_dump())
+    cand = Candidate(**_sync_names(body.model_dump()))
     db.add(cand)
     db.commit()
     db.refresh(cand)
@@ -85,7 +109,8 @@ def update_candidate(
     cand = db.get(Candidate, candidate_id)
     if cand is None:
         raise HTTPException(status_code=404, detail="候選人不存在")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    payload = _sync_names(body.model_dump(exclude_unset=True))
+    for field, value in payload.items():
         setattr(cand, field, value)
     db.commit()
     db.refresh(cand)

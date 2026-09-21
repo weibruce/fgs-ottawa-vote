@@ -131,7 +131,7 @@ export function ScreenOverview() {
  * 整塊可點擊 → /vote/results?division={id}（Enter / Space 亦可）
  */
 function DivisionBlock({ data }: { data: DivisionResult }) {
-  const { t } = useI18n()
+  const { t, nameOf } = useI18n()
   const navigate = useNavigate()
   const { division, voted_count, total_count, results } = data
   const top3 = results.slice(0, 3)
@@ -173,7 +173,7 @@ function DivisionBlock({ data }: { data: DivisionResult }) {
             >
               <span className="shrink-0">
                 <span className={i === 0 ? 'text-primary/60' : 'text-gray/75'}>{RANKS[i]}</span>{' '}
-                {r.name}
+                {nameOf(r)}
               </span>
               <span className="shrink-0">{t('common.votes', { n: r.votes })}</span>
             </div>

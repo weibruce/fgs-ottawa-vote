@@ -37,7 +37,7 @@ const ACTION_BTN =
 export function ConfirmedPage() {
   const navigate = useNavigate()
   const { session } = useVoteStore()
-  const { t } = useI18n()
+  const { t, nameOf } = useI18n()
 
   // 第 6 點閘門：null = 查詢中（先照常顯示），false = 非 active（轉往視窗頁）
   const [windowActive, setWindowActive] = useState<boolean | null>(null)
@@ -88,7 +88,7 @@ export function ConfirmedPage() {
           {t('confirmed.heading')}
         </p>
         <h1 className="mt-[16px] text-center font-serif text-[22px] font-bold leading-[30px] text-ink">
-          {voter.name}
+          {nameOf(voter)}
         </h1>
 
         {/* ── 淺米底資訊框（第 5 點：只留會員卡號、所屬分區） ── */}
@@ -104,7 +104,7 @@ export function ConfirmedPage() {
             <p className="text-[13px] leading-[22px] text-ink">
               {t('confirmed.proxyNoticeTitle', {
                 division: voter.division_name,
-                name: voter.name,
+                name: nameOf(voter),
                 no: voter.member_no,
               })}
             </p>
@@ -124,7 +124,15 @@ export function ConfirmedPage() {
             <p className="text-[13px] leading-[20px] text-primary">{t('confirmed.votedNote')}</p>
             {session.voted_by_proxy && (
               <p className="mt-[4px] text-[13px] leading-[20px] text-gray">
-                {t('confirmed.votedByProxyNote', { proxyName: session.voted_proxy_name ?? '' })}
+                {t('confirmed.votedByProxyNote', {
+                  proxyName:
+                    nameOf({
+                      name_trad: session.voted_proxy_name_trad ?? session.voted_proxy_name,
+                      name_simp: session.voted_proxy_name_simp,
+                      givenname: session.voted_proxy_givenname,
+                      surname: session.voted_proxy_surname,
+                    }) || (session.voted_proxy_name ?? ''),
+                })}
               </p>
             )}
           </div>

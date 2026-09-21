@@ -2,7 +2,11 @@
  * 會員名單 — 1:1 對齊參考稿 docs/ui/admin/voting_system_dashboard_04.png
  * 幾何量測（1920×940）：
  *   分區小卡 h=106 / gap-3；篩選列 h=38；表格卡片 y 352→904（表頭 41px、資料列 46px、頁尾 51px）
- * 資料來源：src/api/members.ts（listMembers / fetchMemberStats / importMembers）
+ * 資料來源：src/api/members.ts（listMembers / createMember / updateMember / deleteMember /
+ *          fetchMemberStats / importMembers）
+ *
+ * 姓名規則：中文姓名只需輸入「姓名(繁)」，後端自動同步出簡體（name_simp）；
+ *          英文名 givenname / surname 分開輸入。
  */
 import {
   useEffect,
@@ -15,19 +19,26 @@ import {
 import { AdminLayout } from '../components/AdminLayout'
 import {
   IconCheckCircle,
+  IconClose,
   IconDownload,
+  IconEdit,
+  IconPlus,
   IconSearch,
+  IconTrash,
   IconUser,
 } from '../components/icons'
-import { Button, Card, DivisionTag, PageIntro } from '../components/ui'
+import { Button, Card, DivisionTag, Field, PageIntro } from '../components/ui'
 import { apiError } from '../api/client'
 import {
+  createMember,
+  deleteMember,
   fetchMemberStats,
   importMembers,
   listMembers,
+  updateMember,
   type MemberQuery,
 } from '../api/members'
-import type { MemberOut, MemberStats } from '../api/types'
+import type { MemberInput, MemberOut, MemberStats } from '../api/types'
 import { useAsync } from '../hooks/useAsync'
 
 const PAGE_SIZE = 10
@@ -35,15 +46,13 @@ const PAGE_SIZE = 10
 /** 已投票狀態色（參考稿 emerald-700） */
 const VOTED_GREEN = '#047857'
 
-/**
- * 代投欄位（後端 MemberOut 已回傳，但共用型別檔尚未補；
- * 依規範不改共用檔，於本頁以區域型別擴充）。
- */
-type MemberRow = MemberOut & {
-  voted_by_proxy?: boolean
-  proxy_name?: string
-  proxy_member_no?: string
-}
+/** 性別選項（未填＝空字串，與後端 gender 相容） */
+const GENDER_OPTIONS = [
+  { value: '', label: '未填' },
+  { value: '男', label: '男' },
+  { value: '女', label: '女' },
+  { value: '其他', label: '其他' },
+]
 
 /** 載入中的小卡佔位（維持 5 卡版面，避免載入時跳動） */
 const PLACEHOLDER_STATS: MemberStats[] = Array.from({ length: 5 }, (_, i) => ({
@@ -68,6 +77,16 @@ function formatVotedAt(iso: string | null): string {
     minute: '2-digit',
     hour12: false,
   }).format(d)
+}
+
+/** 長欄位顯示：截斷 + title 提示 */
+function Ellipsis({ value, maxWidth = 200 }: { value: string; maxWidth?: number }) {
+  if (!value) return <span className="text-gray-deep">—</span>
+  return (
+    <div className="truncate text-gray-deep" style={{ maxWidth }} title={value}>
+      {value}
+    </div>
+  )
 }
 
 /* ── 投票狀態（圖示 16px + 文字 12px，參考稿圖示圓徑約 14px、與文字間距 4px） ── */
@@ -103,12 +122,12 @@ function VoteStatus({
   if (voted && votedByProxy) {
     return (
       <div className="flex flex-col items-start gap-[3px]">
-        <span className="inline-flex items-center gap-[2px] px-[6px] py-[2px] rounded-[4px] border border-[#E3D8C2] text-[12px] leading-none bg-[#FBF3E4] text-[#8A6D3B]">
+        <span className="inline-flex items-center gap-[2px] px-[6px] py-[2px] rounded-[4px] border border-[#E3D8C2] text-[12px] leading-none bg-[#FBF3E4] text-[#8A6D3B] whitespace-nowrap">
           <IconUser size={14} strokeWidth={1.4} />
           已被代投
         </span>
         {proxyName ? (
-          <span className="text-[12px] leading-none text-gray">
+          <span className="text-[12px] leading-none text-gray whitespace-nowrap">
             代投人：{proxyName}
           </span>
         ) : null}
@@ -118,14 +137,14 @@ function VoteStatus({
 
   return voted ? (
     <span
-      className="inline-flex items-center gap-[2px] text-[12px] leading-none"
+      className="inline-flex items-center gap-[2px] text-[12px] leading-none whitespace-nowrap"
       style={{ color: VOTED_GREEN }}
     >
       <IconCheckCircle size={16} />
       已投票
     </span>
   ) : (
-    <span className="inline-flex items-center gap-[2px] text-[12px] leading-none text-gray-deep">
+    <span className="inline-flex items-center gap-[2px] text-[12px] leading-none text-gray-deep whitespace-nowrap">
       <NotVotedIcon />
       未投票
     </span>
@@ -160,6 +179,202 @@ function PageButton({
   )
 }
 
+/* ── 新增／編輯表單狀態 ── */
+interface MemberForm {
+  member_no: string
+  name_trad: string
+  name_simp: string
+  givenname: string
+  surname: string
+  division_id: string
+  gender: string
+  phone: string
+  email: string
+  address: string
+}
+
+function initialForm(initial: MemberOut | null, divisions: MemberStats[]): MemberForm {
+  return {
+    member_no: initial?.member_no ?? '',
+    name_trad: initial?.name_trad ?? '',
+    name_simp: initial?.name_simp ?? '',
+    givenname: initial?.givenname ?? '',
+    surname: initial?.surname ?? '',
+    division_id: initial
+      ? String(initial.division_id)
+      : divisions[0]
+        ? String(divisions[0].division_id)
+        : '',
+    gender: initial?.gender ?? '',
+    phone: initial?.phone ?? '',
+    email: initial?.email ?? '',
+    address: initial?.address ?? '',
+  }
+}
+
+/** 新增／編輯會員彈窗（沿用 ui.tsx 的 Field / Button 樣式） */
+function MemberModal({
+  initial,
+  divisions,
+  saving,
+  onClose,
+  onSubmit,
+}: {
+  initial: MemberOut | null
+  divisions: MemberStats[]
+  saving: boolean
+  onClose: () => void
+  onSubmit: (form: MemberForm) => void
+}) {
+  const [form, setForm] = useState<MemberForm>(() => initialForm(initial, divisions))
+  const set = <K extends keyof MemberForm>(k: K, v: MemberForm[K]) =>
+    setForm((f) => ({ ...f, [k]: v }))
+
+  const valid =
+    form.member_no.trim().length > 0 &&
+    form.name_trad.trim().length > 0 &&
+    form.division_id !== ''
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-card rounded-xl border border-border w-full max-w-3xl max-h-[88vh] overflow-y-auto p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between">
+          <h3 className="text-[18px] font-bold text-ink leading-none">
+            {initial ? '編輯會員' : '新增會員'}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="關閉"
+            className="w-5 h-5 flex items-center justify-center text-gray hover:text-ink"
+          >
+            <IconClose size={18} />
+          </button>
+        </div>
+
+        <div className="mt-6 grid grid-cols-2 gap-x-5 gap-y-5">
+          <Field label="佛光會員卡號">
+            <input
+              value={form.member_no}
+              onChange={(e) => set('member_no', e.target.value)}
+              placeholder="例如：BGS-2024-0001"
+              className="ui-input"
+            />
+          </Field>
+
+          <Field label="所屬分會">
+            <select
+              value={form.division_id}
+              onChange={(e) => set('division_id', e.target.value)}
+              className="ui-select"
+            >
+              {!initial && !divisions[0] && <option value="">請選擇</option>}
+              {divisions.map((d) => (
+                <option key={d.division_id} value={String(d.division_id)}>
+                  {d.division_name}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="姓名(繁)" hint="只需輸入中文姓名，簡體由後端自動產生">
+            <input
+              value={form.name_trad}
+              onChange={(e) => set('name_trad', e.target.value)}
+              placeholder="例如：林文雄"
+              className="ui-input"
+            />
+          </Field>
+
+          <Field label="姓名(簡)" hint="由系統依繁體自動同步，儲存後生效">
+            <input
+              value={form.name_simp}
+              readOnly
+              disabled
+              placeholder="（系統自動產生）"
+              className="ui-input disabled:bg-light-bg disabled:text-gray-deep"
+            />
+          </Field>
+
+          <Field label="givenname（英文名）">
+            <input
+              value={form.givenname}
+              onChange={(e) => set('givenname', e.target.value)}
+              placeholder="例如：Fiona"
+              className="ui-input"
+            />
+          </Field>
+
+          <Field label="surname（英文姓）">
+            <input
+              value={form.surname}
+              onChange={(e) => set('surname', e.target.value)}
+              placeholder="例如：Lin"
+              className="ui-input"
+            />
+          </Field>
+
+          <Field label="性別">
+            <select
+              value={form.gender}
+              onChange={(e) => set('gender', e.target.value)}
+              className="ui-select"
+            >
+              {GENDER_OPTIONS.map((g) => (
+                <option key={g.value} value={g.value}>
+                  {g.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="手機號">
+            <input
+              value={form.phone}
+              onChange={(e) => set('phone', e.target.value)}
+              placeholder="例如：0912-345-678"
+              className="ui-input"
+            />
+          </Field>
+
+          <Field label="Email">
+            <input
+              value={form.email}
+              onChange={(e) => set('email', e.target.value)}
+              placeholder="例如：name@example.com"
+              className="ui-input"
+            />
+          </Field>
+
+          <Field label="地址" className="col-span-2">
+            <input
+              value={form.address}
+              onChange={(e) => set('address', e.target.value)}
+              placeholder="例如：渥太華市 141 號 32 街"
+              className="ui-input"
+            />
+          </Field>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 mt-7">
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            取消
+          </Button>
+          <Button onClick={() => onSubmit(form)} disabled={!valid || saving}>
+            {saving ? '儲存中…' : initial ? '儲存修改' : '新增會員'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function MembersPage() {
   const [keyword, setKeyword] = useState('')
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
@@ -168,6 +383,8 @@ export function MembersPage() {
   const [page, setPage] = useState(1)
   const [toast, setToast] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
+  const [editor, setEditor] = useState<{ member: MemberOut | null } | null>(null)
+  const [saving, setSaving] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   // 搜尋 debounce（300ms；Enter 亦可立即套用）
@@ -177,8 +394,9 @@ export function MembersPage() {
   }, [keyword])
 
   const statsQuery = useAsync(() => fetchMemberStats(), [])
-  // MemberQuery 的 status 聯集尚未含 proxy_voted（共用檔不可改），以斷言放行
-  const statusParam = (
+  // 分區下拉與表單共用同一份 stats（若尚未載入則表單分區為空）
+  const divisions = statsQuery.data ?? []
+  const statusParam: MemberQuery['status'] =
     status === 'all'
       ? ''
       : status === 'voted'
@@ -186,7 +404,6 @@ export function MembersPage() {
         : status === 'proxy-voted'
           ? 'proxy_voted'
           : 'not_voted'
-  ) as MemberQuery['status']
   const membersQuery = useAsync(
     () =>
       listMembers({
@@ -206,7 +423,7 @@ export function MembersPage() {
     return map
   }, [statsQuery.data])
 
-  const rows: MemberRow[] = membersQuery.data?.items ?? []
+  const rows: MemberOut[] = membersQuery.data?.items ?? []
   const total = membersQuery.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -255,6 +472,51 @@ export function MembersPage() {
     }
   }
 
+  /** 新增／編輯送出：中文只送 name_trad，後端會自動補 name_simp */
+  const onSaveMember = async (form: MemberForm) => {
+    const payload: MemberInput = {
+      member_no: form.member_no.trim(),
+      name_trad: form.name_trad.trim(),
+      givenname: form.givenname.trim(),
+      surname: form.surname.trim(),
+      division_id: Number(form.division_id),
+      gender: form.gender,
+      phone: form.phone.trim(),
+      email: form.email.trim(),
+      address: form.address.trim(),
+    }
+    setSaving(true)
+    try {
+      if (editor?.member) {
+        await updateMember(editor.member.id, payload)
+        flash(`已更新 ${payload.member_no}`)
+      } else {
+        await createMember(payload)
+        flash(`已新增 ${payload.member_no}`)
+      }
+      setEditor(null)
+      await membersQuery.reload()
+      await statsQuery.reload()
+    } catch (err) {
+      flash(apiError(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const onDeleteMember = async (m: MemberOut) => {
+    if (!window.confirm(`確定刪除 ${m.member_no} ${m.name_trad}？`)) return
+    try {
+      await deleteMember(m.id)
+      flash(`已刪除 ${m.member_no}`)
+      setEditor(null)
+      await membersQuery.reload()
+      await statsQuery.reload()
+    } catch (err) {
+      flash(apiError(err))
+    }
+  }
+
   return (
     <AdminLayout title="會員名單">
       <PageIntro
@@ -276,7 +538,8 @@ export function MembersPage() {
               <IconDownload size={16} />
               {importing ? '匯入中…' : '匯入名單'}
             </Button>
-            <Button onClick={() => flash('新增會員請使用「匯入名單」，或透過 API 建立')}>
+            <Button className="gap-2" onClick={() => setEditor({ member: null })}>
+              <IconPlus size={16} />
               新增會員
             </Button>
           </div>
@@ -365,35 +628,49 @@ export function MembersPage() {
         </div>
       )}
 
-      {/* ── 名單表格 ── */}
+      {/* ── 名單表格（欄位多，min-width 讓表格橫向捲動不擠壓） ── */}
       <Card className="mt-[25px] overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="ui-table">
+          <table className="ui-table min-w-[1860px]">
             <thead>
-              {/* 欄寬依參考稿量測（百分比依表格寬 1598px 換算） */}
               <tr>
-                <th className="pl-5 w-[18.57%]">佛光會員卡號</th>
-                <th className="w-[12.88%]">姓名 (繁)</th>
-                <th className="w-[12.88%]">姓名 (簡)</th>
-                <th className="w-[11.32%]">所屬分區</th>
-                <th className="w-[15.32%]">手機</th>
-                <th className="w-[12.13%]">投票狀態</th>
-                <th className="w-[16.88%]">投票時間</th>
+                <th className="pl-5">佛光會員卡號</th>
+                <th>姓名(繁)</th>
+                <th>姓名(簡)</th>
+                <th>givenname</th>
+                <th>surname</th>
+                <th>所屬分會</th>
+                <th>性別</th>
+                <th>手機號</th>
+                <th>Email</th>
+                <th>地址</th>
+                <th>投票狀態</th>
+                <th>投票時間</th>
+                <th className="pr-5">操作</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((m) => (
                 <tr key={m.id}>
-                  <td className="pl-5 text-ink-soft">{m.member_no}</td>
-                  <td className="font-semibold text-ink">{m.name_trad}</td>
-                  <td className="text-gray-deep">{m.name_simp}</td>
+                  <td className="pl-5 text-ink-soft whitespace-nowrap">{m.member_no}</td>
+                  <td className="font-semibold text-ink whitespace-nowrap">{m.name_trad}</td>
+                  <td className="text-gray-deep whitespace-nowrap">{m.name_simp || '—'}</td>
+                  <td className="text-gray-deep whitespace-nowrap">{m.givenname || '—'}</td>
+                  <td className="text-gray-deep whitespace-nowrap">{m.surname || '—'}</td>
                   <td>
                     <DivisionTag
                       name={m.division_name}
                       color={divisionColor(m.division_name)}
                     />
                   </td>
-                  <td className="text-gray-deep">{m.phone || '—'}</td>
+                  <td className="text-gray-deep whitespace-nowrap">{m.gender || '—'}</td>
+                  <td className="text-gray-deep whitespace-nowrap">{m.phone || '—'}</td>
+                  <td>
+                    <Ellipsis value={m.email} />
+                  </td>
+                  <td>
+                    <Ellipsis value={m.address} maxWidth={240} />
+                  </td>
                   <td>
                     <VoteStatus
                       voted={m.has_voted}
@@ -401,12 +678,36 @@ export function MembersPage() {
                       proxyName={m.proxy_name}
                     />
                   </td>
-                  <td className="text-gray-deep">{formatVotedAt(m.voted_at)}</td>
+                  <td className="text-gray-deep whitespace-nowrap">{formatVotedAt(m.voted_at)}</td>
+                  <td className="pr-5 whitespace-nowrap">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setEditor({ member: m })}
+                        title={`編輯 ${m.name_trad}`}
+                        aria-label={`編輯 ${m.name_trad}`}
+                        className="inline-flex items-center gap-1 text-[13px] text-primary hover:underline"
+                      >
+                        <IconEdit size={15} />
+                        編輯
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void onDeleteMember(m)}
+                        title={`刪除 ${m.name_trad}`}
+                        aria-label={`刪除 ${m.name_trad}`}
+                        className="inline-flex items-center gap-1 text-[13px] text-danger hover:underline"
+                      >
+                        <IconTrash size={15} />
+                        刪除
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-gray-deep">
+                  <td colSpan={13} className="py-12 text-center text-gray-deep">
                     {membersQuery.loading ? '載入中…' : '無符合條件的會員'}
                   </td>
                 </tr>
@@ -438,6 +739,16 @@ export function MembersPage() {
           </div>
         </div>
       </Card>
+
+      {editor && (
+        <MemberModal
+          initial={editor.member}
+          divisions={divisions}
+          saving={saving}
+          onClose={() => (saving ? undefined : setEditor(null))}
+          onSubmit={(form) => void onSaveMember(form)}
+        />
+      )}
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 bg-ink text-white text-[13px] rounded-lg px-4 py-3 shadow-lg">

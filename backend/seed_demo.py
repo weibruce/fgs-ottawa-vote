@@ -79,6 +79,34 @@ NAME_EN = {
     "周雅琳": "Lydia", "許志明": "Simon", "楊惠芳": "Cindy",
 }
 
+# 中文姓氏 → 英文拼音（示範資料用）
+SURNAME_EN = {
+    "陳": "Chen", "林": "Lin", "黃": "Huang", "張": "Chang", "李": "Lee", "王": "Wang",
+    "吳": "Wu", "劉": "Liu", "蔡": "Tsai", "楊": "Yang", "許": "Hsu", "鄭": "Cheng",
+    "謝": "Hsieh", "郭": "Kuo", "洪": "Hung", "曾": "Tseng", "廖": "Liao", "賴": "Lai",
+    "徐": "Hsu", "周": "Chou", "葉": "Yeh", "蘇": "Su", "莊": "Chuang", "呂": "Lu",
+    "江": "Chiang", "何": "Ho", "蕭": "Hsiao", "羅": "Lo", "高": "Kao", "潘": "Pan",
+}
+GIVEN_EN = [
+    "Richard", "Amanda", "Vincent", "Fiona", "Marcus", "Elaine", "Joyce", "Steven",
+    "Grace", "Howard", "Michelle", "Daniel", "Lydia", "Simon", "Cindy", "Kevin",
+    "Alice", "Brian", "Cathy", "Derek", "Emily", "Frank", "Gloria", "Henry",
+]
+FEMALE_EN = {
+    "Amanda", "Fiona", "Elaine", "Joyce", "Grace", "Michelle", "Lydia", "Cindy",
+    "Alice", "Cathy", "Emily", "Gloria",
+}
+
+
+def gender_of(english_name: str) -> str:
+    """示範資料用：依英文名判定性別，讓資料看起來合理"""
+    return "女" if english_name in FEMALE_EN else "男"
+EDUCATIONS = ["大學", "碩士", "博士", "高中", "專科"]
+OCCUPATIONS = ["教師", "公務員", "會計師", "工程師", "醫師", "自營商", "退休", "護理師"]
+PRECEPTS = ["已受五戒", "已受菩薩戒", "未受戒", "已受在家戒"]
+VOLUNTEER_GROUPS = ["香積組", "知賓組", "環保組", "文書組", "社教組", "法務組", "青年團"]
+REFUGE_MASTERS = ["星雲大師", "心保和尚", "慧傳法師", "覺培法師", "滿謙法師"]
+
 SURNAMES = list("陳林黃張李王吳劉蔡楊許鄭謝郭洪曾廖賴徐周葉蘇莊呂江何蕭羅高潘")
 GIVEN = [
     "明德", "慧儀", "志遠", "淑芬", "文昌", "美玲", "婉君", "文雄", "信宏", "美華",
@@ -129,12 +157,19 @@ def main() -> None:
                 surname = SURNAMES[(seq + i) % len(SURNAMES)]
                 given = GIVEN[(seq * 7 + i * 3) % len(GIVEN)]
                 full = surname + given
+                given_en = GIVEN_EN[(seq * 3 + i) % len(GIVEN_EN)]
+                surname_en = SURNAME_EN.get(surname, "Chen")
                 m = Member(
                     member_no=f"BGS-2024-{seq:04d}",
                     name_trad=full,
                     name_simp=to_simplified(full),
+                    givenname=given_en,
+                    surname=surname_en,
                     division_id=divisions[name].id,
+                    gender=gender_of(given_en),
                     phone=f"09{random.randint(10, 99)}-{random.randint(100, 999)}-{random.randint(100, 999)}",
+                    email=f"{given_en.lower()}.{surname_en.lower()}{seq:03d}@example.com",
+                    address=f"渥太華市 {random.randint(1, 300)} 號 {random.randint(1, 99)} 街",
                     is_active=True,
                 )
                 db.add(m)
@@ -152,11 +187,30 @@ def main() -> None:
             for order, (cname, title, slogan, terms, _w) in enumerate(CANDIDATES[name]):
                 avatar = f"/candidates/photo0{photo_seq % 4 + 1}.jpg"
                 photo_seq += 1
+                c_surname = cname[0]
+                c_given_en = NAME_EN.get(cname, "")
+                c_surname_en = SURNAME_EN.get(c_surname, "Chen")
+                cpidx = photo_seq - 1
                 c = Candidate(
                     division_id=divisions[name].id, name=cname,
-                    name_en=NAME_EN.get(cname, ""), title=title,
+                    name_simp=to_simplified(cname),
+                    givenname=c_given_en, surname=c_surname_en,
+                    name_en=f"{c_given_en} {c_surname_en}".strip(),
+                    member_no=f"BGS-2024-{500 + cpidx:04d}",
+                    gender=gender_of(c_given_en),
+                    title=title,
                     avatar_url=avatar, slogan=slogan,
-                    description=f"{cname}，{slogan}。", term_count=terms,
+                    description=f"{cname}，{slogan}。",
+                    term_count=terms,
+                    phone=f"09{random.randint(10, 99)}-{random.randint(100, 999)}-{random.randint(100, 999)}",
+                    email=f"{c_given_en.lower()}.{c_surname_en.lower()}@example.com",
+                    address=f"渥太華市 {random.randint(1, 300)} 號 {random.randint(1, 99)} 街",
+                    education=EDUCATIONS[cpidx % len(EDUCATIONS)],
+                    occupation=OCCUPATIONS[cpidx % len(OCCUPATIONS)],
+                    is_refuge=cpidx % 5 != 4,
+                    refuge_master=REFUGE_MASTERS[cpidx % len(REFUGE_MASTERS)],
+                    precept_status=PRECEPTS[cpidx % len(PRECEPTS)],
+                    volunteer_group=VOLUNTEER_GROUPS[cpidx % len(VOLUNTEER_GROUPS)],
                     sort_order=order, is_active=True,
                 )
                 db.add(c)

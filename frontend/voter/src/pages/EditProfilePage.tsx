@@ -26,10 +26,10 @@ import { useI18n } from '../i18n'
 export function EditProfilePage() {
   const navigate = useNavigate()
   const { session, save } = useVoteStore()
-  const { t } = useI18n()
+  const { t, nameOf } = useI18n()
 
-  // 表單以 session 的會員資料預填
-  const [name, setName] = useState(session?.voter.name ?? '')
+  // 表單以 session 的會員資料預填（姓名依當前語言顯示）
+  const [name, setName] = useState(() => nameOf(session?.voter))
   const [memberNo, setMemberNo] = useState(session?.voter.member_no ?? '')
   const [proxyName, setProxyName] = useState(session?.voter.proxy_name ?? '')
   const [proxyMemberNo, setProxyMemberNo] = useState(session?.voter.proxy_member_no ?? '')

@@ -305,3 +305,73 @@ query：`?division_id=&round_id=&anonymous=&format=csv|xlsx`
 /vote/window  輪次非 active 時的「尚未開始／已結束」頁（verify/confirmed/choose/proxy/detail/success 皆有閘門）
 /vote/results、/screen  即時結果（投票期間與結束後皆可看，不受閘門限制）
 ```
+
+---
+
+## 13. 資料表欄位（2026-09 擴充）
+
+### 13.1 `members`（會員）
+
+| 欄位 | 型別 | 說明 |
+|------|------|------|
+| `member_no` | str(64) | 佛光會員卡號（全庫唯一，身份確認用） |
+| `name_trad` | str(128) | 姓名（繁） |
+| `name_simp` | str(128) | 姓名（簡）— 由 OpenCC 自動同步 |
+| `givenname` | str(128) | 英文名 |
+| `surname` | str(128) | 英文姓 |
+| `division_id` | FK | 所屬分會（`division_name` 由 API 帶出） |
+| `gender` | str(16) | 性別 |
+| `phone` | str(32) | 手機號 |
+| `email` | str(254) | Email |
+| `address` | str(512) | 地址 |
+| `is_active` | bool | 啟用狀態 |
+| （衍生）`has_voted` / `voted_at` / `voted_by_proxy` / `proxy_name` / `proxy_member_no` | | 由當前輪次票表推導，非實體欄位 |
+
+### 13.2 `candidates`（候選人）
+
+| 欄位 | 型別 | 說明 |
+|------|------|------|
+| `member_no` | str(64) | 佛光會員卡號 |
+| `name` | str(128) | 姓名（繁） |
+| `name_simp` | str(128) | 姓名（簡）— 自動同步 |
+| `givenname` / `surname` | str(128) | 英文名／英文姓 |
+| `name_en` | str(128) | 英文全名 — 未提供時由 `givenname + surname` 組合 |
+| `gender` | str(16) | 性別 |
+| `division_id` | FK | 所屬分會 |
+| `avatar_url` | str(512) | 照片 |
+| `title` | str(128) | 職位（投票端型別為 `position`） |
+| `slogan` | str(200) | 競選宣言（投票端型別為 `slogan`，詳情頁標題為「競選理念」） |
+| `description` | text | 個人介紹 |
+| `term_count` | int | 已任屆數 |
+| `phone` / `email` / `address` | | 聯絡方式 |
+| `education` | str(256) | 學歷 |
+| `occupation` | str(256) | 職業 |
+| `is_refuge` | bool | 是否皈依 |
+| `refuge_master` | str(128) | 皈依師長 |
+| `precept_status` | str(64) | 受戒狀態 |
+| `volunteer_group` | str(128) | 義工組別 |
+| `sort_order` / `is_active` | | 排序與啟用狀態 |
+
+### 13.3 中文姓名的三條規則
+
+1. **同步**：新增／修改會員或候選人時，中文姓名只給繁體或只給簡體，
+   後端都會自動補出另一邊（`sync_name_pair`，OpenCC）。
+   兩邊都給時以繁體為準重新轉出簡體，避免不一致。
+   英文 `name_en` 未提供時，由 `givenname + surname` 組合。
+2. **驗證**：身份確認時，**繁體、簡體、英文任一命中即通過**（`match_member_name`）。
+   英文比對不分大小寫、忽略多餘空白，且**只輸入 givenname 或只輸入 surname 也算命中**。
+3. **顯示**：由前端依使用者偏好語言挑選，後端同時回傳三種姓名欄位：
+   - 繁中 → `name_trad`
+   - 简中 → `name_simp`
+   - English → `name_en`（或 `givenname + surname`）
+   投票端用 `useI18n().nameOf(entity)`；後端匯出用 `display_name(lang, ...)`。
+   缺值時逐級退回，保證一定顯示得出姓名。
+
+### 13.4 匯入／匯出
+
+- 匯入接受的表頭（中英皆可）：`佛光會員卡號`、`姓名`／`姓名(繁)`、`姓名(簡)`、
+  `givenname`、`surname`、`所屬分會`／`所屬分區`、`性別`、`手機號`、`Email`、`地址`
+- 中文姓名同樣只給一邊即可
+- 匯出欄位：`佛光會員卡號、姓名(繁)、姓名(簡)、givenname、surname、所屬分會、
+  性別、手機號、Email、地址、已投票、投票時間、狀態`
+- 匯入範本：`GET /admin/members/import/template`

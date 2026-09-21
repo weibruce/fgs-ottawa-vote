@@ -84,6 +84,10 @@ export function VerifyPage() {
         voted_candidate_ids: data.voted_candidate_ids,
         voted_by_proxy: data.voted_by_proxy,
         voted_proxy_name: data.voted_proxy_name,
+        voted_proxy_name_trad: data.voted_proxy_name_trad,
+        voted_proxy_name_simp: data.voted_proxy_name_simp,
+        voted_proxy_givenname: data.voted_proxy_givenname,
+        voted_proxy_surname: data.voted_proxy_surname,
       })
       navigate('/vote/confirmed')
     } catch (e) {

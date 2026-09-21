@@ -7,7 +7,7 @@
  * 互動：整張卡點擊 = 切換選取；頭像點擊 = 前往候選人詳情
  * 頭像：有 avatar_url 用照片（外圈金色細框），沒有則退回姓氏圓形（bg-avatar + 主紅襯線字）
  */
-import { useI18n } from '../i18n'
+import { pickName, useI18n } from '../i18n'
 import type { Candidate } from '../types'
 
 export interface CandidateCardProps {
@@ -32,12 +32,15 @@ export function CandidateCard({
   onToggle,
   onDetail,
 }: CandidateCardProps) {
-  const { t } = useI18n()
-  // 姓氏（中文名第一個字）
-  const surname = candidate.name.trim().charAt(0)
-  // 次要行：優先英文名（資料，不翻譯）；沒有英文名時退回職位 · 屆數
+  const { t, nameOf } = useI18n()
+  // 顯示名（依當前語言）＋ 姓氏圓形頭像取顯示名的第一個字
+  const displayName = nameOf(candidate)
+  const surname = displayName.trim().charAt(0)
+  // 次要行：固定英文名（資料，不翻譯）；沒有英文名時退回職位 · 屆數
+  const englishName = pickName('en', candidate)
+  // 英文模式下主名已是英文，副標改用「職位 · 屆數」避免重複
   const secondary =
-    candidate.name_en?.trim() ||
+    (englishName && englishName !== displayName ? englishName : '') ||
     t('choose.secondaryTerms', { position: candidate.position, n: candidate.term_count })
 
   const interactive = !disabled && !readOnly
@@ -73,7 +76,7 @@ export function CandidateCard({
         role="button"
         data-detail-link={onDetail ? 'true' : 'false'}
         disabled={!onDetail}
-        aria-label={t('choose.detailAria', { name: candidate.name })}
+        aria-label={t('choose.detailAria', { name: displayName })}
         onClick={(e) => {
           // 不觸發整卡的切換選取
           e.stopPropagation()
@@ -86,7 +89,7 @@ export function CandidateCard({
         {candidate.avatar_url ? (
           <img
             src={candidate.avatar_url}
-            alt={candidate.name}
+            alt={displayName}
             className="h-full w-full rounded-full object-cover"
           />
         ) : (
@@ -99,7 +102,7 @@ export function CandidateCard({
       {/* ── 姓名 + 次要行（主要動作：與整卡一致 → 切換選取） ── */}
       <div className="min-w-0 flex-1 text-left">
         <span className="block truncate text-[17px] font-bold leading-[22px] text-ink">
-          {candidate.name}
+          {displayName}
         </span>
         <span className="mt-[4px] block truncate text-[12px] leading-[18px] text-gray">
           {secondary}

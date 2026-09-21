@@ -1,11 +1,14 @@
 /**
  * 候選人管理 — 1:1 對齊參考稿 docs/ui/admin/voting_system_dashboard_03.png
  *
- * 幾何量測（1920×940 DPR=1）：
- *   說明列        y 95..133（說明文字 14px、右側主色按鈕 36px）
- *   膠囊分頁卡片  y 155..204（p-2；膠囊 h-32px / px-18px / 間距 3px）
- *   表格卡片      x 288..1887、y 229..684（表頭 41px、每列 69px）
- * 資料：src/data/mock.ts 的 mockCandidates（唯讀），後續接 API 時替換為 props/query。
+ * 列表欄位（需求新增姓名三態 + 會員資料）：
+ *   佛光會員卡號、姓名(繁)、姓名(簡)、givenname、surname、性別、所屬分會、照片、
+ *   個人介紹、手機號、Email、地址、學歷、職業、是否皈依、皈依師長、受戒狀態、
+ *   義工組別、目前票數、操作
+ *
+ * 欄位多 → 表格可橫向捲動（固定欄寬，不擠壓變形）。
+ * 姓名規則：中文只輸入「姓名(繁)」即可，後端自動產生 name_simp；
+ *          givenname / surname 分開輸入，name_en 留空時由後端組合。
  */
 import { useMemo, useState } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
@@ -16,47 +19,85 @@ import { apiError } from '../api/client'
 import { listCandidates, createCandidate, updateCandidate, deleteCandidate } from '../api/candidates'
 import { listRounds } from '../api/rounds'
 import { fetchDivisionOverview } from '../api/divisions'
+import type { CandidateInput } from '../api/types'
 
-/** 表格實際需要的資料形狀（由 API 轉換而來，維持原本 JSX 不變） */
+/** 表格列所需的完整資料形狀（由 API 轉換而來） */
 interface CandRow {
   id: number
-  rank: number
-  name: string
-  surname: string
-  bio: string
   division: string
-  position: string
+  member_no: string
+  name: string
+  name_simp: string
+  name_en: string
+  givenname: string
+  surname: string
+  gender: string
+  title: string
+  avatar_url: string
   slogan: string
-  terms: string
+  description: string
+  term_count: number
+  phone: string
+  email: string
+  address: string
+  education: string
+  occupation: string
+  is_refuge: boolean
+  refuge_master: string
+  precept_status: string
+  volunteer_group: string
+  sort_order: number
+  is_active: boolean
   votes: number
 }
 
 /** 「全部」分頁的鍵值 */
 const ALL = '全部' as const
 
-/**
- * 表格欄寬（%）。由參考稿量測的 px 換算：卡片內容寬 = 1600px
- * 排序 128 / 姓名 466 / 分區 128 / 職位 176 / 競選宣言 266 / 已任屆數 194 / 目前票數 87 / 操作 155
- */
-const COL_W = ['8%', '29.125%', '8%', '11%', '16.625%', '12.125%', '5.4375%', '9.6875%'] as const
+/** 欄位定義（順序＝表頭順序；w 為固定欄寬 px，總寬即表格最小寬度 → 可橫向捲動） */
+const COLUMNS: { key: string; label: string; w: number; align?: 'right' }[] = [
+  { key: 'member_no', label: '佛光會員卡號', w: 150 },
+  { key: 'name', label: '姓名(繁)', w: 100 },
+  { key: 'name_simp', label: '姓名(簡)', w: 100 },
+  { key: 'givenname', label: 'givenname', w: 110 },
+  { key: 'surname', label: 'surname', w: 100 },
+  { key: 'gender', label: '性別', w: 72 },
+  { key: 'division', label: '所屬分會', w: 100 },
+  { key: 'photo', label: '照片', w: 80 },
+  { key: 'description', label: '個人介紹', w: 260 },
+  { key: 'phone', label: '手機號', w: 140 },
+  { key: 'email', label: 'Email', w: 210 },
+  { key: 'address', label: '地址', w: 200 },
+  { key: 'education', label: '學歷', w: 100 },
+  { key: 'occupation', label: '職業', w: 100 },
+  { key: 'is_refuge', label: '是否皈依', w: 90 },
+  { key: 'refuge_master', label: '皈依師長', w: 120 },
+  { key: 'precept_status', label: '受戒狀態', w: 120 },
+  { key: 'volunteer_group', label: '義工組別', w: 110 },
+  { key: 'votes', label: '目前票數', w: 100, align: 'right' },
+  { key: 'actions', label: '操作', w: 110, align: 'right' },
+]
+const TABLE_MIN_W = COLUMNS.reduce((sum, c) => sum + c.w, 0)
 
-/** 表頭「排序」欄的上下箭頭（參考稿為 10×10 線性圖示，icons.tsx 無此圖示故自繪） */
-function IconSortArrows({ size = 12 }: { size?: number }) {
+const GENDER_OPTIONS = ['男', '女', '其他', ''] as const
+
+/** 照片縮圖；載入失敗（例如 dev server 未提供照片）時退回姓氏圓形 */
+function AvatarThumb({ src, name }: { src: string; name: string }) {
+  const [failed, setFailed] = useState(false)
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt={name}
+        onError={() => setFailed(true)}
+        className="h-10 w-10 rounded-full border border-border object-cover"
+      />
+    )
+  }
   return (
-    <svg
-      viewBox="0 0 12 12"
-      width={size}
-      height={size}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.3}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M4 10.6V1.6M1.6 4L4 1.6 6.4 4" />
-      <path d="M8 1.4v9M5.6 8L8 10.4 10.4 8" />
-    </svg>
+    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-[15px] font-bold text-white">
+      {name.trim().charAt(0) || '—'}
+    </span>
   )
 }
 
@@ -73,22 +114,34 @@ export function CandidatesPage() {
       divColorByName[d.name] = d.color
     }
 
-    const perDiv: Record<string, number> = {}
-    const rowsMapped: CandRow[] = list.map((c) => {
-      perDiv[c.division_name] = (perDiv[c.division_name] ?? 0) + 1
-      return {
-        id: c.id,
-        rank: perDiv[c.division_name],
-        name: c.name,
-        surname: c.name.charAt(0),
-        bio: c.description,
-        division: c.division_name,
-        position: c.title,
-        slogan: c.slogan,
-        terms: `${c.term_count} 屆`,
-        votes: c.vote_count ?? 0,
-      }
-    })
+    const rowsMapped: CandRow[] = list.map((c) => ({
+      id: c.id,
+      division: c.division_name,
+      member_no: c.member_no ?? '',
+      name: c.name ?? '',
+      name_simp: c.name_simp ?? '',
+      name_en: c.name_en ?? '',
+      givenname: c.givenname ?? '',
+      surname: c.surname ?? '',
+      gender: c.gender ?? '',
+      title: c.title ?? '',
+      avatar_url: c.avatar_url ?? '',
+      slogan: c.slogan ?? '',
+      description: c.description ?? '',
+      term_count: c.term_count ?? 0,
+      phone: c.phone ?? '',
+      email: c.email ?? '',
+      address: c.address ?? '',
+      education: c.education ?? '',
+      occupation: c.occupation ?? '',
+      is_refuge: c.is_refuge ?? false,
+      refuge_master: c.refuge_master ?? '',
+      precept_status: c.precept_status ?? '',
+      volunteer_group: c.volunteer_group ?? '',
+      sort_order: c.sort_order ?? 0,
+      is_active: c.is_active ?? true,
+      votes: c.vote_count ?? 0,
+    }))
     return { rows: rowsMapped, divIdByName, divColorByName }
   }, [])
 
@@ -96,8 +149,7 @@ export function CandidatesPage() {
   const divIdByName = data?.divIdByName ?? {}
   const divColorByName = data?.divColorByName ?? {}
   const divisionOptions = Object.keys(divIdByName)
-  // 參考稿預設停在「東區」分頁
-  const [tab, setTab] = useState<string>('東區')
+  const [tab, setTab] = useState<string>(ALL)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<CandRow | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -151,12 +203,31 @@ export function CandidatesPage() {
       flash('找不到對應分區')
       return
     }
-    const body = {
+    const body: CandidateInput = {
       division_id,
       name: c.name,
-      title: c.position,
+      name_simp: c.name_simp,
+      name_en: c.name_en,
+      givenname: c.givenname,
+      surname: c.surname,
+      member_no: c.member_no,
+      gender: c.gender,
+      title: c.title,
+      avatar_url: c.avatar_url,
       slogan: c.slogan,
-      description: c.bio,
+      description: c.description,
+      term_count: c.term_count,
+      phone: c.phone,
+      email: c.email,
+      address: c.address,
+      education: c.education,
+      occupation: c.occupation,
+      is_refuge: c.is_refuge,
+      refuge_master: c.refuge_master,
+      precept_status: c.precept_status,
+      volunteer_group: c.volunteer_group,
+      sort_order: c.sort_order,
+      is_active: c.is_active,
     }
     try {
       if (editing) {
@@ -210,86 +281,126 @@ export function CandidatesPage() {
         ))}
       </Card>
 
-      {/* 候選人表格 */}
+      {/* 候選人表格（欄位多 → 橫向捲動） */}
       <Card className="mt-6 overflow-hidden">
         {loading && rows.length === 0 && (
           <div className="py-20 text-center text-[14px] text-gray">載入中…</div>
         )}
-        <table className={`ui-table table-fixed w-full ${loading && rows.length === 0 ? 'hidden' : ''}`}>
-          <colgroup>
-            {COL_W.map((w, i) => (
-              <col key={i} style={{ width: w }} />
-            ))}
-          </colgroup>
-          <thead>
-            <tr>
-              <th className="h-[40px] px-5 py-0">
-                <span className="inline-flex items-center gap-[2px]">
-                  排序
-                  <IconSortArrows />
-                </span>
-              </th>
-              <th className="h-[40px] px-5 py-0">姓名</th>
-              <th className="h-[40px] px-5 py-0">分區</th>
-              <th className="h-[40px] px-5 py-0">職位</th>
-              <th className="h-[40px] px-5 py-0">競選宣言</th>
-              <th className="h-[40px] px-5 py-0">已任屆數</th>
-              <th className="h-[40px] px-5 py-0 text-right">目前票數</th>
-              <th className="h-[40px] px-5 py-0 text-right">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((c) => (
-              <tr key={`${c.division}-${c.name}`}>
-                <td className="h-[69px] px-5 py-0 text-[13px] text-gray-deep">#{c.rank}</td>
-                <td className="h-[69px] px-5 py-0">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-[15px] font-bold text-white">
-                      {c.surname}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-[14px] font-bold leading-[18px] text-ink">{c.name}</div>
-                      <div className="truncate text-[12px] leading-[15px] text-gray-deep">
-                        {c.bio}
-                      </div>
-                    </div>
-                  </div>
-                </td>
-                <td className="h-[69px] px-5 py-0">
-                  <DivisionTag name={c.division} color={divColorByName[c.division]} />
-                </td>
-                <td className="h-[69px] px-5 py-0 text-[14px] text-ink-soft">{c.position}</td>
-                <td className="h-[69px] px-5 py-0 text-[14px] text-ink-soft">{c.slogan}</td>
-                <td className="h-[69px] px-5 py-0 text-[14px] text-ink-soft">{c.terms}</td>
-                <td className="h-[69px] px-5 py-0 text-right font-serif text-[13px] font-bold text-primary">
-                  {c.votes}
-                </td>
-                <td className="h-[69px] px-5 py-0">
-                  <div className="flex items-center justify-end gap-[14px] pr-[5px]">
-                    <button
-                      type="button"
-                      onClick={() => startEdit(c)}
-                      title="編輯"
-                      aria-label={`編輯 ${c.name}`}
-                      className="text-ink-soft transition-colors hover:text-primary"
-                    >
-                      <IconEdit size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => remove(c)}
-                      title="刪除"
-                      aria-label={`刪除 ${c.name}`}
-                      className="text-primary transition-colors hover:text-primary-hover"
-                    >
-                      <IconTrash size={16} />
-                    </button>
-                  </div>
-                </td>
+        <div className="overflow-x-auto">
+          <table
+            className={`ui-table table-fixed ${loading && rows.length === 0 ? 'hidden' : ''}`}
+            style={{ minWidth: TABLE_MIN_W }}
+          >
+            <colgroup>
+              {COLUMNS.map((c) => (
+                <col key={c.key} style={{ width: c.w }} />
+              ))}
+            </colgroup>
+            <thead>
+              <tr>
+                {COLUMNS.map((c) => (
+                  <th
+                    key={c.key}
+                    className={`h-[40px] px-4 py-0 ${c.align === 'right' ? 'text-right' : ''}`}
+                  >
+                    {c.label}
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map((c) => (
+                <tr key={c.id}>
+                  <td className="h-[69px] px-4 py-0 whitespace-nowrap text-[13px] text-gray-deep">
+                    {c.member_no || '—'}
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[14px] font-bold text-ink">
+                    {c.name || '—'}
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[14px] text-ink-soft">
+                    {c.name_simp || '—'}
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[14px] text-ink-soft">
+                    {c.givenname || '—'}
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[14px] text-ink-soft">
+                    {c.surname || '—'}
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[14px] text-ink-soft">
+                    {c.gender || '—'}
+                  </td>
+                  <td className="h-[69px] px-4 py-0">
+                    <DivisionTag name={c.division} color={divColorByName[c.division]} />
+                  </td>
+                  <td className="h-[69px] px-4 py-0">
+                    <AvatarThumb src={c.avatar_url} name={c.name} />
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[13px] text-ink-soft">
+                    <span className="block truncate" title={c.description}>
+                      {c.description || '—'}
+                    </span>
+                  </td>
+                  <td className="h-[69px] px-4 py-0 whitespace-nowrap text-[13px] text-ink-soft">
+                    {c.phone || '—'}
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[13px] text-ink-soft">
+                    <span className="block truncate" title={c.email}>
+                      {c.email || '—'}
+                    </span>
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[13px] text-ink-soft">
+                    <span className="block truncate" title={c.address}>
+                      {c.address || '—'}
+                    </span>
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[13px] text-ink-soft">
+                    {c.education || '—'}
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[13px] text-ink-soft">
+                    {c.occupation || '—'}
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[13px] text-ink-soft">
+                    {c.is_refuge ? '是' : '否'}
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[13px] text-ink-soft">
+                    {c.refuge_master || '—'}
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[13px] text-ink-soft">
+                    {c.precept_status || '—'}
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[13px] text-ink-soft">
+                    {c.volunteer_group || '—'}
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-right font-serif text-[13px] font-bold text-primary">
+                    {c.votes}
+                  </td>
+                  <td className="h-[69px] px-4 py-0">
+                    <div className="flex items-center justify-end gap-[14px] pr-[5px]">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(c)}
+                        title="編輯"
+                        aria-label={`編輯 ${c.name}`}
+                        className="text-ink-soft transition-colors hover:text-primary"
+                      >
+                        <IconEdit size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => remove(c)}
+                        title="刪除"
+                        aria-label={`刪除 ${c.name}`}
+                        className="text-primary transition-colors hover:text-primary-hover"
+                      >
+                        <IconTrash size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       {showModal && (
@@ -310,7 +421,35 @@ export function CandidatesPage() {
   )
 }
 
-/* ── 新增／編輯（尚未接 API，先以本地 state 呈現） ── */
+/* ── 新增／編輯表單（補齊所有候選人欄位） ── */
+
+/** 表單狀態：數字欄位以字串保存，送出時再轉數字 */
+interface FormState {
+  member_no: string
+  name: string
+  name_simp: string
+  name_en: string
+  givenname: string
+  surname: string
+  gender: string
+  division: string
+  title: string
+  avatar_url: string
+  slogan: string
+  description: string
+  term_count: string
+  phone: string
+  email: string
+  address: string
+  education: string
+  occupation: string
+  is_refuge: boolean
+  refuge_master: string
+  precept_status: string
+  volunteer_group: string
+  sort_order: string
+  is_active: boolean
+}
 
 function CandidateModal({
   divisionOptions,
@@ -323,25 +462,72 @@ function CandidateModal({
   onClose: () => void
   onSave: (c: CandRow) => void
 }) {
-  const [name, setName] = useState(initial?.name ?? '')
-  const [division, setDivision] = useState(initial?.division ?? '東區')
-  const [position, setPosition] = useState(initial?.position ?? '會長候選人')
-  const [slogan, setSlogan] = useState(initial?.slogan ?? '')
-  const [bio, setBio] = useState(initial?.bio ?? '')
+  const [form, setForm] = useState<FormState>(() => ({
+    member_no: initial?.member_no ?? '',
+    name: initial?.name ?? '',
+    name_simp: initial?.name_simp ?? '',
+    name_en: initial?.name_en ?? '',
+    givenname: initial?.givenname ?? '',
+    surname: initial?.surname ?? '',
+    gender: initial?.gender ?? '',
+    division: initial?.division ?? divisionOptions[0] ?? '',
+    title: initial?.title ?? '會長候選人',
+    avatar_url: initial?.avatar_url ?? '',
+    slogan: initial?.slogan ?? '',
+    description: initial?.description ?? '',
+    term_count: String(initial?.term_count ?? 0),
+    phone: initial?.phone ?? '',
+    email: initial?.email ?? '',
+    address: initial?.address ?? '',
+    education: initial?.education ?? '',
+    occupation: initial?.occupation ?? '',
+    is_refuge: initial?.is_refuge ?? false,
+    refuge_master: initial?.refuge_master ?? '',
+    precept_status: initial?.precept_status ?? '',
+    volunteer_group: initial?.volunteer_group ?? '',
+    sort_order: String(initial?.sort_order ?? 0),
+    is_active: initial?.is_active ?? true,
+  }))
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+    setForm((f) => ({ ...f, [key]: value }))
+
+  /** 英文全名留空時，提示後端將組合出的值 */
+  const autoNameEn = [form.givenname.trim(), form.surname.trim()].filter(Boolean).join(' ')
 
   const submit = () => {
-    const trimmed = name.trim()
-    if (!trimmed) return
+    const name = form.name.trim()
+    if (!name) {
+      setFormError('請輸入姓名（繁）')
+      return
+    }
     onSave({
       id: initial?.id ?? 0,
-      rank: initial?.rank ?? 1,
-      name: trimmed,
-      surname: trimmed.charAt(0),
-      bio: bio.trim(),
-      division,
-      position: position.trim() || '會長候選人',
-      slogan: slogan.trim(),
-      terms: initial?.terms ?? '0 屆',
+      division: form.division,
+      member_no: form.member_no.trim(),
+      name,
+      name_simp: form.name_simp.trim(),
+      name_en: form.name_en.trim(),
+      givenname: form.givenname.trim(),
+      surname: form.surname.trim(),
+      gender: form.gender,
+      title: form.title.trim(),
+      avatar_url: form.avatar_url.trim(),
+      slogan: form.slogan.trim(),
+      description: form.description.trim(),
+      term_count: Number(form.term_count) || 0,
+      phone: form.phone.trim(),
+      email: form.email.trim(),
+      address: form.address.trim(),
+      education: form.education.trim(),
+      occupation: form.occupation.trim(),
+      is_refuge: form.is_refuge,
+      refuge_master: form.refuge_master.trim(),
+      precept_status: form.precept_status.trim(),
+      volunteer_group: form.volunteer_group.trim(),
+      sort_order: Number(form.sort_order) || 0,
+      is_active: form.is_active,
       votes: initial?.votes ?? 0,
     })
   }
@@ -352,26 +538,96 @@ function CandidateModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-card p-6 shadow-xl"
+        className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-card p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-lg font-bold text-ink">
           {initial ? '編輯候選人' : '新增候選人'}
         </h3>
-        <div className="mt-5 space-y-4">
-          <Field label="姓名">
+
+        {formError && (
+          <div className="mt-3 rounded-lg border border-danger/30 bg-danger-bg px-3 py-2 text-[13px] text-danger">
+            {formError}
+          </div>
+        )}
+
+        {/* 姓名 */}
+        <h4 className="mt-5 mb-3 text-[13px] font-bold text-gray-deep">姓名</h4>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="姓名(繁)" hint="中文只需輸入這一欄，後端會自動產生簡體姓名">
             <input
               className="ui-input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={form.name}
+              onChange={(e) => set('name', e.target.value)}
               placeholder="例如：林明德"
             />
           </Field>
-          <Field label="分區">
+          <Field label="姓名(簡)" hint="留空時由繁體自動轉出">
+            <input
+              className="ui-input"
+              value={form.name_simp}
+              onChange={(e) => set('name_simp', e.target.value)}
+              placeholder="例如：林明德"
+            />
+          </Field>
+          <Field label="givenname">
+            <input
+              className="ui-input"
+              value={form.givenname}
+              onChange={(e) => set('givenname', e.target.value)}
+              placeholder="例如：Richard"
+            />
+          </Field>
+          <Field label="surname">
+            <input
+              className="ui-input"
+              value={form.surname}
+              onChange={(e) => set('surname', e.target.value)}
+              placeholder="例如：Lin"
+            />
+          </Field>
+          <Field
+            label="英文全名 name_en"
+            hint={autoNameEn ? `留空時由後端組合為「${autoNameEn}」` : '留空時由後端以 givenname + surname 組合'}
+          >
+            <input
+              className="ui-input"
+              value={form.name_en}
+              onChange={(e) => set('name_en', e.target.value)}
+              placeholder={autoNameEn}
+            />
+          </Field>
+        </div>
+
+        {/* 基本資料 */}
+        <h4 className="mt-6 mb-3 text-[13px] font-bold text-gray-deep">基本資料</h4>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="佛光會員卡號">
+            <input
+              className="ui-input"
+              value={form.member_no}
+              onChange={(e) => set('member_no', e.target.value)}
+              placeholder="例如：BGS-2024-0500"
+            />
+          </Field>
+          <Field label="性別">
             <select
               className="ui-select"
-              value={division}
-              onChange={(e) => setDivision(e.target.value)}
+              value={form.gender}
+              onChange={(e) => set('gender', e.target.value)}
+            >
+              {GENDER_OPTIONS.map((g) => (
+                <option key={g || 'none'} value={g}>
+                  {g || '未填'}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="所屬分會">
+            <select
+              className="ui-select"
+              value={form.division}
+              onChange={(e) => set('division', e.target.value)}
             >
               {divisionOptions.map((n) => (
                 <option key={n} value={n}>
@@ -383,27 +639,150 @@ function CandidateModal({
           <Field label="職位">
             <input
               className="ui-input"
-              value={position}
-              onChange={(e) => setPosition(e.target.value)}
+              value={form.title}
+              onChange={(e) => set('title', e.target.value)}
+              placeholder="例如：會長候選人"
             />
           </Field>
-          <Field label="競選宣言">
+          <Field label="照片 URL avatar_url">
             <input
               className="ui-input"
-              value={slogan}
-              onChange={(e) => setSlogan(e.target.value)}
+              value={form.avatar_url}
+              onChange={(e) => set('avatar_url', e.target.value)}
+              placeholder="/candidates/photo01.jpg"
+            />
+          </Field>
+        </div>
+
+        {/* 聯絡方式 */}
+        <h4 className="mt-6 mb-3 text-[13px] font-bold text-gray-deep">聯絡方式</h4>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="手機號">
+            <input
+              className="ui-input"
+              value={form.phone}
+              onChange={(e) => set('phone', e.target.value)}
+            />
+          </Field>
+          <Field label="Email">
+            <input
+              className="ui-input"
+              value={form.email}
+              onChange={(e) => set('email', e.target.value)}
+            />
+          </Field>
+          <Field label="地址" className="sm:col-span-2">
+            <input
+              className="ui-input"
+              value={form.address}
+              onChange={(e) => set('address', e.target.value)}
+            />
+          </Field>
+        </div>
+
+        {/* 背景資料 */}
+        <h4 className="mt-6 mb-3 text-[13px] font-bold text-gray-deep">背景資料</h4>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="學歷">
+            <input
+              className="ui-input"
+              value={form.education}
+              onChange={(e) => set('education', e.target.value)}
+            />
+          </Field>
+          <Field label="職業">
+            <input
+              className="ui-input"
+              value={form.occupation}
+              onChange={(e) => set('occupation', e.target.value)}
+            />
+          </Field>
+          <Field label="受戒狀態">
+            <input
+              className="ui-input"
+              value={form.precept_status}
+              onChange={(e) => set('precept_status', e.target.value)}
+              placeholder="例如：已受五戒"
+            />
+          </Field>
+          <Field label="義工組別">
+            <input
+              className="ui-input"
+              value={form.volunteer_group}
+              onChange={(e) => set('volunteer_group', e.target.value)}
+              placeholder="例如：香積組"
+            />
+          </Field>
+          <Field label="皈依師長">
+            <input
+              className="ui-input"
+              value={form.refuge_master}
+              onChange={(e) => set('refuge_master', e.target.value)}
+              placeholder="例如：星雲大師"
+            />
+          </Field>
+          <Field label="是否皈依">
+            <label className="flex h-[38px] items-center gap-2 text-[14px] text-ink">
+              <input
+                type="checkbox"
+                checked={form.is_refuge}
+                onChange={(e) => set('is_refuge', e.target.checked)}
+                className="h-4 w-4 accent-[var(--color-primary)]"
+              />
+              {form.is_refuge ? '是' : '否'}
+            </label>
+          </Field>
+        </div>
+
+        {/* 競選資料 */}
+        <h4 className="mt-6 mb-3 text-[13px] font-bold text-gray-deep">競選資料</h4>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="競選宣言" className="sm:col-span-2">
+            <input
+              className="ui-input"
+              value={form.slogan}
+              onChange={(e) => set('slogan', e.target.value)}
               placeholder="例如：慈悲喜捨，服務大眾"
             />
           </Field>
-          <Field label="簡介">
+          <Field label="個人介紹" className="sm:col-span-2">
             <textarea
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
+              value={form.description}
+              onChange={(e) => set('description', e.target.value)}
               rows={3}
               className="ui-input h-auto resize-none py-3"
             />
           </Field>
+          <Field label="已任屆數">
+            <input
+              type="number"
+              min={0}
+              className="ui-input"
+              value={form.term_count}
+              onChange={(e) => set('term_count', e.target.value)}
+            />
+          </Field>
+          <Field label="排序 sort_order">
+            <input
+              type="number"
+              className="ui-input"
+              value={form.sort_order}
+              onChange={(e) => set('sort_order', e.target.value)}
+            />
+          </Field>
+          <Field label="是否啟用">
+            <label className="flex h-[38px] items-center gap-2 text-[14px] text-ink">
+              <input
+                type="checkbox"
+                checked={form.is_active}
+                onChange={(e) => set('is_active', e.target.checked)}
+                className="h-4 w-4 accent-[var(--color-primary)]"
+              />
+              {form.is_active ? '啟用' : '停用'}
+            </label>
+          </Field>
         </div>
+
         <div className="mt-6 flex justify-end gap-3">
           <Button variant="outline" onClick={onClose}>
             取消

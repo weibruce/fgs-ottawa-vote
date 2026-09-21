@@ -16,7 +16,7 @@ import { useI18n } from '../i18n'
 export function SuccessPage() {
   const navigate = useNavigate()
   const { session } = useVoteStore()
-  const { t } = useI18n()
+  const { t, nameOf } = useI18n()
 
   /** 投票視窗閘門：輪次非 active → 一律導到 /vote/window（第 6 點） */
   const [windowActive, setWindowActive] = useState<boolean | null>(null)
@@ -66,7 +66,7 @@ export function SuccessPage() {
 
           {/* ── 襯線大名 ── */}
           <h1 className="mt-[14px] text-center font-serif text-[22px] font-bold leading-[30px] text-ink">
-            {voter.name}
+            {nameOf(voter)}
           </h1>
         </div>
 

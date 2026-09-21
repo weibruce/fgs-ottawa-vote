@@ -52,7 +52,13 @@ def confirm_identity(
         raise HTTPException(status_code=404, detail="未找到該會員卡號")
 
     # 3. 姓名匹配（簡繁歸一化）
-    if not match_member_name(name, member.name_trad, member.name_simp):
+    if not match_member_name(
+        name,
+        member.name_trad,
+        member.name_simp,
+        member.givenname,
+        member.surname,
+    ):
         raise HTTPException(status_code=400, detail="姓名與卡號不匹配")
 
     # 3.5 代投人驗證（勾選代投時，兩組姓名＋卡號都要通過）
@@ -65,7 +71,13 @@ def confirm_identity(
         proxy_member = db.query(Member).filter(Member.member_no == proxy_member_no.strip()).first()
         if proxy_member is None:
             raise HTTPException(status_code=404, detail="未找到代投人的會員卡號，請核實")
-        if not match_member_name(proxy_name, proxy_member.name_trad, proxy_member.name_simp):
+        if not match_member_name(
+            proxy_name,
+            proxy_member.name_trad,
+            proxy_member.name_simp,
+            proxy_member.givenname,
+            proxy_member.surname,
+        ):
             raise HTTPException(status_code=400, detail="代投人姓名與卡號不匹配，請核實")
 
     # 4. 是否已投票：**不再擋**。
@@ -75,9 +87,21 @@ def confirm_identity(
     voted_candidate_ids: list[int] = []
     voted_by_proxy = False
     voted_proxy_name = ""
+    voted_proxy_name_trad = ""
+    voted_proxy_name_simp = ""
+    voted_proxy_givenname = ""
+    voted_proxy_surname = ""
     if already is not None:
         voted_by_proxy = bool(already.is_proxy)
         voted_proxy_name = already.proxy_name or ""
+        # 既有代投人的三態姓名（用卡號回查會員檔）
+        if voted_by_proxy and already.proxy_member_no:
+            _pm = db.query(Member).filter(Member.member_no == already.proxy_member_no).first()
+            if _pm is not None:
+                voted_proxy_name_trad = _pm.name_trad
+                voted_proxy_name_simp = _pm.name_simp
+                voted_proxy_givenname = _pm.givenname
+                voted_proxy_surname = _pm.surname
         voted_candidate_ids = [
             cid
             for (cid,) in db.query(VoteCandidate.candidate_id)
@@ -115,8 +139,16 @@ def confirm_identity(
         "voted_candidate_ids": voted_candidate_ids,
         "voted_by_proxy": voted_by_proxy,
         "voted_proxy_name": voted_proxy_name,
+        "voted_proxy_name_trad": voted_proxy_name_trad,
+        "voted_proxy_name_simp": voted_proxy_name_simp,
+        "voted_proxy_givenname": voted_proxy_givenname,
+        "voted_proxy_surname": voted_proxy_surname,
         "voter": {
             "name": member.name_trad,
+            "name_trad": member.name_trad,
+            "name_simp": member.name_simp,
+            "givenname": member.givenname,
+            "surname": member.surname,
             "member_no": member_no,
             "division_id": member.division_id,
             "division_name": division.name,
@@ -124,6 +156,10 @@ def confirm_identity(
             "proxy_voter_name": proxy_note if is_proxy else None,
             "proxy_name": (proxy_member.name_trad if (is_proxy and proxy_member) else None),
             "proxy_member_no": (proxy_member.member_no if (is_proxy and proxy_member) else None),
+            "proxy_name_trad": (proxy_member.name_trad if (is_proxy and proxy_member) else ""),
+            "proxy_name_simp": (proxy_member.name_simp if (is_proxy and proxy_member) else ""),
+            "proxy_givenname": (proxy_member.givenname if (is_proxy and proxy_member) else ""),
+            "proxy_surname": (proxy_member.surname if (is_proxy and proxy_member) else ""),
         },
     }
 
@@ -341,7 +377,15 @@ def get_division_candidates(db: Session, round_id: int, division_id: int) -> dic
                 "id": c.id,
                 "division_id": c.division_id,
                 "name": c.name,
+                "name_simp": c.name_simp,
+                "givenname": c.givenname,
+                "surname": c.surname,
                 "name_en": c.name_en or None,
+                "member_no": c.member_no,
+                "gender": c.gender,
+                "education": c.education,
+                "occupation": c.occupation,
+                "volunteer_group": c.volunteer_group,
                 "position": c.title,
                 "avatar_url": c.avatar_url or None,
                 "description": c.description or "",
@@ -422,6 +466,10 @@ def _division_result_dict(db: Session, rnd: Round, div: Division, round_id: int)
             {
                 "candidate_id": c.id,
                 "name": c.name,
+                "name_simp": c.name_simp,
+                "givenname": c.givenname,
+                "surname": c.surname,
+                "name_en": c.name_en,
                 "votes": cand_votes.get(c.id, 0),
                 "is_leading": max_v > 0 and cand_votes.get(c.id, 0) == max_v,
             }
@@ -496,6 +544,10 @@ def get_results(db: Session, round_id: int) -> dict:
                 {
                     "candidate_id": c.id,
                     "name": c.name,
+                    "name_simp": c.name_simp,
+                    "givenname": c.givenname,
+                    "surname": c.surname,
+                    "name_en": c.name_en,
                     "title": c.title,
                     "avatar_url": c.avatar_url or "",
                     "votes": cand_votes.get(c.id, 0),

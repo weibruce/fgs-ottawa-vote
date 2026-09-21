@@ -36,7 +36,7 @@ type Notice = { kind: 'i18n'; key: string } | { kind: 'api'; text: string }
 export function ProxyPage() {
   const navigate = useNavigate()
   const { session, save } = useVoteStore()
-  const { t, translateError } = useI18n()
+  const { t, translateError, nameOf } = useI18n()
 
   const [targetName, setTargetName] = useState('')
   const [targetCard, setTargetCard] = useState('')
@@ -131,6 +131,10 @@ export function ProxyPage() {
       voted_candidate_ids: pending.voted_candidate_ids,
       voted_by_proxy: pending.voted_by_proxy,
       voted_proxy_name: pending.voted_proxy_name,
+      voted_proxy_name_trad: pending.voted_proxy_name_trad,
+      voted_proxy_name_simp: pending.voted_proxy_name_simp,
+      voted_proxy_givenname: pending.voted_proxy_givenname,
+      voted_proxy_surname: pending.voted_proxy_surname,
     })
     navigate('/vote/choose')
   }
@@ -154,7 +158,7 @@ export function ProxyPage() {
             {t('proxy.currentLabel')}
           </p>
           <dl className="mt-[10px]">
-            <InfoRow label={t('verify.nameLabel')} value={session.voter.name} />
+            <InfoRow label={t('verify.nameLabel')} value={nameOf(session.voter)} />
             <InfoRow label={t('confirmed.cardLabel')} value={session.voter.member_no} />
             <InfoRow label={t('confirmed.divisionLabel')} value={session.voter.division_name} />
           </dl>
@@ -220,14 +224,14 @@ export function ProxyPage() {
             <span className="block">
               {t('proxy.confirmLine1', {
                 division: session.voter.division_name,
-                name: session.voter.name,
+                name: nameOf(session.voter),
                 no: session.voter.member_no,
               })}
             </span>
             <span className="block">
               {t('proxy.confirmLine2', {
                 division: pending.voter.division_name,
-                name: pending.voter.name,
+                name: nameOf(pending.voter),
                 no: pending.voter.member_no,
               })}
             </span>

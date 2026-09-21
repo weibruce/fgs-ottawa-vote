@@ -519,6 +519,33 @@ function interpolate(template: string, vars?: Record<string, string | number>): 
 
 export type TFn = (key: string, vars?: Record<string, string | number>) => string
 
+/** 可挑選姓名的實體（會員／候選人皆有這組欄位） */
+export interface NameFields {
+  name?: string | null
+  name_trad?: string | null
+  name_simp?: string | null
+  name_en?: string | null
+  givenname?: string | null
+  surname?: string | null
+}
+
+/**
+ * 依偏好語言挑選要顯示的姓名（需求第 3 點）：
+ *   繁中 → 繁體姓名；简中 → 簡體姓名；English → 英文全名
+ * 缺值時逐級退回，保證回得出非空字串（後端也提供同名 helper 供匯出使用）。
+ */
+export function pickName(lang: Lang, e: NameFields | null | undefined): string {
+  if (!e) return ''
+  const trad = (e.name_trad ?? e.name ?? '').trim()
+  const simp = (e.name_simp ?? '').trim()
+  const en =
+    (e.name_en ?? '').trim() ||
+    [(e.givenname ?? '').trim(), (e.surname ?? '').trim()].filter(Boolean).join(' ')
+  if (lang === 'en') return en || trad || simp
+  if (lang === 'zh-Hans') return simp || trad || en
+  return trad || simp || en
+}
+
 interface I18nContextValue {
   lang: Lang
   setLang: (l: Lang) => void
@@ -536,6 +563,8 @@ interface I18nContextValue {
    * 简中／English 同樣改用「第 N 輪 / Round N」。
    */
   roundShort: (name: string | null | undefined, roundNo: number | null | undefined) => string
+  /** 依當前語言挑選姓名（pickName 的綁定版） */
+  nameOf: (e: NameFields | null | undefined) => string
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null)
@@ -605,9 +634,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     [lang, t],
   )
 
+  const nameOf = useCallback(
+    (e: NameFields | null | undefined) => pickName(lang, e),
+    [lang],
+  )
+
   const value = useMemo(
-    () => ({ lang, setLang, t, translateError, roundLabel, roundShort }),
-    [lang, setLang, t, translateError, roundLabel, roundShort],
+    () => ({ lang, setLang, t, translateError, roundLabel, roundShort, nameOf }),
+    [lang, setLang, t, translateError, roundLabel, roundShort, nameOf],
   )
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>

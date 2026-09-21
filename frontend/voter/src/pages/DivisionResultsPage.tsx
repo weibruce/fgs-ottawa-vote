@@ -97,7 +97,7 @@ function ResultRow({
 export function DivisionResultsPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const { t, translateError, roundShort } = useI18n()
+  const { t, translateError, roundShort, nameOf } = useI18n()
   const { session } = useVoteStore()
   const paramDivision = Number(params.get('division') || 0)
 
@@ -211,9 +211,9 @@ export function DivisionResultsPage() {
               return (
                 <div key={r.candidate_id} className={gap}>
                   {i === leadingIndex ? (
-                    <LeadingRow name={r.name} votes={r.votes} ratio={ratio} />
+                    <LeadingRow name={nameOf(r)} votes={r.votes} ratio={ratio} />
                   ) : (
-                    <ResultRow name={r.name} votes={r.votes} ratio={ratio} />
+                    <ResultRow name={nameOf(r)} votes={r.votes} ratio={ratio} />
                   )}
                 </div>
               )

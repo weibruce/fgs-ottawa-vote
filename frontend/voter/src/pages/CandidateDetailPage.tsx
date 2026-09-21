@@ -20,7 +20,7 @@ import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from '
 import { VoteShell } from '../components/VoteShell'
 import { getActiveRound, getDivisionCandidates } from '../api/client'
 import { useVoteStore } from '../hooks/useVoteStore'
-import { useI18n } from '../i18n'
+import { pickName, useI18n } from '../i18n'
 import type { Candidate } from '../types'
 
 /** ChoosePage 以 navigate(path, { state }) 帶入的資料（可選） */
@@ -35,7 +35,7 @@ export function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [params] = useSearchParams()
   const { session } = useVoteStore()
-  const { t } = useI18n()
+  const { t, nameOf } = useI18n()
 
   /** 投票視窗閘門：輪次非 active → 一律導到 /vote/window（第 6 點） */
   const [windowActive, setWindowActive] = useState<boolean | null>(null)
@@ -144,7 +144,12 @@ export function CandidateDetailPage() {
     )
   }
 
-  const initial = candidate.name.charAt(0)
+  // 顯示名（依當前語言）＋ 英文名副標（固定英文，缺 name_en 時由 givenname + surname 組合）
+  const displayName = nameOf(candidate)
+  // 英文模式下主名本身就是英文，避免副標與主名重複
+  const englishName = pickName('en', candidate)
+  const showEnglish = englishName !== '' && englishName !== displayName
+  const initial = displayName.charAt(0)
   // 候選人名單頁（P3）以 ?division= 決定要載入哪一區，故返回時必須帶上本區 id
   const backToChoose = `/vote/choose?division=${candidate.division_id}`
 
@@ -157,7 +162,7 @@ export function CandidateDetailPage() {
           {candidate.avatar_url ? (
             <img
               src={candidate.avatar_url}
-              alt={candidate.name}
+              alt={displayName}
               className="h-[200px] w-[160px] rounded-[8px] border-2 border-gold object-cover"
             />
           ) : (
@@ -171,13 +176,13 @@ export function CandidateDetailPage() {
 
         {/* 2. 大名 */}
         <h1 className="mt-[10px] text-center font-serif text-[30px] font-bold leading-[36px] text-ink">
-          {candidate.name}
+          {displayName}
         </h1>
 
         {/* 3. 英文名 */}
-        {candidate.name_en && (
+        {showEnglish && (
           <p className="mt-[11px] text-center text-[13px] leading-[18px] text-gray">
-            {candidate.name_en}
+            {englishName}
           </p>
         )}
 

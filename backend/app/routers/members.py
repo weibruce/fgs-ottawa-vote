@@ -28,7 +28,7 @@ from app.schemas.member import (
     MemberUpdate,
 )
 from app.services.activity import log_action
-from app.services.simp_trad import to_simplified, to_traditional
+from app.services.simp_trad import sync_name_pair, to_simplified, to_traditional
 
 router = APIRouter(prefix="/admin/members", tags=["admin-members"])
 
@@ -37,9 +37,16 @@ VOTE_LOCK_MESSAGE = "投票進行中，無法修改會員名單"
 # 匯入檔表頭別名（去空白 / 轉小寫後比對）
 HEADER_ALIASES: dict[str, set[str]] = {
     "member_no": {"佛光會員卡號", "會員卡號", "卡號", "member_no", "memberno", "memberno.", "card_no", "cardno"},
-    "name": {"姓名", "姓名(繁)", "姓名（繁）", "姓名(簡)", "姓名（簡）", "name"},
-    "division": {"所屬分區", "所属分区", "分區", "分区", "division", "division_name", "區", "区"},
-    "phone": {"手機", "手机", "手機號碼", "手机号码", "電話", "电话", "phone", "mobile"},
+    "name": {"姓名", "姓名(繁)", "姓名（繁）", "中文姓名", "name"},
+    "name_simp": {"姓名(簡)", "姓名（簡）", "簡體姓名", "简体姓名", "name_simp"},
+    "givenname": {"givenname", "given_name", "英文名", "名字(英)"},
+    "surname": {"surname", "family_name", "英文姓", "姓氏(英)"},
+    "division": {"所屬分區", "所属分区", "所屬分會", "所属分会", "分區", "分区", "分會", "分会",
+                 "division", "division_name", "區", "区"},
+    "gender": {"性別", "性别", "gender", "sex"},
+    "phone": {"手機號", "手机号", "手機", "手机", "手機號碼", "手机号码", "電話", "电话", "phone", "mobile"},
+    "email": {"email", "e-mail", "電子郵件", "电子邮件", "信箱"},
+    "address": {"地址", "住址", "address"},
 }
 
 
@@ -104,9 +111,8 @@ def _ensure_editable(db: Session) -> None:
 
 
 def _normalize_name(name: str) -> tuple[str, str]:
-    """回傳 (name_trad, name_simp)：簡繁輸入皆正確歸一"""
-    name_trad = to_traditional(name)
-    return name_trad, to_simplified(name_trad)
+    """回傳 (name_trad, name_simp)：簡繁輸入皆正確歸一並保持同步"""
+    return sync_name_pair(name_trad=name)
 
 
 # ── 列表 ────────────────────────────────────────────────────────────────
@@ -139,6 +145,10 @@ def list_members(
             conds.append(Member.member_no.ilike(like))
             conds.append(Member.name_trad.ilike(like))
             conds.append(Member.name_simp.ilike(like))
+        # 英文姓名：不分大小寫，且 givenname / surname 各自都可命中
+        en_like = f"%{keyword}%"
+        conds.append(Member.givenname.ilike(en_like))
+        conds.append(Member.surname.ilike(en_like))
         query = query.filter(or_(*conds))
 
     if status == "voted":
@@ -216,10 +226,10 @@ def member_stats(
 def import_template(_admin=Depends(get_current_admin)):
     """下載 CSV 匯入範本（含 UTF-8 BOM，Excel 開中文不亂碼）"""
     lines = [
-        "佛光會員卡號,姓名,所屬分區,手機",
-        "BGS-2024-0001,林明德,東區,0912-345-678",
-        "BGS-2024-0002,陈慧仪,南區,0912-345-679",
-        "BGS-2024-0003,王志遠,西區,",
+        "佛光會員卡號,姓名,姓名(簡),givenname,surname,所屬分會,性別,手機號,Email,地址",
+        "BGS-2024-0001,林明德,林明德,Richard,Lin,東區,男,0912-345-678,richard@example.com,渥太華市 1 號 1 街",
+        "BGS-2024-0002,陳慧儀,陈慧仪,Amanda,Chen,南區,女,0912-345-679,amanda@example.com,",
+        "BGS-2024-0003,王志遠,王志远,Vincent,Wang,西區,男,,,",
     ]
     content = "\ufeff" + "\r\n".join(lines) + "\r\n"
     return Response(
@@ -244,13 +254,21 @@ def create_member(
     if db.get(Division, body.division_id) is None:
         raise HTTPException(status_code=400, detail="分區不存在")
 
-    name_trad, name_simp = _normalize_name(body.name_trad.strip())
+    # 姓名同步：只給繁或只給簡都會補出另一邊
+    name_trad, name_simp = sync_name_pair(
+        (body.name_trad or "").strip(), (body.name_simp or "").strip()
+    )
     member = Member(
         member_no=member_no,
         name_trad=name_trad,
         name_simp=name_simp,
+        givenname=(body.givenname or "").strip(),
+        surname=(body.surname or "").strip(),
         division_id=body.division_id,
+        gender=(body.gender or "").strip(),
         phone=(body.phone or "").strip(),
+        email=(body.email or "").strip(),
+        address=(body.address or "").strip(),
         is_active=body.is_active,
     )
     db.add(member)
@@ -288,16 +306,21 @@ def update_member(
         if dup is not None:
             raise HTTPException(status_code=409, detail=f"會員卡號 {member_no} 已存在")
         member.member_no = member_no
-    if "name_trad" in data and data["name_trad"]:
-        name_trad, name_simp = _normalize_name(data["name_trad"].strip())
+    # 姓名同步：帶了任一邊中文姓名就重新配對（繁簡一致）
+    if ("name_trad" in data and data["name_trad"]) or ("name_simp" in data and data["name_simp"]):
+        name_trad, name_simp = sync_name_pair(
+            (data.get("name_trad") or member.name_trad or "").strip(),
+            (data.get("name_simp") or "").strip(),
+        )
         member.name_trad = name_trad
         member.name_simp = name_simp
     if "division_id" in data and data["division_id"] is not None:
         if db.get(Division, data["division_id"]) is None:
             raise HTTPException(status_code=400, detail="分區不存在")
         member.division_id = data["division_id"]
-    if "phone" in data and data["phone"] is not None:
-        member.phone = data["phone"].strip()
+    for _f in ("givenname", "surname", "gender", "phone", "email", "address"):
+        if _f in data and data[_f] is not None:
+            setattr(member, _f, str(data[_f]).strip())
     if "is_active" in data and data["is_active"] is not None:
         member.is_active = data["is_active"]
 
@@ -416,7 +439,13 @@ def _parse_import_rows(raw: bytes, filename: str, divisions: list[Division]) -> 
         member_no = pick("member_no")
         name = pick("name")
         division_raw = pick("division")
+        name_simp_in = pick("name_simp")
+        givenname = pick("givenname")
+        surname = pick("surname")
+        gender = pick("gender")
         phone = pick("phone")
+        email = pick("email")
+        address = pick("address")
 
         if not any([member_no, name, division_raw, phone]):
             continue
@@ -424,7 +453,8 @@ def _parse_import_rows(raw: bytes, filename: str, divisions: list[Division]) -> 
         if not member_no:
             errors.append(ImportErrorItem(row=row_no, member_no=None, reason="佛光會員卡號不可為空"))
             continue
-        if not name:
+        # 中文姓名只給繁體或只給簡體都算有效（後端會同步另一邊）
+        if not name and not name_simp_in:
             errors.append(ImportErrorItem(row=row_no, member_no=member_no, reason="姓名不可為空"))
             continue
         if not division_raw:
@@ -445,8 +475,14 @@ def _parse_import_rows(raw: bytes, filename: str, divisions: list[Division]) -> 
                 "row": row_no,
                 "member_no": member_no,
                 "name": name,
+                "name_simp": name_simp_in,
+                "givenname": givenname,
+                "surname": surname,
                 "division_id": division_id,
+                "gender": gender,
                 "phone": phone,
+                "email": email,
+                "address": address,
             }
         )
 
@@ -496,14 +532,20 @@ async def import_members(
         db.flush()
 
     for r in pending:
-        name_trad, name_simp = _normalize_name(r["name"])
+        # 姓名同步：只給繁或只給簡都會補出另一邊
+        name_trad, name_simp = sync_name_pair(r["name"], r.get("name_simp", ""))
         db.add(
             Member(
                 member_no=r["member_no"],
                 name_trad=name_trad,
                 name_simp=name_simp,
+                givenname=r.get("givenname", ""),
+                surname=r.get("surname", ""),
                 division_id=r["division_id"],
-                phone=r["phone"],
+                gender=r.get("gender", ""),
+                phone=r.get("phone", ""),
+                email=r.get("email", ""),
+                address=r.get("address", ""),
                 is_active=True,
             )
         )

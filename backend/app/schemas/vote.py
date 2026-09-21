@@ -15,7 +15,11 @@ class ConfirmRequest(BaseModel):
 
 
 class VoterInfo(BaseModel):
-    name: str
+    name: str  # 繁體姓名（相容既有前端）
+    name_trad: str = ""
+    name_simp: str = ""
+    givenname: str = ""
+    surname: str = ""
     member_no: str
     division_id: int
     division_name: str
@@ -23,6 +27,11 @@ class VoterInfo(BaseModel):
     proxy_voter_name: str | None = None
     proxy_name: str | None = None
     proxy_member_no: str | None = None
+    # 代投人姓名的繁／簡／英（顯示時依語言挑選）
+    proxy_name_trad: str = ""
+    proxy_name_simp: str = ""
+    proxy_givenname: str = ""
+    proxy_surname: str = ""
 
 
 class ConfirmResponse(BaseModel):
@@ -35,6 +44,10 @@ class ConfirmResponse(BaseModel):
     voted_candidate_ids: list[int] = []
     voted_by_proxy: bool = False
     voted_proxy_name: str = ""
+    voted_proxy_name_trad: str = ""
+    voted_proxy_name_simp: str = ""
+    voted_proxy_givenname: str = ""
+    voted_proxy_surname: str = ""
     voter: VoterInfo
 
 
@@ -59,8 +72,16 @@ class SubmitVoteResponse(BaseModel):
 class CandidateOut(BaseModel):
     id: int
     division_id: int
-    name: str
+    name: str  # 繁體姓名
+    name_simp: str = ""
+    givenname: str = ""
+    surname: str = ""
     name_en: str | None = None
+    member_no: str = ""
+    gender: str = ""
+    education: str = ""
+    occupation: str = ""
+    volunteer_group: str = ""
     position: str
     avatar_url: str | None = None
     description: str
@@ -120,7 +141,11 @@ class ResultsResponse(BaseModel):
 # --- 前端對齊型別（DivisionResult 嵌套型） ---
 class FrontendCandidateResult(BaseModel):
     candidate_id: int
-    name: str
+    name: str  # 繁體姓名
+    name_simp: str = ""
+    givenname: str = ""
+    surname: str = ""
+    name_en: str = ""
     votes: int
     is_leading: bool = False
 

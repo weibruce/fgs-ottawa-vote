@@ -23,19 +23,33 @@ export interface Division {
 export interface Candidate {
   id: number
   division_id: number
-  name: string              // 中文名
-  name_en: string | null    // 英文名
+  name: string              // 中文名（繁體）
+  /** 姓名三態：顯示時用 pickName(lang, candidate) 依偏好語言挑選 */
+  name_simp?: string | null
+  name_en: string | null    // 英文全名
+  givenname?: string | null
+  surname?: string | null
+  member_no?: string | null // 佛光會員卡號
+  gender?: string | null
   position: string          // 職位（後端 title 欄位）
   avatar_url: string | null
   description: string       // 競選理念
   slogan: string | null     // 候選人宣言
   term_count: number        // 現任屆數
   sort_order: number
+  education?: string | null
+  occupation?: string | null
+  volunteer_group?: string | null
 }
 
 /** 投票人資訊（confirm 回傳） */
 export interface VoterInfo {
   name: string
+  /** 姓名（繁／簡／英文）— 顯示時用 pickName() 依語言挑選 */
+  name_trad?: string | null
+  name_simp?: string | null
+  givenname?: string | null
+  surname?: string | null
   member_no: string
   division_id: number
   division_name: string
@@ -43,6 +57,10 @@ export interface VoterInfo {
   /** 代投人（後端已驗證姓名＋卡號） */
   proxy_name: string | null
   proxy_member_no: string | null
+  proxy_name_trad?: string
+  proxy_name_simp?: string
+  proxy_givenname?: string
+  proxy_surname?: string
 }
 
 /** 身份確認請求（對齊後端 ConfirmRequest） */
@@ -66,6 +84,10 @@ export interface ConfirmResponse {
   /** 該票是否由他人代投；是的話帶代投人姓名 */
   voted_by_proxy?: boolean
   voted_proxy_name?: string
+  voted_proxy_name_trad?: string
+  voted_proxy_name_simp?: string
+  voted_proxy_givenname?: string
+  voted_proxy_surname?: string
   voter: VoterInfo
 }
 
@@ -91,6 +113,11 @@ export interface DivisionCandidates {
 export interface CandidateResult {
   candidate_id: number
   name: string
+  /** 姓名三態（結果頁依語言顯示） */
+  name_simp?: string | null
+  name_en?: string | null
+  givenname?: string | null
+  surname?: string | null
   votes: number
   is_leading: boolean
 }

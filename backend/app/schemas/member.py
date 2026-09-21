@@ -6,17 +6,30 @@ from pydantic import BaseModel, Field
 
 class MemberCreate(BaseModel):
     member_no: str = Field(..., min_length=1, max_length=64, description="佛光會員卡號")
-    name_trad: str = Field(..., min_length=1, max_length=128, description="姓名（繁體）")
+    # 中文只給一邊即可（name_simp 未給時由 name_trad 自動轉出，反之亦然）
+    name_trad: str = Field("", max_length=128, description="姓名（繁）；留空時由簡體轉出")
+    name_simp: str = Field("", max_length=128, description="姓名（簡）；留空時由繁體轉出")
+    givenname: str = Field("", max_length=128)
+    surname: str = Field("", max_length=128)
     division_id: int = Field(..., description="所屬分區 ID")
-    phone: str = Field("", max_length=32)
+    gender: str = Field("", max_length=16, description="性別")
+    phone: str = Field("", max_length=32, description="手機號")
+    email: str = Field("", max_length=254)
+    address: str = Field("", max_length=512)
     is_active: bool = True
 
 
 class MemberUpdate(BaseModel):
     member_no: str | None = Field(None, min_length=1, max_length=64)
-    name_trad: str | None = Field(None, min_length=1, max_length=128)
+    name_trad: str | None = Field(None, max_length=128)
+    name_simp: str | None = Field(None, max_length=128)
+    givenname: str | None = Field(None, max_length=128)
+    surname: str | None = Field(None, max_length=128)
     division_id: int | None = None
+    gender: str | None = Field(None, max_length=16)
     phone: str | None = Field(None, max_length=32)
+    email: str | None = Field(None, max_length=254)
+    address: str | None = Field(None, max_length=512)
     is_active: bool | None = None
 
 
@@ -25,9 +38,14 @@ class MemberOut(BaseModel):
     member_no: str
     name_trad: str
     name_simp: str
+    givenname: str = ""
+    surname: str = ""
     division_id: int
     division_name: str = ""
+    gender: str = ""
     phone: str = ""
+    email: str = ""
+    address: str = ""
     is_active: bool = True
     has_voted: bool = False
     voted_at: datetime | None = None

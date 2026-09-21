@@ -27,7 +27,7 @@ export function ChoosePage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const { session, save } = useVoteStore()
-  const { t, translateError, roundShort } = useI18n()
+  const { t, translateError, roundShort, nameOf } = useI18n()
 
   // 唯讀模式：已投票後從「查看投票」進入（第 8 點）
   const isView = params.get('view') === '1'
@@ -185,7 +185,10 @@ export function ChoosePage() {
   const roundLabel = roundShort(roundInfo.name, roundInfo.roundNo)
   const divisionName = data?.division.name ?? session.voter.division_name
   const selectedNames = selected
-    .map((id) => candidates.find((c) => c.id === id)?.name)
+    .map((id) => {
+      const c = candidates.find((x) => x.id === id)
+      return c ? nameOf(c) : undefined
+    })
     .filter(Boolean)
     .join('、')
 
@@ -204,7 +207,7 @@ export function ChoosePage() {
 
         {/* ── 副標：投票人 + 卡號（12px 灰；設計稿實測這行比簡報所述 14px 小一級） ── */}
         <p className="mt-[3px] text-[12px] leading-[18px] text-gray">
-          {t('choose.voterLine', { name: session.voter.name, no: session.voter.member_no })}
+          {t('choose.voterLine', { name: nameOf(session.voter), no: session.voter.member_no })}
         </p>
 
         <div className="mt-[12px] border-t border-border" />
