@@ -101,7 +101,7 @@ export function VerifyPage() {
   return (
     <VoteShell>
       {/* ── 表單卡（頁首三行已移除；卡片直接從頂端開始） ── */}
-      <section className="vote-card-body px-[22px] pt-[34px] pb-[30px]">
+      <section className="vote-card-body px-[22px] pt-[40px] pb-[36px]">
         <div className="flex flex-col items-center">
           {/* logo 與組織名同一行，整組置中 */}
           <div className="flex items-center gap-[12px]">
@@ -116,18 +116,18 @@ export function VerifyPage() {
               {t('app.orgLine2')}
             </p>
           </div>
-          <h2 className="mt-[14px] font-serif text-[16px] font-bold leading-[20px] text-ink">
+          <h2 className="mt-[22px] font-serif text-[16px] font-bold leading-[20px] text-ink">
             {t('verify.heading')}
           </h2>
         </div>
 
-        <div className="mt-[4px] border-t border-border" />
+        <div className="mt-[8px] border-t border-border" />
 
-        <p className="mt-[4px] text-center text-[14px] leading-[20px] text-gray">
+        <p className="mt-[8px] text-center text-[14px] leading-[20px] text-gray">
           {t('verify.intro')}
         </p>
 
-        <div className="mt-[34px] space-y-[15px]">
+        <div className="mt-[40px] space-y-[22px]">
           <Field label={t('verify.nameLabel')} required htmlFor="voter-name">
             <TextInput
               id="voter-name"
@@ -163,12 +163,12 @@ export function VerifyPage() {
           type="button"
           onClick={handleSubmit}
           disabled={loading}
-          className="vote-btn mt-[16px]"
+          className="vote-btn mt-[28px]"
         >
           {loading ? t('common.confirming') : t('verify.submit')}
         </button>
 
-        <p className="mt-[22px] text-center text-[12px] leading-[18px] text-gray">
+        <p className="mt-[28px] text-center text-[12px] leading-[18px] text-gray">
           {t('verify.footer')}
         </p>
       </section>

@@ -207,6 +207,15 @@ export function ProxyPage() {
         >
           {loading ? t('common.submitting') : t('proxy.submit')}
         </button>
+
+        {/* ── 返回（次要按鈕，回核驗完成頁） ── */}
+        <button
+          type="button"
+          onClick={() => navigate('/vote/confirmed')}
+          className="mt-[12px] flex h-[46px] w-full items-center justify-center rounded-[10px] border border-gold text-[15px] font-bold text-ink"
+        >
+          {t('common.back')}
+        </button>
       </section>
 
       {/* ── 代投核對 popup（第 1 行＝當前會員；第 2 行＝被代投者） ── */}

@@ -9,7 +9,12 @@
  *       POST /votes/submit                                 → 成功更新 session 並導向 /vote/done
  *
  * 唯讀模式（第 8 點）：`?view=1` → 標題用 view.heading、卡片預選 session.voted_candidate_ids
- *   且不可切換、隱藏「確認投票」改顯示 view.note + 「返回」（→ /vote/confirmed），不呼叫 submit。
+ *   且不可切換、隱藏「確認投票」改顯示 view.note，不呼叫 submit。
+ *   唯讀模式必須繞過投票視窗閘門（否則投票結束後進不到本頁）。
+ *   底部按鈕依來源區分：
+ *     - `?view=1&from=done`（DonePage 的「返回查看投票」）→「查看最終投票結果」
+ *       （進程已結束才可點 → /vote/results?division=…；未結束 disabled + view.finalResultLocked）
+ *     - 其他來源 →「返回」（→ /vote/confirmed）
  */
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
@@ -18,7 +23,7 @@ import { VoteShell } from '../components/VoteShell'
 import { CandidateCard } from '../components/CandidateCard'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { ErrorBanner } from '../components/ErrorBanner'
-import { getActiveRound, getDivisionCandidates, submitVote, messageForError } from '../api/client'
+import { getActiveRound, getDivisionCandidates, submitVote, messageForError, type RoundPublicInfo } from '../api/client'
 import { useI18n } from '../i18n'
 import { useVoteStore } from '../hooks/useVoteStore'
 import type { ApiError, DivisionCandidates } from '../types'
@@ -31,6 +36,8 @@ export function ChoosePage() {
 
   // 唯讀模式：已投票後從「查看投票」進入（第 8 點）
   const isView = params.get('view') === '1'
+  // 來源：DonePage 的「返回查看投票」會帶 from=done（第 5 節第 2 點）
+  const fromDone = params.get('from') === 'done'
 
   // 分區一律以 session 為準（query 僅作為退路）
   const divisionId = session?.voter.division_id ?? Number(params.get('division') || 0)
@@ -42,8 +49,12 @@ export function ChoosePage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
-  /** 投票視窗閘門：狀態非 active → 導到 /vote/window（第 6 點） */
-  const [windowActive, setWindowActive] = useState<boolean | null>(null)
+  /**
+   * 投票視窗閘門：狀態非 active → 導到 /vote/window（第 6 點）
+   * null = 查詢中（先照常顯示）。
+   * 唯讀模式另外用它判讀「進程是否已結束」→ 決定「查看最終投票結果」是否可點。
+   */
+  const [roundStatus, setRoundStatus] = useState<RoundPublicInfo['status'] | null>(null)
 
   // 唯讀模式預選先前投的候選人；正常模式一律從空開始（第 8 點）
   const [selected, setSelected] = useState<number[]>(() =>
@@ -55,22 +66,27 @@ export function ChoosePage() {
   const [notice, setNotice] = useState<{ kind: 'min' | 'api'; text?: string } | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  // 投票狀態（公開端點：投票視窗閘門；失敗時不擋）
+  // 投票狀態（公開端點：投票視窗閘門 + 唯讀最終結果解鎖；失敗時不擋）
   useEffect(() => {
     let alive = true
-    getActiveRound()
-      .then((res) => {
-        if (!alive) return
-        setWindowActive(res.data.status === 'active')
-      })
-      .catch(() => {
-        /* 閘門非關鍵，遇錯誤不擋（後續 API 自會報錯） */
-        if (alive) setWindowActive(true)
-      })
+    const load = () => {
+      getActiveRound()
+        .then((res) => {
+          if (alive) setRoundStatus(res.data.status)
+        })
+        .catch(() => {
+          /* 閘門非關鍵，遇錯誤不擋（後續 API 自會報錯） */
+          if (alive) setRoundStatus((prev) => prev ?? 'active')
+        })
+    }
+    load()
+    // 唯讀模式持續輪詢：投票結束後「查看最終投票結果」需跟著更新為可點
+    const timer = isView ? setInterval(load, 5000) : null
     return () => {
       alive = false
+      if (timer !== null) clearInterval(timer)
     }
-  }, [])
+  }, [isView])
 
   // 候選人名單
   useEffect(() => {
@@ -180,7 +196,12 @@ export function ChoosePage() {
   // 無 session → 回身份驗證
   if (!session) return <Navigate to="/vote/verify" replace />
   // 狀態非 active → 轉往投票視窗狀態頁（第 6 點閘門）
-  if (windowActive === false) return <Navigate to="/vote/window" replace />
+  // 唯讀模式必須繞過閘門：投票結束後仍要能進來看最終結果（第 5 節第 3 點）
+  if (!isView && roundStatus !== null && roundStatus !== 'active')
+    return <Navigate to="/vote/window" replace />
+
+  // 進程是否已結束（closed/locked）→ 僅唯讀的「查看最終投票結果」依此啟用
+  const votingClosed = roundStatus === 'closed' || roundStatus === 'locked'
 
   const divisionName = data?.division.name ?? session.voter.division_name
   const selectedNames = selected
@@ -277,15 +298,33 @@ export function ChoosePage() {
           {isView ? t('view.note') : t('choose.footer', { min: minVotes, max: maxVotes })}
         </p>
 
-        {/* ── 主按鈕：正常＝確認投票；唯讀＝返回（第 8 點） ── */}
+        {/* ── 主按鈕：正常＝確認投票；唯讀＝依來源顯示返回或查看最終結果（第 8 點／第 5 節） ── */}
         {isView ? (
-          <button
-            type="button"
-            onClick={() => navigate('/vote/confirmed')}
-            className="vote-btn mt-[16px]"
-          >
-            {t('view.back')}
-          </button>
+          fromDone ? (
+            <>
+              <button
+                type="button"
+                onClick={() => navigate(`/vote/results?division=${divisionId}`)}
+                disabled={!votingClosed}
+                className="vote-btn mt-[16px]"
+              >
+                {t('view.finalResult')}
+              </button>
+              {!votingClosed && (
+                <p className="mt-[10px] text-center text-[12px] leading-[18px] text-gray">
+                  {t('view.finalResultLocked')}
+                </p>
+              )}
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate('/vote/confirmed')}
+              className="vote-btn mt-[16px]"
+            >
+              {t('view.back')}
+            </button>
+          )
         ) : (
           <button type="button" onClick={handleConfirmClick} disabled={submitting} className="vote-btn mt-[16px]">
             {t('choose.submit')}

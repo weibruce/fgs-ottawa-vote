@@ -2,7 +2,7 @@
  * DonePage（/vote/done）— 第 11 點
  *
  * 投票送出成功後的完成頁：置中金圈圖示 + 主紅勾（與 ConfirmedPage 同款式）、
- * done.title 文案，以及整行按鈕 done.back（「返回查看投票」）→ /vote/choose?view=1。
+ * done.title 文案，以及整行按鈕 done.back（「返回查看投票」）→ /vote/choose?view=1&from=done。
  * 無 session → 回 /vote/verify。
  */
 import { Navigate, useNavigate } from 'react-router-dom'
@@ -45,7 +45,7 @@ export function DonePage() {
         {/* ── 返回查看投票（唯讀） ── */}
         <button
           type="button"
-          onClick={() => navigate('/vote/choose?view=1')}
+          onClick={() => navigate('/vote/choose?view=1&from=done')}
           className="vote-btn mt-[30px]"
         >
           {t('done.back')}

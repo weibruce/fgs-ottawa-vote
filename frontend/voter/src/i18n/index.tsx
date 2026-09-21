@@ -50,6 +50,9 @@ const zhHant: Dict = {
   'common.people': '{voted} / {total} 人',
   'common.votes': '{n} 票',
   'common.langLabel': '語言',
+  'common.back': '返回',
+  'view.finalResult': '查看最終投票結果',
+  'view.finalResultLocked': '投票結束後即可查看最終結果',
 
   // ── 品牌 ──
   'app.logoAlt': '國際佛光會',
@@ -221,6 +224,9 @@ const zhHans: Dict = {
   'common.people': '{voted} / {total} 人',
   'common.votes': '{n} 票',
   'common.langLabel': '语言',
+  'common.back': '返回',
+  'view.finalResult': '查看最终投票结果',
+  'view.finalResultLocked': '投票结束后即可查看最终结果',
 
   'app.logoAlt': '国际佛光会',
   'app.orgLine1': '2026 国际佛光会渥太华协会',
@@ -381,6 +387,9 @@ const en: Dict = {
   'common.people': '{voted} / {total} people',
   'common.votes': '{n} votes',
   'common.langLabel': 'Language',
+  'common.back': 'Back',
+  'view.finalResult': 'View final results',
+  'view.finalResultLocked': 'Final results are available after voting closes',
 
   'app.logoAlt': 'BLIA',
   'app.orgLine1': '2026 BLIA Ottawa Chapter',

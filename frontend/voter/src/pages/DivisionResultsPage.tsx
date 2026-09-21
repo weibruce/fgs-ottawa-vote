@@ -17,6 +17,7 @@ import { VoteShell } from '../components/VoteShell'
 import { ErrorBanner } from '../components/ErrorBanner'
 import {
   getActiveRound,
+  getDivisionCandidates,
   getDivisionResults,
   messageForError,
   type RoundPublicInfo,
@@ -41,29 +42,110 @@ function Bar({ ratio, tone = 'gold' }: { ratio: number; tone?: 'primary' | 'gold
   )
 }
 
-/** 最高票列（淡金底圓角框 + 淡金邊框 + 「目前最高票」） */
-function LeadingRow({
+/** 名次色：第一名紅、第二名灰（小花與 No1／No2 同色） */
+const RANK1_COLOR = '#C41E25'
+const RANK2_COLOR = '#A59F94'
+
+/** 名次小花（純 SVG 自繪，六瓣；無外部依賴） */
+function RankFlower({ size = 15, color }: { size?: number; color: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      className="shrink-0"
+      aria-hidden="true"
+    >
+      {[0, 60, 120, 180, 240, 300].map((deg) => {
+        const rad = (deg * Math.PI) / 180
+        return (
+          <circle
+            key={deg}
+            cx={12 + Math.cos(rad) * 5.4}
+            cy={12 + Math.sin(rad) * 5.4}
+            r="3.7"
+            fill={color}
+          />
+        )
+      })}
+      <circle cx="12" cy="12" r="3.2" fill="var(--color-card)" />
+    </svg>
+  )
+}
+
+/** 頭像：有照片用照片（金框），載入失敗或無資料則退回姓氏圓形（投票端既有模式） */
+function RankAvatar({
+  src,
+  name,
+  size = 54,
+}: {
+  src: string | null | undefined
+  name: string
+  size?: number
+}) {
+  const [failed, setFailed] = useState(false)
+  const showPhoto = Boolean(src) && !failed
+  const surname = name.trim().charAt(0) || '—'
+  return (
+    <span
+      className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full ${
+        showPhoto ? 'border-[1.5px] border-gold' : 'bg-avatar'
+      }`}
+      style={{ width: size, height: size }}
+    >
+      {showPhoto ? (
+        <img
+          src={src as string}
+          alt={name}
+          className="h-full w-full rounded-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span className="font-serif text-[20px] font-bold leading-none text-primary">
+          {surname}
+        </span>
+      )}
+    </span>
+  )
+}
+
+/**
+ * 第 1／2 名（並排、各佔一半寬度）：只有照片、姓名、票數，外加同色小花 + No1／No2，
+ * 沒有得票 bar。視覺沿用投票端（panel-soft 淡米底、金框、主紅票數）。
+ */
+function TopCandidateCard({
+  rank,
   name,
   votes,
-  ratio,
+  avatarUrl,
 }: {
+  rank: 1 | 2
   name: string
   votes: number
-  ratio: number
+  avatarUrl: string | null | undefined
 }) {
   const { t } = useI18n()
+  const badgeColor = rank === 1 ? RANK1_COLOR : RANK2_COLOR
   return (
-    <div className="rounded-[12px] border border-gold-light bg-panel-soft px-[13px] pt-[12px] pb-[10px]">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[17px] leading-[24px] font-bold text-ink">{name}</span>
-        <span className="shrink-0 text-[17px] leading-[24px] font-bold text-primary">
-          {t('common.votes', { n: votes })}
+    <div
+      data-top-candidate={rank}
+      className="flex min-w-0 flex-col items-center rounded-[12px] border border-gold-light bg-panel-soft px-[6px] pt-[15px] pb-[14px]"
+    >
+      <RankAvatar src={avatarUrl} name={name} />
+      <div className="mt-[9px] flex w-full min-w-0 items-center justify-center gap-[2px]">
+        <span className="truncate text-[14px] leading-[19px] font-bold text-ink">{name}</span>
+        <span
+          className="inline-flex shrink-0 items-center gap-[2px]"
+          style={{ color: badgeColor }}
+        >
+          <RankFlower size={14} color={badgeColor} />
+          <span className="text-[11px] leading-none font-bold">No{rank}</span>
         </span>
       </div>
-      <div className="mt-[6px]">
-        <Bar ratio={ratio} tone="primary" />
-      </div>
-      <p className="mt-[8px] text-[12px] leading-[16px] text-gold">{t('results.leading')}</p>
+      <p className="mt-[7px] font-serif text-[20px] leading-[24px] font-bold text-primary">
+        {t('common.votes', { n: votes })}
+      </p>
     </div>
   )
 }
@@ -142,9 +224,30 @@ export function DivisionResultsPage() {
   const maxVotes = results.reduce((m, r) => Math.max(m, r.votes), 0)
   const turnout = total > 0 ? (voted / total) * 100 : 0
 
-  // 最高票列（平票時只框第一位，其餘照票數排序顯示）
-  const firstLeading = results.findIndex((r) => r.is_leading)
-  const leadingIndex = firstLeading >= 0 ? firstLeading : 0
+  // 結果 API 沒有頭像欄位 → 由同分區候選人名單補 id → avatar_url 對照（抓不到就退回姓氏圓形）
+  const [avatars, setAvatars] = useState<Record<number, string | null>>({})
+  useEffect(() => {
+    if (!ready) return
+    let alive = true
+    getDivisionCandidates(roundId as number, divisionId)
+      .then((res) => {
+        if (!alive) return
+        const map: Record<number, string | null> = {}
+        for (const c of res.data.candidates) map[c.id] = c.avatar_url
+        setAvatars(map)
+      })
+      .catch(() => {
+        /* 照片補不到不影響票數顯示，維持姓氏圓形 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [ready, roundId, divisionId])
+
+  // 前兩名：依票數高→低取前兩位（平票仍並列）；其餘（第 3–N 位）維持原順序與原樣式
+  const topTwo = [...results].sort((a, b) => b.votes - a.votes).slice(0, 2)
+  const topIds = new Set(topTwo.map((r) => r.candidate_id))
+  const rest = results.filter((r) => !topIds.has(r.candidate_id))
 
   const divisionName =
     data?.division.name ||
@@ -195,22 +298,28 @@ export function DivisionResultsPage() {
               </p>
             </div>
 
-            {/* ── 候選人得票列（領先列前後間距 19px，其餘列間 23px） ── */}
-            {results.map((r, i) => {
-              const gap =
-                i === 0
-                  ? 'mt-[18px]'
-                  : i === leadingIndex || i - 1 === leadingIndex
-                    ? 'mt-[19px]'
-                    : 'mt-[23px]'
+            {/* ── 前兩名並排、各佔一半寬度（只有照片、姓名、票數 + 小花 No1／No2，無 bar） ── */}
+            {topTwo.length > 0 && (
+              <div className="mt-[18px] grid grid-cols-2 gap-[12px]">
+                {topTwo.map((r, i) => (
+                  <div key={r.candidate_id} className={topTwo.length === 1 ? 'col-span-2' : ''}>
+                    <TopCandidateCard
+                      rank={i === 0 ? 1 : 2}
+                      name={nameOf(r)}
+                      votes={r.votes}
+                      avatarUrl={avatars[r.candidate_id]}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── 第三名之後（第 3–N 位）：維持原本樣式（含得票 bar 與排列） ── */}
+            {rest.map((r) => {
               const ratio = maxVotes > 0 ? r.votes / maxVotes : 0
               return (
-                <div key={r.candidate_id} className={gap}>
-                  {i === leadingIndex ? (
-                    <LeadingRow name={nameOf(r)} votes={r.votes} ratio={ratio} />
-                  ) : (
-                    <ResultRow name={nameOf(r)} votes={r.votes} ratio={ratio} />
-                  )}
+                <div key={r.candidate_id} className="mt-[23px]" data-rest-row>
+                  <ResultRow name={nameOf(r)} votes={r.votes} ratio={ratio} />
                 </div>
               )
             })}
