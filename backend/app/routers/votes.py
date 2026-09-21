@@ -4,11 +4,17 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.schemas.vote import (
-    ConfirmRequest, ConfirmResponse,
-    SubmitVoteRequest, SubmitVoteResponse,
-    ResultsResponse, DivisionCandidates,
-    FrontendDivisionResult, OverviewResult,
+    ConfirmRequest,
+    ConfirmResponse,
+    DivisionCandidates,
+    FrontendDivisionResult,
+    OverviewResult,
+    ProfileOut,
+    ProfileUpdateRequest,
+    ResultsResponse,
     RoundInfoOut,
+    SubmitVoteRequest,
+    SubmitVoteResponse,
 )
 from app.services import vote_service
 from app.models.round_ import Round
@@ -160,3 +166,19 @@ def get_division_candidates(
     前端投票頁用
     """
     return vote_service.get_division_candidates(db, round_id, division_id)
+
+
+@router.patch("/profile", response_model=ProfileOut)
+def patch_profile(body: ProfileUpdateRequest, db: Session = Depends(get_db)):
+    """
+    更新本人聯絡資料（性別／手機號／Email／地址）。
+    以 voter_token 驗身；姓名、卡號、所屬分區不可變更。
+    """
+    return vote_service.update_profile(
+        db,
+        body.voter_token,
+        gender=body.gender,
+        phone=body.phone,
+        email=body.email,
+        address=body.address,
+    )

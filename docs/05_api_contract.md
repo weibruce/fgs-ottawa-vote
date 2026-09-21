@@ -507,3 +507,29 @@ Email、地址、已投票、投票時間、狀態`
 | `chair_candidate_id` | 會長（FK candidates，可空＝由票數自動推導） |
 | `vice_candidate_id` | 副會長（FK candidates，可空） |
 | `officers_manual` | 是否為手動指派（true 時忽略自動推導） |
+
+---
+
+## 15. 投票端：更新本人聯絡資料
+
+| 方法 | 路徑 | 說明 |
+|------|------|------|
+| PATCH | `/votes/profile` | 投票人更新**自己的**聯絡資料 |
+
+```jsonc
+// request
+{ "voter_token": "<JWT>", "gender": "女", "phone": "0912-000-111",
+  "email": "me@example.com", "address": "渥太華市…" }
+
+// 200
+{ "member_no": "BGS-2024-0006", "name_trad": "鄭品妤", "name_simp": "郑品妤",
+  "givenname": "Henry", "surname": "Cheng",
+  "division_id": 61, "division_name": "東區分會",
+  "gender": "女", "phone": "0912-000-111", "email": "me@example.com", "address": "…" }
+```
+
+**只允許修改** `gender` / `phone` / `email` / `address` 四個欄位。
+姓名、佛光會員卡號、所屬分會屬身分識別欄位，**不可**由本端點變更。
+驗身方式與 `/votes/submit` 相同（`voter_token`）；憑證無效或過期回 `401`。
+
+對應頁面：投票端「個人資料更新」（`/vote/edit`）——上方三列唯讀、下方四個欄位可編輯。

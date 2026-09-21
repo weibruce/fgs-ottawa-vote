@@ -10,12 +10,16 @@
  *   資訊框 y268–420（1px #E3D8C2 框、圓角 12、內距 x14 / pt36 pb34、列距 33）、
  *   按鈕 y440–487（h48）、卡片 pt75 / pb76。
  *
- * 本批（第 1、5、8 點）：
- *   5. 資訊框移除「代理投票」列（只留會員卡號、所屬分區）。
- *   1. 四顆按鈕（開始投票／查看投票／修改資料／代他人投票）外觀統一，
- *      以 2×2 grid 排列；「開始投票」不再使用整行主色實心按鈕。
- *   8. 依 session.already_voted 決定「開始投票／查看投票」誰可點；已投票時於按鈕上方
- *      顯示 confirmed.votedNote，若 voted_by_proxy 再顯示 confirmed.votedByProxyNote。
+ * 本批（VOTE7 第 2、3 點）：
+ *   資訊框只留會員卡號、所屬分區（第 5 點既有）。
+ *   四顆按鈕全部改用 .vote-btn，以 2×2 grid 排列，順序為：
+ *     ① 開始投票／查看我的投票（依 session.already_voted 切換文案與目的地：
+ *        未投票 → /vote/choose；已投票 → /vote/choose?view=1 唯讀查看）
+ *     ② 查看候選人信息 → /vote/candidates
+ *     ③ 個人資料更新 → /vote/edit
+ *     ④ 委託票 → /vote/proxy
+ *   已投票時於按鈕上方顯示 confirmed.votedNote，若 voted_by_proxy 再顯示
+ *   confirmed.votedByProxyNote。
  *
  * 保留：voter.is_proxy 的代投提示框、投票視窗閘門、i18n。
  */
@@ -25,14 +29,6 @@ import { VoteShell } from '../components/VoteShell'
 import { useVoteStore } from '../hooks/useVoteStore'
 import { useI18n } from '../i18n'
 import { getActiveRound } from '../api/client'
-
-/**
- * 四顆動作按鈕的共用樣式（金框、深墨字）。
- * 第 1 點：四顆外觀完全一致（同高 46、同圓角 10、同字級 15、同字重、同寬 grid 欄），
- * 不再有「一顆實心主按鈕 + 三顆描邊」的分別；disabled 以淡化 + 禁用游標呈現。
- */
-const ACTION_BTN =
-  'flex h-[46px] min-w-0 items-center justify-center rounded-[10px] border border-gold bg-transparent px-[6px] text-center text-[15px] font-bold leading-[18px] text-ink transition-colors hover:bg-gold-pale/30 disabled:cursor-not-allowed disabled:opacity-40'
 
 export function ConfirmedPage() {
   const navigate = useNavigate()
@@ -138,30 +134,27 @@ export function ConfirmedPage() {
           </div>
         )}
 
-        {/* ── 四顆動作按鈕：2×2 grid、外觀統一（第 1、6、8 點） ── */}
-        {/* 第 1 列：開始投票（未投票可點）／查看投票（已投票可點，唯讀） */}
-        {/* 第 2 列：修改資料／代他人投票 */}
+        {/* ── 四顆動作按鈕：2×2 grid、全部沿用 .vote-btn（第 2、3 點） ── */}
+        {/* 順序：① 開始投票／查看我的投票（依 already_voted）② 查看候選人信息 ③ 個人資料更新 ④ 委託票 */}
         <div className="mt-[19px] grid grid-cols-2 gap-[10px]">
           <button
             type="button"
-            onClick={() => navigate('/vote/choose')}
-            disabled={alreadyVoted}
-            className={ACTION_BTN}
+            onClick={() => navigate(alreadyVoted ? '/vote/choose?view=1' : '/vote/choose')}
+            className="vote-btn"
           >
-            {t('confirmed.startVote')}
+            {alreadyVoted ? t('confirmed.viewVote') : t('confirmed.startVote')}
           </button>
           <button
             type="button"
-            onClick={() => navigate('/vote/choose?view=1')}
-            disabled={!alreadyVoted}
-            className={ACTION_BTN}
+            onClick={() => navigate('/vote/candidates')}
+            className="vote-btn"
           >
-            {t('confirmed.viewVote')}
+            {t('confirmed.viewCandidates')}
           </button>
-          <button type="button" onClick={() => navigate('/vote/edit')} className={ACTION_BTN}>
+          <button type="button" onClick={() => navigate('/vote/edit')} className="vote-btn">
             {t('confirmed.editData')}
           </button>
-          <button type="button" onClick={() => navigate('/vote/proxy')} className={ACTION_BTN}>
+          <button type="button" onClick={() => navigate('/vote/proxy')} className="vote-btn">
             {t('confirmed.proxyVote')}
           </button>
         </div>

@@ -10,6 +10,7 @@ import { ProxyPage } from './pages/ProxyPage'
 import { DonePage } from './pages/DonePage'
 import { ConfirmedPage } from './pages/ConfirmedPage'
 import { ChoosePage } from './pages/ChoosePage'
+import { ViewCandidatesPage } from './pages/ViewCandidatesPage'
 import { CandidateDetailPage } from './pages/CandidateDetailPage'
 import { DivisionResultsPage } from './pages/DivisionResultsPage'
 import { ScreenOverview } from './pages/ScreenOverview'
@@ -27,6 +28,8 @@ export function AppRouter() {
         <Route path="/vote/window" element={<VoteWindowPage />} />
         <Route path="/vote/confirmed" element={<ConfirmedPage />} />
         <Route path="/vote/choose" element={<ChoosePage />} />
+        {/* 查看候選人信息（第 6 點）：唯讀瀏覽，不可選取 */}
+        <Route path="/vote/candidates" element={<ViewCandidatesPage />} />
         <Route path="/vote/candidate/:id" element={<CandidateDetailPage />} />
         {/* 完成投票後（第 11 點）：顯示「請等待分會投票結束」+ 返回查看投票 */}
         <Route path="/vote/done" element={<DonePage />} />

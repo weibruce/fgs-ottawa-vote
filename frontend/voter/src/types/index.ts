@@ -61,6 +61,11 @@ export interface VoterInfo {
   proxy_name_simp?: string
   proxy_givenname?: string
   proxy_surname?: string
+  /** 聯絡資料（PATCH /votes/profile 可更新；confirm 未必回傳，故選用） */
+  gender?: string | null
+  phone?: string | null
+  email?: string | null
+  address?: string | null
 }
 
 /** 身份確認請求（對齊後端 ConfirmRequest） */

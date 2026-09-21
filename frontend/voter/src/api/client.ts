@@ -120,6 +120,38 @@ export function getDivisionResults(roundId: number, divisionId: number) {
   })
 }
 
+/** 更新本人聯絡資料回傳（PATCH /votes/profile，對齊後端 ProfileOut） */
+export interface ProfileOut {
+  member_no: string
+  name_trad: string
+  name_simp: string
+  givenname: string
+  surname: string
+  division_id: number
+  division_name: string
+  gender: string
+  phone: string
+  email: string
+  address: string
+}
+
+/** 更新本人聯絡資料（PATCH /votes/profile）— 只允許性別／手機號／Email／地址 */
+export function updateProfile(req: {
+  voter_token: string
+  gender: string
+  phone: string
+  email: string
+  address: string
+}) {
+  return api.patch<ProfileOut>('/profile', {
+    voter_token: req.voter_token,
+    gender: req.gender,
+    phone: req.phone,
+    email: req.email,
+    address: req.address,
+  })
+}
+
 /** 五區彙總結果（GET /votes/results?round_id） */
 export function getOverviewResults(roundId: number) {
   return api.get<import('../types').OverviewResult>('/results', {

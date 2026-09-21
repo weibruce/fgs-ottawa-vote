@@ -153,6 +153,10 @@ def confirm_identity(
             "division_id": member.division_id,
             "division_name": division.name,
             "is_proxy": is_proxy,
+            "gender": member.gender,
+            "phone": member.phone,
+            "email": member.email,
+            "address": member.address,
             "proxy_voter_name": proxy_note if is_proxy else None,
             "proxy_name": (proxy_member.name_trad if (is_proxy and proxy_member) else None),
             "proxy_member_no": (proxy_member.member_no if (is_proxy and proxy_member) else None),
@@ -621,3 +625,46 @@ def _recount_from_pg(db: Session, round_id: int, division_id: int, cands: list[C
         pipe.execute()
     except Exception:
         pass
+
+
+# ============ 更新本人聯絡資料 ============
+def update_profile(
+    db: Session,
+    voter_token: str,
+    gender: str = "",
+    phone: str = "",
+    email: str = "",
+    address: str = "",
+) -> dict:
+    """
+    投票人更新**自己的**聯絡資料。
+    只允許改 gender / phone / email / address；
+    姓名、卡號、所屬分區一律不可由此端點變更（身分識別欄位）。
+    """
+    claims = _verify_voter_token(voter_token)
+    member_no = claims.get("member_no")
+    member = db.query(Member).filter(Member.member_no == member_no).first()
+    if member is None:
+        raise HTTPException(status_code=404, detail="會員不存在")
+
+    member.gender = (gender or "").strip()
+    member.phone = (phone or "").strip()
+    member.email = (email or "").strip()
+    member.address = (address or "").strip()
+    db.commit()
+    db.refresh(member)
+
+    division = db.get(Division, member.division_id)
+    return {
+        "member_no": member.member_no,
+        "name_trad": member.name_trad,
+        "name_simp": member.name_simp,
+        "givenname": member.givenname,
+        "surname": member.surname,
+        "division_id": member.division_id,
+        "division_name": division.name if division else "",
+        "gender": member.gender,
+        "phone": member.phone,
+        "email": member.email,
+        "address": member.address,
+    }

@@ -1,39 +1,43 @@
 /**
- * EditProfilePage（/vote/edit）— 第 2 點
+ * EditProfilePage（/vote/edit）— VOTE7 第 4 點
  *
- * 直接顯示並修改當前 session 內保存的會員資料，**不再重新驗證身份**
- * （移除原本 POST /votes/confirm 的流程）。
+ * 版面：上面三列唯讀（會員姓名／會員卡號／所屬分會，取自 session）、
+ *       下面四個可編輯輸入框（性別 select 男／女／其他／未填、手機號、Email、地址）。
  *
- * 可取得欄位（VoterInfo，見 types/index.ts）：
- *   姓名 name、會員卡號 member_no、所屬分區 division_name（後端資料，唯讀）、
- *   代投時另有 proxy_name / proxy_member_no。
+ * 儲存 → PATCH /api/votes/profile（只允許改這四欄；姓名、卡號、所屬分區不可變更）
+ *       成功後用回傳值更新 session 的 voter，並顯示 edit.saved；
+ *       失敗用 translateError(messageForError(e)) 顯示。
  *
- * 投票端沒有「更新會員」的 API（會員 CRUD 僅管理端 /api/admin/members，需管理員 token），
- * 因此儲存＝更新前端 session（useVoteStore.save），讓後續頁面顯示修改後內容；
- * 頁面文案也明確說明這只影響本次操作顯示。之後若後端提供投票端更新端點，再改為呼叫 API。
- *
- * 無 session → /vote/verify；狀態非 active → /vote/window（與 ConfirmedPage 相同閘門）。
+ * 無 session → /vote/verify；視窗非 active → /vote/window（與 ConfirmedPage 相同閘門）。
  */
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
+import type { AxiosError } from 'axios'
 import { VoteShell } from '../components/VoteShell'
 import { Field, TextInput } from '../components/Field'
 import { ErrorBanner } from '../components/ErrorBanner'
-import { getActiveRound } from '../api/client'
+import { getActiveRound, messageForError, updateProfile } from '../api/client'
 import { useVoteStore } from '../hooks/useVoteStore'
 import { useI18n } from '../i18n'
+import type { ApiError } from '../types'
+
+/** 性別選項（後端 Member.gender 為自由字串，此處提供設計稿指定的四個選項） */
+const GENDER_OPTIONS = ['男', '女', '其他', '未填'] as const
 
 export function EditProfilePage() {
   const navigate = useNavigate()
   const { session, save } = useVoteStore()
-  const { t, nameOf } = useI18n()
+  const { t, translateError, nameOf } = useI18n()
 
-  // 表單以 session 的會員資料預填（姓名依當前語言顯示）
-  const [name, setName] = useState(() => nameOf(session?.voter))
-  const [memberNo, setMemberNo] = useState(session?.voter.member_no ?? '')
-  const [proxyName, setProxyName] = useState(session?.voter.proxy_name ?? '')
-  const [proxyMemberNo, setProxyMemberNo] = useState(session?.voter.proxy_member_no ?? '')
+  // 四個可編輯欄位（以 session 既有值預填；confirm 未回傳時為空）
+  const [gender, setGender] = useState(() => session?.voter.gender ?? '')
+  const [phone, setPhone] = useState(() => session?.voter.phone ?? '')
+  const [email, setEmail] = useState(() => session?.voter.email ?? '')
+  const [address, setAddress] = useState(() => session?.voter.address ?? '')
+
   const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   // 投票視窗閘門（與 ConfirmedPage 相同規則）：null = 查詢中，false = 非 active → /vote/window
   const [windowActive, setWindowActive] = useState<boolean | null>(null)
@@ -58,25 +62,49 @@ export function EditProfilePage() {
 
   const voter = session.voter
 
-  /** 儲存：僅更新前端 session（無投票端更新 API），再回中控頁 */
-  function handleSubmit() {
+  /** 儲存：PATCH 後端，成功以回傳值更新 session.voter */
+  async function handleSubmit() {
     if (!session) return
     setError(null)
-    if (!name.trim() || !memberNo.trim()) {
-      setError(t('verify.errNeedFields'))
-      return
+    setSaved(false)
+    setSaving(true)
+    try {
+      const res = await updateProfile({
+        voter_token: session.voter_token,
+        gender,
+        phone,
+        email,
+        address,
+      })
+      const p = res.data
+      save({
+        ...session,
+        voter: {
+          ...voter,
+          // 身分識別欄位以後端回傳為準（不可由本端點變更）
+          member_no: p.member_no || voter.member_no,
+          name_trad: p.name_trad || voter.name_trad,
+          name_simp: p.name_simp || voter.name_simp,
+          givenname: p.givenname || voter.givenname,
+          surname: p.surname || voter.surname,
+          division_id: p.division_id || voter.division_id,
+          division_name: p.division_name || voter.division_name,
+          gender: p.gender,
+          phone: p.phone,
+          email: p.email,
+          address: p.address,
+        },
+      })
+      setGender(p.gender)
+      setPhone(p.phone)
+      setEmail(p.email)
+      setAddress(p.address)
+      setSaved(true)
+    } catch (e) {
+      setError(translateError(messageForError(e as AxiosError<ApiError>)))
+    } finally {
+      setSaving(false)
     }
-    save({
-      ...session,
-      voter: {
-        ...voter,
-        name: name.trim(),
-        member_no: memberNo.trim(),
-        proxy_name: voter.is_proxy ? proxyName.trim() || null : voter.proxy_name,
-        proxy_member_no: voter.is_proxy ? proxyMemberNo.trim() || null : voter.proxy_member_no,
-      },
-    })
-    navigate('/vote/confirmed')
   }
 
   return (
@@ -88,78 +116,84 @@ export function EditProfilePage() {
 
         <div className="mt-[14px] border-t border-border" />
 
-        <p className="mt-[16px] text-center text-[14px] leading-[20px] text-gray">{t('edit.desc')}</p>
-        <p className="mt-[6px] text-center text-[12px] leading-[18px] text-gray-light">
-          {t('edit.sessionNote')}
+        <p className="mt-[16px] text-center text-[14px] leading-[20px] text-gray">
+          {t('edit.readonlyNote')}
         </p>
 
-        {/* ── 表單：會員姓名 / 會員卡號（可編輯）＋ 所屬分區（唯讀） ── */}
-        <div className="mt-[26px] space-y-[15px]">
-          <Field label={t('verify.nameLabel')} required htmlFor="edit-name">
-            <TextInput
-              id="edit-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t('verify.namePlaceholder')}
-              autoComplete="off"
-            />
-          </Field>
-
-          <Field label={t('verify.cardLabel')} required htmlFor="edit-card">
-            <TextInput
-              id="edit-card"
-              value={memberNo}
-              onChange={(e) => setMemberNo(e.target.value)}
-              placeholder={t('verify.cardPlaceholder')}
-              autoComplete="off"
-            />
-          </Field>
-
-          {/* 所屬分區：後端資料，不可編輯 */}
-          <div>
-            <span className="mb-[8px] block text-[14px] leading-none text-ink">
-              {t('confirmed.divisionLabel')}
-            </span>
-            <div
-              data-readonly-division
-              className="flex h-[46px] w-full items-center rounded-[10px] border border-border bg-light-bg px-[14px] text-[15px] text-gray"
-            >
-              {voter.division_name}
-            </div>
-          </div>
-
-          {/* 代投人資料（僅代投會員顯示；同屬 session 內會員資料，可一併修改） */}
-          {voter.is_proxy && (
-            <>
-              <Field label={t('verify.proxyNameLabel')} htmlFor="edit-proxy-name">
-                <TextInput
-                  id="edit-proxy-name"
-                  value={proxyName}
-                  onChange={(e) => setProxyName(e.target.value)}
-                  autoComplete="off"
-                />
-              </Field>
-              <Field label={t('verify.proxyCardLabel')} htmlFor="edit-proxy-card">
-                <TextInput
-                  id="edit-proxy-card"
-                  value={proxyMemberNo}
-                  onChange={(e) => setProxyMemberNo(e.target.value)}
-                  autoComplete="off"
-                />
-              </Field>
-            </>
-          )}
+        {/* ── 唯讀三列：會員姓名／會員卡號／所屬分會（取自 session） ── */}
+        <div className="mt-[22px] space-y-[13px]">
+          <ReadonlyRow label={t('verify.nameLabel')} value={nameOf(voter)} />
+          <ReadonlyRow label={t('verify.cardLabel')} value={voter.member_no} />
+          <ReadonlyRow label={t('confirmed.divisionLabel')} value={voter.division_name} />
         </div>
 
-        {/* ── 驗證錯誤（姓名／卡號空白） ── */}
+        {/* ── 可編輯四欄：性別／手機號／Email／地址 ── */}
+        <div className="mt-[24px] space-y-[15px]">
+          <Field label={t('edit.genderLabel')} htmlFor="edit-gender">
+            <select
+              id="edit-gender"
+              value={gender}
+              onChange={(e) => setGender(e.target.value)}
+              className="vote-input"
+            >
+              <option value="">{t('edit.genderPlaceholder')}</option>
+              {GENDER_OPTIONS.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label={t('edit.phoneLabel')} htmlFor="edit-phone">
+            <TextInput
+              id="edit-phone"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              autoComplete="tel"
+            />
+          </Field>
+
+          <Field label={t('edit.emailLabel')} htmlFor="edit-email">
+            <TextInput
+              id="edit-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+            />
+          </Field>
+
+          <Field label={t('edit.addressLabel')} htmlFor="edit-address">
+            <TextInput
+              id="edit-address"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              autoComplete="street-address"
+            />
+          </Field>
+        </div>
+
+        {/* ── 儲存結果提示 ── */}
         {error && (
           <div className="mt-[18px]">
             <ErrorBanner message={error} />
           </div>
         )}
+        {saved && (
+          <p data-profile-saved className="mt-[18px] text-center text-[14px] text-primary">
+            {t('edit.saved')}
+          </p>
+        )}
 
-        {/* ── 儲存（僅更新本次操作顯示） ── */}
-        <button type="button" onClick={handleSubmit} className="vote-btn mt-[20px]">
+        {/* ── 儲存（PATCH /votes/profile） ── */}
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={saving}
+          className="vote-btn mt-[20px]"
+        >
           {t('edit.submit')}
         </button>
 
@@ -173,5 +207,17 @@ export function EditProfilePage() {
         </button>
       </section>
     </VoteShell>
+  )
+}
+
+/** 唯讀資料列：label + 不可編輯的值（灰底） */
+function ReadonlyRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span className="mb-[8px] block text-[14px] leading-none text-ink">{label}</span>
+      <div className="flex h-[46px] w-full items-center rounded-[10px] border border-border bg-light-bg px-[14px] text-[15px] text-gray">
+        {value}
+      </div>
+    </div>
   )
 }

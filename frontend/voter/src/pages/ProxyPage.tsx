@@ -160,7 +160,6 @@ export function ProxyPage() {
           <dl className="mt-[10px]">
             <InfoRow label={t('verify.nameLabel')} value={nameOf(session.voter)} />
             <InfoRow label={t('confirmed.cardLabel')} value={session.voter.member_no} />
-            <InfoRow label={t('confirmed.divisionLabel')} value={session.voter.division_name} />
           </dl>
         </div>
 
@@ -220,23 +219,28 @@ export function ProxyPage() {
         onCancel={() => setPending(null)}
       >
         {pending && (
-          <>
-            <span className="block">
-              {t('proxy.confirmLine1', {
-                division: session.voter.division_name,
-                name: nameOf(session.voter),
-                no: session.voter.member_no,
-              })}
-            </span>
-            <span className="block">
-              {t('proxy.confirmLine2', {
-                division: pending.voter.division_name,
-                name: nameOf(pending.voter),
-                no: pending.voter.member_no,
-              })}
-            </span>
-            <span className="mt-[6px] block">{t('proxy.confirmWarn')}</span>
-          </>
+          <div className="text-left">
+            <div className="border-t border-border" />
+            <div className="mt-[12px] space-y-[6px]">
+              {/* 第 1 行：當前會員；第 2/3/4 行：被委託人（confirm 回應的 voter） */}
+              <span className="block">
+                {t('proxy.confirmLine1', {
+                  name: nameOf(session.voter),
+                  no: session.voter.member_no,
+                })}
+              </span>
+              <span className="block">
+                {t('proxy.confirmName', { name: nameOf(pending.voter) })}
+              </span>
+              <span className="block">
+                {t('proxy.confirmCard', { no: pending.voter.member_no })}
+              </span>
+              <span className="block">
+                {t('proxy.confirmDivision', { division: pending.voter.division_name })}
+              </span>
+            </div>
+            <div className="mt-[12px] border-t border-border" />
+          </div>
         )}
       </ConfirmModal>
     </VoteShell>

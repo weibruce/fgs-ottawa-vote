@@ -24,6 +24,11 @@ class VoterInfo(BaseModel):
     division_id: int
     division_name: str
     is_proxy: bool
+    # 聯絡資料（個人資料更新頁需要預填，否則整批覆寫會清空）
+    gender: str = ""
+    phone: str = ""
+    email: str = ""
+    address: str = ""
     proxy_voter_name: str | None = None
     proxy_name: str | None = None
     proxy_member_no: str | None = None
@@ -182,3 +187,26 @@ class RoundInfoOut(BaseModel):
     opens_at: str | None = None
     closes_at: str | None = None
     divisions: list[DivisionOut] = []
+
+
+# --- 更新本人聯絡資料（投票端） ---
+class ProfileUpdateRequest(BaseModel):
+    voter_token: str
+    gender: str = Field("", max_length=16, description="性別")
+    phone: str = Field("", max_length=32, description="手機號")
+    email: str = Field("", max_length=254)
+    address: str = Field("", max_length=512)
+
+
+class ProfileOut(BaseModel):
+    member_no: str
+    name_trad: str
+    name_simp: str = ""
+    givenname: str = ""
+    surname: str = ""
+    division_id: int
+    division_name: str = ""
+    gender: str = ""
+    phone: str = ""
+    email: str = ""
+    address: str = ""
