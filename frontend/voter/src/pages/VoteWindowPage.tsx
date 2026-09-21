@@ -49,7 +49,7 @@ export function VoteWindowPage() {
   if (status === 'active') {
     return (
       <VoteShell>
-        <section className="vote-card mt-[54px] px-[22px] pt-[34px] pb-[30px] text-center">
+        <section className="vote-card-body px-[22px] pt-[34px] pb-[30px] text-center">
           <p className="text-[14px] leading-[22px] text-ink">{t('verify.intro')}</p>
           <button type="button" className="vote-btn mt-[20px]" onClick={() => navigate('/vote/verify', { replace: true })}>
             {t('window.goVote')}
@@ -61,7 +61,7 @@ export function VoteWindowPage() {
 
   return (
     <VoteShell>
-      <section className="vote-card mt-[54px] px-[22px] pt-[38px] pb-[30px]">
+      <section className="vote-card-body px-[22px] pt-[38px] pb-[30px]">
         <div className="flex flex-col items-center">
           {/* 狀態圖示：未開始＝金框時鐘；已結束＝金框打勾 */}
           <div className="flex h-[64px] w-[64px] items-center justify-center rounded-full border-[1.5px] border-gold bg-gold-pale/50">

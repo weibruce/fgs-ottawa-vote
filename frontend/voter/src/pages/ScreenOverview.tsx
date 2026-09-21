@@ -81,7 +81,7 @@ export function ScreenOverview() {
 
   return (
     <VoteShell>
-      <section className="vote-card px-4 pt-[26px] pb-6">
+      <section className="vote-card-body px-4 pt-[26px] pb-6">
         {/* ── 頁首 ── */}
         <p className="text-[12px] leading-[16px] font-bold text-primary">
           {t('screen.roundOverview', { round: roundText })}

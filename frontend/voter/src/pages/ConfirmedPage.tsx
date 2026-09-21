@@ -10,9 +10,10 @@
  *   資訊框 y268–420（1px #E3D8C2 框、圓角 12、內距 x14 / pt36 pb34、列距 33）、
  *   按鈕 y440–487（h48）、卡片 pt75 / pb76。
  *
- * 本批（第 5–8 點）：
+ * 本批（第 1、5、8 點）：
  *   5. 資訊框移除「代理投票」列（只留會員卡號、所屬分區）。
- *   6. 主按鈕「開始投票」整行 + 下方三顆等寬：「修改資料」「查看投票」「代他人投票」。
+ *   1. 四顆按鈕（開始投票／查看投票／修改資料／代他人投票）外觀統一，
+ *      以 2×2 grid 排列；「開始投票」不再使用整行主色實心按鈕。
  *   8. 依 session.already_voted 決定「開始投票／查看投票」誰可點；已投票時於按鈕上方
  *      顯示 confirmed.votedNote，若 voted_by_proxy 再顯示 confirmed.votedByProxyNote。
  *
@@ -25,9 +26,13 @@ import { useVoteStore } from '../hooks/useVoteStore'
 import { useI18n } from '../i18n'
 import { getActiveRound } from '../api/client'
 
-/** 三顆次要按鈕的共用樣式（金框、深墨字；disabled 淡化） */
-const SECONDARY_BTN =
-  'flex h-[46px] items-center justify-center rounded-[10px] border border-gold bg-transparent px-[4px] text-center text-[12px] font-bold leading-[15px] text-ink transition-colors hover:bg-gold-pale/30 disabled:cursor-not-allowed disabled:opacity-40'
+/**
+ * 四顆動作按鈕的共用樣式（金框、深墨字）。
+ * 第 1 點：四顆外觀完全一致（同高 46、同圓角 10、同字級 15、同字重、同寬 grid 欄），
+ * 不再有「一顆實心主按鈕 + 三顆描邊」的分別；disabled 以淡化 + 禁用游標呈現。
+ */
+const ACTION_BTN =
+  'flex h-[46px] min-w-0 items-center justify-center rounded-[10px] border border-gold bg-transparent px-[6px] text-center text-[15px] font-bold leading-[18px] text-ink transition-colors hover:bg-gold-pale/30 disabled:cursor-not-allowed disabled:opacity-40'
 
 export function ConfirmedPage() {
   const navigate = useNavigate()
@@ -61,7 +66,7 @@ export function ConfirmedPage() {
 
   return (
     <VoteShell>
-      <section className="vote-card px-[22px] pt-[75px] pb-[76px]">
+      <section className="vote-card-body px-[22px] pt-[75px] pb-[76px]">
         {/* ── 圓形圖示：金圈 + 主題紅勾（設計稿 64px） ── */}
         <div className="mx-auto flex h-[64px] w-[64px] items-center justify-center rounded-full border border-gold bg-[#f1e6d1]">
           <svg
@@ -125,30 +130,30 @@ export function ConfirmedPage() {
           </div>
         )}
 
-        {/* ── 主按鈕：未投票可開始，已投票則唯讀（第 6、8 點） ── */}
-        <button
-          type="button"
-          onClick={() => navigate('/vote/choose')}
-          disabled={alreadyVoted}
-          className="vote-btn mt-[19px]"
-        >
-          {t('confirmed.startVote')}
-        </button>
-
-        {/* ── 三顆等寬次要按鈕（第 6、7、8 點） ── */}
-        <div className="mt-[12px] grid grid-cols-3 gap-[10px]">
-          <button type="button" onClick={() => navigate('/vote/edit')} className={SECONDARY_BTN}>
-            {t('confirmed.editData')}
+        {/* ── 四顆動作按鈕：2×2 grid、外觀統一（第 1、6、8 點） ── */}
+        {/* 第 1 列：開始投票（未投票可點）／查看投票（已投票可點，唯讀） */}
+        {/* 第 2 列：修改資料／代他人投票 */}
+        <div className="mt-[19px] grid grid-cols-2 gap-[10px]">
+          <button
+            type="button"
+            onClick={() => navigate('/vote/choose')}
+            disabled={alreadyVoted}
+            className={ACTION_BTN}
+          >
+            {t('confirmed.startVote')}
           </button>
           <button
             type="button"
             onClick={() => navigate('/vote/choose?view=1')}
             disabled={!alreadyVoted}
-            className={SECONDARY_BTN}
+            className={ACTION_BTN}
           >
             {t('confirmed.viewVote')}
           </button>
-          <button type="button" onClick={() => navigate('/vote/proxy')} className={SECONDARY_BTN}>
+          <button type="button" onClick={() => navigate('/vote/edit')} className={ACTION_BTN}>
+            {t('confirmed.editData')}
+          </button>
+          <button type="button" onClick={() => navigate('/vote/proxy')} className={ACTION_BTN}>
             {t('confirmed.proxyVote')}
           </button>
         </div>

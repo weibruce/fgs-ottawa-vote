@@ -20,7 +20,7 @@ export function DonePage() {
 
   return (
     <VoteShell>
-      <section className="vote-card px-[22px] pt-[75px] pb-[76px]">
+      <section className="vote-card-body px-[22px] pt-[75px] pb-[76px]">
         {/* ── 置中金圈圖示 + 主紅勾（沿用 ConfirmedPage 樣式） ── */}
         <div className="mx-auto flex h-[64px] w-[64px] items-center justify-center rounded-full border border-gold bg-[#f1e6d1]">
           <svg

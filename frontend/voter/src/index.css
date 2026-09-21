@@ -89,6 +89,22 @@
     border-radius: 14px;
   }
 
+  /* 卡片頂部工具列（語言選擇鈕）：與下方卡片連成一體，不佔用內容空間 */
+  .vote-card-head {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-bottom: 0;
+    border-radius: 14px 14px 0 0;
+  }
+
+  /* 卡片本體：接在工具列下方（上緣無邊框、無圓角） */
+  .vote-card-body {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-top: 0;
+    border-radius: 0 0 14px 14px;
+  }
+
   /* 輸入框（設計稿：白底、圓角 10px、1px 米色邊框、高 46px） */
   .vote-input {
     width: 100%;

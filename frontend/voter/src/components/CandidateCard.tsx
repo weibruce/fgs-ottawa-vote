@@ -106,13 +106,18 @@ export function CandidateCard({
         </span>
       </div>
 
-      {/* ── 選取圓標（未選＝金框空心圓；已選＝主紅實心 + 白勾） ── */}
+      {/* ── 選取圓標（一般：未選＝金框空心圓、已選＝主紅實心 + 白勾；
+             唯讀模式（?view=1）：一律灰色系，看得出不可修改，但仍以勾記號區分已選／未選） ── */}
       <span
         aria-hidden
         className={`flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full ${
-          selected
-            ? 'bg-primary'
-            : `border-[1.5px] border-gold bg-transparent ${disabled ? 'opacity-40' : ''}`
+          readOnly
+            ? selected
+              ? 'bg-gray-light'
+              : 'border-[1.5px] border-gray-light/60 bg-transparent'
+            : selected
+              ? 'bg-primary'
+              : `border-[1.5px] border-gold bg-transparent ${disabled ? 'opacity-40' : ''}`
         }`}
       >
         {selected && (

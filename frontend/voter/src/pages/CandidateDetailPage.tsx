@@ -113,7 +113,7 @@ export function CandidateDetailPage() {
   if (windowActive === null || loading) {
     return (
       <VoteShell>
-        <section className="vote-card px-[22px] pt-[23px] pb-[23px]">
+        <section className="vote-card-body px-[22px] pt-[23px] pb-[23px]">
           <div className="flex justify-center">
             <div className="h-[200px] w-[160px] animate-pulse rounded-[8px] bg-light-bg" />
           </div>
@@ -130,7 +130,7 @@ export function CandidateDetailPage() {
   if (!candidate) {
     return (
       <VoteShell>
-        <section className="vote-card px-[22px] py-[40px] text-center">
+        <section className="vote-card-body px-[22px] py-[40px] text-center">
           <p className="text-[14px] leading-[25px] text-gray">{t('detail.notFound')}</p>
           <button
             type="button"
@@ -151,7 +151,7 @@ export function CandidateDetailPage() {
   return (
     <VoteShell>
       {/* ── 單張主卡片（設計稿 04_1） ── */}
-      <section className="vote-card px-[22px] pt-[23px] pb-[23px]">
+      <section className="vote-card-body px-[22px] pt-[23px] pb-[23px]">
         {/* 1. 頂部照片：方形圓角 + 淡金細框；無 avatar_url 時退回姓氏圓形 */}
         <div className="flex justify-center">
           {candidate.avatar_url ? (

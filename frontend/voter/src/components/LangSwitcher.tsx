@@ -1,7 +1,7 @@
 /**
  * LangSwitcher — 語言選擇（🌐 繁中）
+ * 地球圖示為**灰色**線性 SVG（不用 emoji，避免各平台渲染成藍色）。
  * 點擊展開：繁中 / 简中 / English；選擇後寫入 localStorage 並即時套用。
- * 由 VoteShell 統一放在每個投票頁面上方，因此所有頁面都有。
  */
 import { useEffect, useRef, useState } from 'react'
 import { LANGS, useI18n, type Lang } from '../i18n'
@@ -36,9 +36,23 @@ export function LangSwitcher() {
         aria-expanded={open}
         aria-label={t('common.langLabel')}
         data-lang-switcher
-        className="flex h-[32px] items-center gap-[6px] rounded-full border border-border bg-card px-[12px] text-[13px] leading-none text-ink transition-colors hover:border-gold"
+        className="flex h-[30px] items-center gap-[6px] rounded-full border border-border bg-card px-[11px] text-[13px] leading-none text-gray transition-colors hover:border-gold hover:text-ink"
       >
-        <span aria-hidden>🌐</span>
+        {/* 灰色地球（線性 SVG，非 emoji） */}
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden
+          className="h-[15px] w-[15px] shrink-0 text-gray-light"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="9" />
+          <path d="M3 12h18" />
+          <path d="M12 3c2.6 2.7 3.9 5.7 3.9 9s-1.3 6.3-3.9 9c-2.6-2.7-3.9-5.7-3.9-9S9.4 5.7 12 3z" />
+        </svg>
         <span>{current.short}</span>
       </button>
 

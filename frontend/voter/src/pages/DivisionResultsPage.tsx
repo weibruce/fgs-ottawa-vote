@@ -158,7 +158,7 @@ export function DivisionResultsPage() {
 
   return (
     <VoteShell>
-      <section className="vote-card px-[21px] pt-[27px] pb-[28px]">
+      <section className="vote-card-body px-[21px] pt-[27px] pb-[28px]">
         {/* ── 頁首 ── */}
         <p className="text-[12px] leading-[16px] font-bold text-primary">
           {t('results.roundStat', { round: roundText, division: divisionName })}

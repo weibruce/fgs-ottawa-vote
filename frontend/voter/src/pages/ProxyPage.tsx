@@ -137,7 +137,7 @@ export function ProxyPage() {
 
   return (
     <VoteShell>
-      <section className="vote-card px-[22px] pt-[34px] pb-[30px]">
+      <section className="vote-card-body px-[22px] pt-[34px] pb-[30px]">
         {/* ── 標題 + 說明 ── */}
         <h1 className="text-center font-serif text-[26px] font-bold leading-[34px] text-ink">
           {t('proxy.heading')}

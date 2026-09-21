@@ -191,7 +191,7 @@ export function ChoosePage() {
 
   return (
     <VoteShell>
-      <section className="vote-card px-[16px] pt-[14px] pb-[25px]">
+      <section className="vote-card-body px-[16px] pt-[14px] pb-[25px]">
         {/* ── 卡片頂部：輪次 · 分區（13px 主紅粗體） ── */}
         <p className="text-[13px] font-bold leading-[18px] tracking-[0.01em] text-primary">
           {roundLabel} · {divisionName}

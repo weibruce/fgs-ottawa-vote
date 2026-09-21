@@ -1,87 +1,99 @@
 /**
- * EditProfilePage（/vote/edit）— 第 7 點
+ * EditProfilePage（/vote/edit）— 第 2 點
  *
- * 以 session 內既有會員資料預填「會員姓名 / 會員卡號」，儲存後重新呼叫
- * POST /votes/confirm 驗證；成功即更新 session（含 already_voted / voted_candidate_ids /
- * voted_by_proxy / voted_proxy_name）並回到 /vote/confirmed。
+ * 直接顯示並修改當前 session 內保存的會員資料，**不再重新驗證身份**
+ * （移除原本 POST /votes/confirm 的流程）。
  *
- * 無 session → 回 /vote/verify；失敗以 translateError(messageForError(e)) 顯示後端錯誤。
+ * 可取得欄位（VoterInfo，見 types/index.ts）：
+ *   姓名 name、會員卡號 member_no、所屬分區 division_name（後端資料，唯讀）、
+ *   代投時另有 proxy_name / proxy_member_no。
+ *
+ * 投票端沒有「更新會員」的 API（會員 CRUD 僅管理端 /api/admin/members，需管理員 token），
+ * 因此儲存＝更新前端 session（useVoteStore.save），讓後續頁面顯示修改後內容；
+ * 頁面文案也明確說明這只影響本次操作顯示。之後若後端提供投票端更新端點，再改為呼叫 API。
+ *
+ * 無 session → /vote/verify；輪次非 active → /vote/window（與 ConfirmedPage 相同閘門）。
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import type { AxiosError } from 'axios'
 import { VoteShell } from '../components/VoteShell'
 import { Field, TextInput } from '../components/Field'
 import { ErrorBanner } from '../components/ErrorBanner'
-import { confirmVoter, messageForError } from '../api/client'
+import { getActiveRound } from '../api/client'
 import { useVoteStore } from '../hooks/useVoteStore'
 import { useI18n } from '../i18n'
-import type { ApiError } from '../types'
 
 export function EditProfilePage() {
   const navigate = useNavigate()
   const { session, save } = useVoteStore()
-  const { t, translateError } = useI18n()
+  const { t } = useI18n()
 
   // 表單以 session 的會員資料預填
   const [name, setName] = useState(session?.voter.name ?? '')
   const [memberNo, setMemberNo] = useState(session?.voter.member_no ?? '')
-  const [loading, setLoading] = useState(false)
+  const [proxyName, setProxyName] = useState(session?.voter.proxy_name ?? '')
+  const [proxyMemberNo, setProxyMemberNo] = useState(session?.voter.proxy_member_no ?? '')
   const [error, setError] = useState<string | null>(null)
+
+  // 投票視窗閘門（與 ConfirmedPage 相同規則）：null = 查詢中，false = 非 active → /vote/window
+  const [windowActive, setWindowActive] = useState<boolean | null>(null)
+  useEffect(() => {
+    let alive = true
+    getActiveRound()
+      .then((res) => {
+        if (alive) setWindowActive(res.data.status === 'active')
+      })
+      .catch(() => {
+        /* 查詢失敗不擋，避免使用者卡死 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   // 無 session → 回身份驗證頁
   if (!session) return <Navigate to="/vote/verify" replace />
+  // 投票視窗未開啟 → 轉往視窗狀態頁
+  if (windowActive === false) return <Navigate to="/vote/window" replace />
 
-  async function handleSubmit() {
+  const voter = session.voter
+
+  /** 儲存：僅更新前端 session（無投票端更新 API），再回中控頁 */
+  function handleSubmit() {
     if (!session) return
     setError(null)
     if (!name.trim() || !memberNo.trim()) {
       setError(t('verify.errNeedFields'))
       return
     }
-    setLoading(true)
-    try {
-      const res = await confirmVoter({
+    save({
+      ...session,
+      voter: {
+        ...voter,
         name: name.trim(),
         member_no: memberNo.trim(),
-        round_id: session.round_id,
-        proxy: false,
-      })
-      const data = res.data
-      // 重新驗證成功：更新 session（含已投票狀態），再回中控頁
-      save({
-        voter_token: data.voter_token,
-        voter: data.voter,
-        round_id: data.round_id,
-        min_votes: data.min_votes,
-        max_votes: data.max_votes,
-        already_voted: data.already_voted,
-        voted_candidate_ids: data.voted_candidate_ids,
-        voted_by_proxy: data.voted_by_proxy,
-        voted_proxy_name: data.voted_proxy_name,
-      })
-      navigate('/vote/confirmed')
-    } catch (e) {
-      setError(translateError(messageForError(e as AxiosError<ApiError>)))
-    } finally {
-      setLoading(false)
-    }
+        proxy_name: voter.is_proxy ? proxyName.trim() || null : voter.proxy_name,
+        proxy_member_no: voter.is_proxy ? proxyMemberNo.trim() || null : voter.proxy_member_no,
+      },
+    })
+    navigate('/vote/confirmed')
   }
 
   return (
     <VoteShell>
-      <section className="vote-card px-[22px] pt-[34px] pb-[30px]">
+      <section className="vote-card-body px-[22px] pt-[34px] pb-[30px]">
         <h2 className="text-center font-serif text-[26px] font-bold leading-tight text-ink">
           {t('edit.heading')}
         </h2>
 
         <div className="mt-[14px] border-t border-border" />
 
-        <p className="mt-[16px] text-center text-[14px] leading-[20px] text-gray">
-          {t('edit.desc')}
+        <p className="mt-[16px] text-center text-[14px] leading-[20px] text-gray">{t('edit.desc')}</p>
+        <p className="mt-[6px] text-center text-[12px] leading-[18px] text-gray-light">
+          {t('edit.sessionNote')}
         </p>
 
-        {/* ── 表單：會員姓名 / 會員卡號 ── */}
+        {/* ── 表單：會員姓名 / 會員卡號（可編輯）＋ 所屬分區（唯讀） ── */}
         <div className="mt-[26px] space-y-[15px]">
           <Field label={t('verify.nameLabel')} required htmlFor="edit-name">
             <TextInput
@@ -102,23 +114,53 @@ export function EditProfilePage() {
               autoComplete="off"
             />
           </Field>
+
+          {/* 所屬分區：後端資料，不可編輯 */}
+          <div>
+            <span className="mb-[8px] block text-[14px] leading-none text-ink">
+              {t('confirmed.divisionLabel')}
+            </span>
+            <div
+              data-readonly-division
+              className="flex h-[46px] w-full items-center rounded-[10px] border border-border bg-light-bg px-[14px] text-[15px] text-gray"
+            >
+              {voter.division_name}
+            </div>
+          </div>
+
+          {/* 代投人資料（僅代投會員顯示；同屬 session 內會員資料，可一併修改） */}
+          {voter.is_proxy && (
+            <>
+              <Field label={t('verify.proxyNameLabel')} htmlFor="edit-proxy-name">
+                <TextInput
+                  id="edit-proxy-name"
+                  value={proxyName}
+                  onChange={(e) => setProxyName(e.target.value)}
+                  autoComplete="off"
+                />
+              </Field>
+              <Field label={t('verify.proxyCardLabel')} htmlFor="edit-proxy-card">
+                <TextInput
+                  id="edit-proxy-card"
+                  value={proxyMemberNo}
+                  onChange={(e) => setProxyMemberNo(e.target.value)}
+                  autoComplete="off"
+                />
+              </Field>
+            </>
+          )}
         </div>
 
-        {/* ── 後端錯誤（卡號不存在 / 姓名不匹配…） ── */}
+        {/* ── 驗證錯誤（姓名／卡號空白） ── */}
         {error && (
           <div className="mt-[18px]">
             <ErrorBanner message={error} />
           </div>
         )}
 
-        {/* ── 儲存並重新驗證 ── */}
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={loading}
-          className="vote-btn mt-[20px]"
-        >
-          {loading ? t('common.confirming') : t('edit.submit')}
+        {/* ── 儲存（僅更新本次操作顯示） ── */}
+        <button type="button" onClick={handleSubmit} className="vote-btn mt-[20px]">
+          {t('edit.submit')}
         </button>
 
         {/* ── 返回中控頁（描邊次按鈕，沿用設計語言） ── */}

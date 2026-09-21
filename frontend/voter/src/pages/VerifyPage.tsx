@@ -97,7 +97,7 @@ export function VerifyPage() {
   return (
     <VoteShell>
       {/* ── 表單卡（頁首三行已移除；卡片直接從頂端開始） ── */}
-      <section className="vote-card px-[22px] pt-[34px] pb-[30px]">
+      <section className="vote-card-body px-[22px] pt-[34px] pb-[30px]">
         <div className="flex flex-col items-center">
           {/* logo 與組織名同一行，整組置中 */}
           <div className="flex items-center gap-[12px]">

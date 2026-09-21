@@ -42,7 +42,7 @@ export function SuccessPage() {
 
   return (
     <VoteShell>
-      <section className="vote-card mt-[8px] px-[22px] pt-[38px] pb-[30px]">
+      <section className="vote-card-body px-[22px] pt-[38px] pb-[30px]">
         {/* ── 置中金圈圖示（比 P2 稍大） ── */}
         <div className="flex flex-col items-center">
           <div className="flex h-[64px] w-[64px] items-center justify-center rounded-full border-[1.5px] border-gold bg-gold-pale/50">
