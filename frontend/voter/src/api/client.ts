@@ -135,6 +135,14 @@ export interface ProfileOut {
   address: string
 }
 
+/**
+ * 讀取本人資料（GET /votes/profile）
+ * token 走 X-Voter-Token header；個人資料更新頁載入時預填用。
+ */
+export function getProfile(voterToken: string) {
+  return api.get<ProfileOut>('/profile', { headers: { 'X-Voter-Token': voterToken } })
+}
+
 /** 更新本人聯絡資料（PATCH /votes/profile）— 只允許性別／手機號／Email／地址 */
 export function updateProfile(req: {
   voter_token: string

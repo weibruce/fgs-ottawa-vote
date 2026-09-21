@@ -1,5 +1,5 @@
 """投票路由 — 身份確認 / 提交投票 / 查詢結果 / 候選人名單"""
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -166,6 +166,15 @@ def get_division_candidates(
     前端投票頁用
     """
     return vote_service.get_division_candidates(db, round_id, division_id)
+
+
+@router.get("/profile", response_model=ProfileOut)
+def read_profile(
+    x_voter_token: str = Header(..., alias="X-Voter-Token"),
+    db: Session = Depends(get_db),
+):
+    """讀取本人資料（個人資料更新頁預填）。token 走 X-Voter-Token header。"""
+    return vote_service.get_profile(db, x_voter_token)
 
 
 @router.patch("/profile", response_model=ProfileOut)

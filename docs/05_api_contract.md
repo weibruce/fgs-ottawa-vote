@@ -514,6 +514,7 @@ Email、地址、已投票、投票時間、狀態`
 
 | 方法 | 路徑 | 說明 |
 |------|------|------|
+| GET | `/votes/profile` | 讀取本人資料（個人資料更新頁預填）；token 走 `X-Voter-Token` header |
 | PATCH | `/votes/profile` | 投票人更新**自己的**聯絡資料 |
 
 ```jsonc
@@ -528,7 +529,11 @@ Email、地址、已投票、投票時間、狀態`
   "gender": "女", "phone": "0912-000-111", "email": "me@example.com", "address": "…" }
 ```
 
-**只允許修改** `gender` / `phone` / `email` / `address` 四個欄位。
+**GET** 以 `X-Voter-Token` header 帶憑證（避免 token 出現在 URL 與存取紀錄），
+回傳與 PATCH 相同的 `ProfileOut`；未帶 header → `422`，憑證無效 → `401`。
+頁面每次進入都向伺服器讀取，不依賴前端 session 的新舊。
+
+**PATCH 只允許修改** `gender` / `phone` / `email` / `address` 四個欄位。
 姓名、佛光會員卡號、所屬分會屬身分識別欄位，**不可**由本端點變更。
 驗身方式與 `/votes/submit` 相同（`voter_token`）；憑證無效或過期回 `401`。
 

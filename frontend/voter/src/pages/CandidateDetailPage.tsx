@@ -21,6 +21,7 @@ import { VoteShell } from '../components/VoteShell'
 import { getActiveRound, getDivisionCandidates } from '../api/client'
 import { useVoteStore } from '../hooks/useVoteStore'
 import { pickName, useI18n } from '../i18n'
+import type { Lang } from '../i18n'
 import type { Candidate } from '../types'
 
 /** ChoosePage 以 navigate(path, { state }) 帶入的資料（可選） */
@@ -29,13 +30,36 @@ interface DetailLocationState {
   divisionName?: string
 }
 
+/**
+ * 來源（?from=）：決定「返回」要回到哪裡（第 4 點）
+ *   view       → 唯讀的「查看我的投票」/vote/choose?view=1
+ *   candidates → 「查看候選人信息」/vote/candidates
+ *   其他/省略  → 一般投票頁 /vote/choose
+ */
+type DetailFrom = 'view' | 'candidates' | 'choose'
+
+/** 返回鍵文字：i18n 檔不可改，唯讀／信息兩來源用頁內三語字面值；
+ *  一般投票頁沿用既有 key `detail.back`。 */
+const BACK_LABEL: Record<'view' | 'candidates', Record<Lang, string>> = {
+  view: {
+    'zh-Hant': '返回查看我的投票',
+    'zh-Hans': '返回查看我的投票',
+    en: 'Back to my vote',
+  },
+  candidates: {
+    'zh-Hant': '返回候選人信息',
+    'zh-Hans': '返回候选人信息',
+    en: 'Back to candidates',
+  },
+}
+
 export function CandidateDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { id } = useParams<{ id: string }>()
   const [params] = useSearchParams()
   const { session } = useVoteStore()
-  const { t, nameOf } = useI18n()
+  const { t, lang, nameOf } = useI18n()
 
   /** 投票視窗閘門：狀態非 active → 一律導到 /vote/window（第 6 點） */
   const [windowActive, setWindowActive] = useState<boolean | null>(null)
@@ -57,6 +81,10 @@ export function CandidateDetailPage() {
   const targetId = Number(id)
   const queryRound = params.get('round')
   const queryDivision = params.get('division')
+  // 來源：view（唯讀投票頁）／candidates（候選人信息頁）／其他（一般投票頁）
+  const rawFrom = params.get('from')
+  const from: DetailFrom =
+    rawFrom === 'view' ? 'view' : rawFrom === 'candidates' ? 'candidates' : 'choose'
 
   const [candidate, setCandidate] = useState<Candidate | null>(state.candidate ?? null)
   const [divisionName, setDivisionName] = useState(
@@ -127,6 +155,17 @@ export function CandidateDetailPage() {
     )
   }
 
+  // 返回目的地依來源決定（第 4 點）
+  const backDivisionId =
+    candidate?.division_id ?? (Number(queryDivision || 0) || session?.voter.division_id || 0)
+  const backTo =
+    from === 'view'
+      ? `/vote/choose?division=${backDivisionId}&view=1`
+      : from === 'candidates'
+        ? '/vote/candidates'
+        : `/vote/choose?division=${backDivisionId}`
+  const backLabel = from === 'choose' ? t('detail.back') : BACK_LABEL[from][lang]
+
   if (!candidate) {
     return (
       <VoteShell>
@@ -134,10 +173,10 @@ export function CandidateDetailPage() {
           <p className="text-[14px] leading-[25px] text-gray">{t('detail.notFound')}</p>
           <button
             type="button"
-            onClick={() => navigate('/vote/choose')}
+            onClick={() => navigate(backTo)}
             className="vote-btn mt-[24px]"
           >
-            {t('detail.back')}
+            {backLabel}
           </button>
         </section>
       </VoteShell>
@@ -150,8 +189,6 @@ export function CandidateDetailPage() {
   const englishName = pickName('en', candidate)
   const showEnglish = englishName !== '' && englishName !== displayName
   const initial = displayName.charAt(0)
-  // 候選人名單頁（P3）以 ?division= 決定要載入哪一區，故返回時必須帶上本區 id
-  const backToChoose = `/vote/choose?division=${candidate.division_id}`
 
   return (
     <VoteShell>
@@ -219,13 +256,13 @@ export function CandidateDetailPage() {
           <p className="mt-[4px] text-[12px] leading-[18px] text-ink">{candidate.description}</p>
         </div>
 
-        {/* 8. 返回候選人名單 */}
+        {/* 8. 返回（依 ?from= 回到唯讀我的投票／候選人信息／候選人名單） */}
         <button
           type="button"
-          onClick={() => navigate(backToChoose)}
+          onClick={() => navigate(backTo)}
           className="vote-btn mt-[19px]"
         >
-          {t('detail.back')}
+          {backLabel}
         </button>
       </section>
     </VoteShell>

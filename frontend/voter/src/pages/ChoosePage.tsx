@@ -125,9 +125,11 @@ export function ChoosePage() {
 
   const openDetail = useCallback(
     (id: number) => {
-      navigate(`/vote/candidate/${id}?division=${divisionId}&round=${roundId}`)
+      // 帶上來來源：唯讀模式 → from=view，一般模式 → from=choose（詳情頁據此決定返回目的地）
+      const from = isView ? 'view' : 'choose'
+      navigate(`/vote/candidate/${id}?division=${divisionId}&round=${roundId}&from=${from}`)
     },
-    [navigate, divisionId, roundId]
+    [navigate, divisionId, roundId, isView]
   )
 
   /** 設計稿主按鈕恆為實心 → 點擊時才檢查票數下限（不以 disabled 淡化） */

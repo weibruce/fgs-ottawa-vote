@@ -1,25 +1,29 @@
 /**
  * P3-6 查看候選人信息（route /vote/candidates）
- * 版面與 ChoosePage 幾乎一致（同一張卡、同一組 CandidateCard）：
- *   標題 viewCandidates.heading、提示列 viewCandidates.banner（無「已選 N/M 票」）、
- *   候選人卡片一律 readOnly（不可選取）、無「確認投票」按鈕、
- *   底部只有一顆「返回」（viewCandidates.back → /vote/confirmed）。
- * 點頭像 → 候選人詳情（參數帶法同 ChoosePage）。
+ *
+ * 獨立頁面：唯讀瀏覽當前分區的全部候選人，與 ChoosePage 的投票選取邏輯完全無關。
+ *   - 沒有任何 input[type=radio]／選取圓標／data-selected
+ *   - 沒有「已選 N/M 票」、沒有「確認投票」按鈕
+ *   - 標題 viewCandidates.heading、提示列 viewCandidates.banner
+ *   - 點整張卡片（含頭像）→ 候選人詳情，導覽帶 from=candidates
+ *   - 底部只有一顆「返回」（viewCandidates.back → /vote/confirmed）
  *
  * 資料：session（useVoteStore）→ round_id / voter.division_id
  *       GET /votes/round/active                            → 投票視窗閘門
  *       GET /votes/round/{round_id}/division/{division_id} → 候選人名單
+ *
+ * 卡片渲染為本頁自有實作（沿用投票端既有卡片語言：vote-card / 圓形頭像 / 姓名＋次要行），
+ * 刻意不使用 CandidateCard（該元件帶選取圓標與 data-selected）。
  */
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import type { AxiosError } from 'axios'
 import { VoteShell } from '../components/VoteShell'
-import { CandidateCard } from '../components/CandidateCard'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { getActiveRound, getDivisionCandidates, messageForError } from '../api/client'
-import { useI18n } from '../i18n'
+import { pickName, useI18n } from '../i18n'
 import { useVoteStore } from '../hooks/useVoteStore'
-import type { ApiError, DivisionCandidates } from '../types'
+import type { ApiError, Candidate, DivisionCandidates } from '../types'
 
 export function ViewCandidatesPage() {
   const navigate = useNavigate()
@@ -81,10 +85,12 @@ export function ViewCandidatesPage() {
   const candidates = data?.candidates ?? []
   const loadErrorText = loadError === null ? null : translateError(loadError)
 
-  // 點頭像 → 候選人詳情（參數帶法同 ChoosePage）
+  // 點整張卡片（含頭像）→ 候選人詳情；帶 from=candidates，詳情頁返回時才知道要回本頁
   const openDetail = useCallback(
     (id: number) => {
-      navigate(`/vote/candidate/${id}?division=${divisionId}&round=${roundId}`)
+      navigate(
+        `/vote/candidate/${id}?division=${divisionId}&round=${roundId}&from=candidates`
+      )
     },
     [navigate, divisionId, roundId]
   )
@@ -118,7 +124,7 @@ export function ViewCandidatesPage() {
           </span>
         </div>
 
-        {/* ── 候選人卡片清單（一律唯讀、不可選取） ── */}
+        {/* ── 候選人卡片清單（純瀏覽、無選取狀態） ── */}
         {loading && (
           <div className="mt-[15px] space-y-[10px]">
             {[0, 1, 2].map((i) => (
@@ -131,7 +137,6 @@ export function ViewCandidatesPage() {
                   <div className="h-[16px] w-[104px] animate-pulse rounded bg-light-bg" />
                   <div className="mt-[8px] h-[12px] w-[140px] animate-pulse rounded bg-light-bg" />
                 </div>
-                <div className="h-[24px] w-[24px] shrink-0 animate-pulse rounded-full bg-light-bg" />
               </div>
             ))}
           </div>
@@ -146,14 +151,7 @@ export function ViewCandidatesPage() {
         {!loading && !loadErrorText && (
           <div className="mt-[15px] space-y-[10px]">
             {candidates.map((c) => (
-              <CandidateCard
-                key={c.id}
-                candidate={c}
-                selected={false}
-                readOnly
-                onToggle={() => {}}
-                onDetail={() => openDetail(c.id)}
-              />
+              <ViewCandidateCard key={c.id} candidate={c} onOpen={() => openDetail(c.id)} />
             ))}
           </div>
         )}
@@ -168,5 +166,74 @@ export function ViewCandidatesPage() {
         </button>
       </section>
     </VoteShell>
+  )
+}
+
+/**
+ * 本頁自有候選人卡片（唯讀、純導覽）：
+ * 整張卡可點（含頭像）→ 候選人詳情；沒有選取圓標、沒有 data-selected。
+ * 版面沿用投票端既有卡片語言：vote-card 80px、圓形頭像 52px、姓名＋次要行。
+ */
+function ViewCandidateCard({
+  candidate,
+  onOpen,
+}: {
+  candidate: Candidate
+  onOpen: () => void
+}) {
+  const { t, nameOf } = useI18n()
+  const displayName = nameOf(candidate)
+  const initial = displayName.trim().charAt(0)
+  // 次要行：英文名（資料，不翻譯）；英文模式下主名即英文，改用「職位 · 屆數」避免重複
+  const englishName = pickName('en', candidate)
+  const secondary =
+    (englishName && englishName !== displayName ? englishName : '') ||
+    t('choose.secondaryTerms', { position: candidate.position, n: candidate.term_count })
+
+  return (
+    <div
+      role="button"
+      data-candidate-card
+      tabIndex={0}
+      aria-label={t('choose.detailAria', { name: displayName })}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onOpen()
+        }
+      }}
+      className="vote-card flex h-[80px] cursor-pointer items-center gap-[14px] rounded-[12px] px-[14px] outline-none transition-colors focus-visible:border-gold"
+    >
+      {/* ── 頭像 52px：有照片用照片 + 金框，否則姓氏圓形；點擊同樣由整卡 onClick 導覽 ── */}
+      <span
+        aria-hidden
+        className={`flex h-[52px] w-[52px] shrink-0 items-center justify-center overflow-hidden rounded-full ${
+          candidate.avatar_url ? 'border-[1.5px] border-gold' : 'bg-avatar'
+        }`}
+      >
+        {candidate.avatar_url ? (
+          <img
+            src={candidate.avatar_url}
+            alt={displayName}
+            className="h-full w-full rounded-full object-cover"
+          />
+        ) : (
+          <span className="font-serif text-[20px] font-bold leading-none text-primary">
+            {initial}
+          </span>
+        )}
+      </span>
+
+      {/* ── 姓名 + 次要行（英文名／職位 · 屆數） ── */}
+      <span className="min-w-0 flex-1 text-left">
+        <span className="block truncate text-[17px] font-bold leading-[22px] text-ink">
+          {displayName}
+        </span>
+        <span className="mt-[4px] block truncate text-[12px] leading-[18px] text-gray">
+          {secondary}
+        </span>
+      </span>
+    </div>
   )
 }

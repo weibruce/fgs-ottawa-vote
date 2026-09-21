@@ -627,6 +627,29 @@ def _recount_from_pg(db: Session, round_id: int, division_id: int, cands: list[C
         pass
 
 
+# ============ 讀取本人資料 ============
+def get_profile(db: Session, voter_token: str) -> dict:
+    """以 voter_token 讀取本人完整資料（個人資料更新頁預填用）"""
+    claims = _verify_voter_token(voter_token)
+    member = db.query(Member).filter(Member.member_no == claims.get("member_no")).first()
+    if member is None:
+        raise HTTPException(status_code=404, detail="會員不存在")
+    division = db.get(Division, member.division_id)
+    return {
+        "member_no": member.member_no,
+        "name_trad": member.name_trad,
+        "name_simp": member.name_simp,
+        "givenname": member.givenname,
+        "surname": member.surname,
+        "division_id": member.division_id,
+        "division_name": division.name if division else "",
+        "gender": member.gender,
+        "phone": member.phone,
+        "email": member.email,
+        "address": member.address,
+    }
+
+
 # ============ 更新本人聯絡資料 ============
 def update_profile(
     db: Session,
