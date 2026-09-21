@@ -1,6 +1,6 @@
 """分區模型（五區：東/南/西/北/中）"""
 from datetime import datetime
-from sqlalchemy import String, Integer, DateTime, func
+from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
@@ -20,6 +20,15 @@ class Division(Base):
     closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # 前端顯示顏色（hex）
     color: Mapped[str] = mapped_column(String(16), default="#C41E24")
+    # 當選人（投票結束後：第一名會長、第二名副會長；平票時由管理員手動指派）
+    # 手動指派會寫入這兩個欄位；留空則由計票結果自動推導
+    chair_candidate_id: Mapped[int | None] = mapped_column(
+        ForeignKey("candidates.id", ondelete="SET NULL"), nullable=True
+    )
+    vice_candidate_id: Mapped[int | None] = mapped_column(
+        ForeignKey("candidates.id", ondelete="SET NULL"), nullable=True
+    )
+    officers_manual: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

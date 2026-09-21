@@ -44,10 +44,9 @@ function IconMedal({ size = 21 }: IconProps) {
   )
 }
 
-/* ── 匯出項目卡片圖示（依參考稿順序：統計圖／文件／獎章／統計圖／人員／日曆） ── */
+/* ── 匯出項目卡片圖示（依參考稿順序：統計圖／獎章／統計圖／人員／日曆） ── */
 const CARD_ICON: Record<string, { Icon: ComponentType<IconProps>; size: number }> = {
   各分區投票明細: { Icon: IconTally, size: 25 },
-  第二輪投票明細: { Icon: IconFileText, size: 25 },
   幹部指派名單: { Icon: IconMedal, size: 21 },
   五區彙總統計: { Icon: IconTally, size: 25 },
   會員名單: { Icon: IconMembers, size: 25 },
@@ -57,7 +56,6 @@ const CARD_ICON: Record<string, { Icon: ComponentType<IconProps>; size: number }
 /* ── 卡片標題 → 後端匯出類型（契約第 8 節） ── */
 const KIND_BY_TITLE: Record<string, ExportKind> = {
   各分區投票明細: 'division_votes',
-  第二輪投票明細: 'round2_votes',
   幹部指派名單: 'appointments',
   五區彙總統計: 'division_summary',
   會員名單: 'members',
@@ -200,7 +198,6 @@ const EXPORT_CARDS: { title: string; desc: string; formats: string[] }[] = [
     desc: '姓名、卡號、所屬分區、是否代投、投票時間、投了誰（匿名模式下不顯示身份）',
     formats: ['Excel', 'CSV'],
   },
-  { title: '第二輪投票明細', desc: '總會副會長選舉完整投票錄', formats: ['Excel', 'CSV'] },
   { title: '幹部指派名單', desc: '按分區匯出各區幹部任命資料', formats: ['Excel'] },
   {
     title: '五區彙總統計',
@@ -212,7 +209,7 @@ const EXPORT_CARDS: { title: string; desc: string; formats: string[] }[] = [
     desc: '包含卡號、簡繁雙存姓名、分區、手機的完整名單',
     formats: ['Excel', 'CSV'],
   },
-  { title: '完整選舉報告', desc: '包含全部輪次、結果、指派的終局報告文件', formats: ['PDF'] },
+  { title: '完整選舉報告', desc: '包含全部結果、指派的終局報告文件', formats: ['PDF'] },
 ]
 
 export function ExportPage() {
@@ -221,14 +218,14 @@ export function ExportPage() {
   const [anonymous, setAnonymous] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
-  /* 篩選選項由後端提供（分區 / 輪次） */
+  /* 篩選選項由後端提供（分區 / 進程） */
   const { data: divisions } = useAsync(() => listDivisions(), [])
   const { data: rounds } = useAsync(() => listRounds(), [])
   const { data: history, loading: historyLoading, error: historyError, reload: reloadHistory } =
     useAsync(() => fetchExportHistory(), [])
 
   const divisionOptions = ['全部分區', ...(divisions ?? []).map((d) => d.name)]
-  const roundOptions = ['全部輪次', ...(rounds ?? []).map((r) => r.name)]
+  const roundOptions = ['全部進程', ...(rounds ?? []).map((r) => r.name)]
 
   const divisionId =
     division === 'all' ? null : ((divisions ?? []).find((d) => d.name === division)?.id ?? null)
@@ -278,7 +275,7 @@ export function ExportPage() {
         <IconFilter size={16} className="shrink-0 text-gray-deep" />
         <span className="shrink-0 text-[14px] text-ink-soft">篩選條件：</span>
         <FilterSelect label="分區" value={division} onChange={setDivision} options={divisionOptions} />
-        <FilterSelect label="輪次" value={round} onChange={setRound} options={roundOptions} />
+        <FilterSelect label="進程" value={round} onChange={setRound} options={roundOptions} />
         <label className="ml-auto flex cursor-pointer items-center gap-2">
           <input
             type="checkbox"

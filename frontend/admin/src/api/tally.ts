@@ -14,7 +14,7 @@ export async function fetchTallyOverview(roundId: number): Promise<TallyOverview
   })
 }
 
-/** 投票人明細；匿名輪次後端會回傳空 items 並帶 anonymous=true */
+/** 投票人明細；匿名投票時後端會回傳空 items 並帶 anonymous=true */
 export async function fetchVoters(roundId: number, divisionId: number): Promise<VoterDetailResponse> {
   return http.get<VoterDetailResponse>('/admin/tally/voters', {
     params: { round_id: roundId, division_id: divisionId },

@@ -37,7 +37,7 @@ export function CandidateDetailPage() {
   const { session } = useVoteStore()
   const { t, nameOf } = useI18n()
 
-  /** 投票視窗閘門：輪次非 active → 一律導到 /vote/window（第 6 點） */
+  /** 投票視窗閘門：狀態非 active → 一律導到 /vote/window（第 6 點） */
   const [windowActive, setWindowActive] = useState<boolean | null>(null)
   useEffect(() => {
     let alive = true
@@ -76,7 +76,7 @@ export function CandidateDetailPage() {
         if (session) divisionIds = [session.voter.division_id]
         else if (Number(queryDivision || 0)) divisionIds = [Number(queryDivision)]
 
-        // 直接開啟連結（無 session、無 query）→ 用當前輪次逐區找出該候選人
+        // 直接開啟連結（無 session、無 query）→ 用當前投票逐區找出該候選人
         if (!roundId || divisionIds.length === 0) {
           const active = await getActiveRound()
           if (!roundId) roundId = active.data.id

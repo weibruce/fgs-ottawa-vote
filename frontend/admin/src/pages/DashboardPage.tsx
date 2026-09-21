@@ -3,7 +3,7 @@
  * 幾何：banner 132px｜統計卡 4 欄 gap 28px｜下層 2:1
  *
  * 資料來源（docs/05_api_contract.md）：
- *   GET /api/admin/dashboard/summary —— 當前輪次 / 統計 / 各分區
+ *   GET /api/admin/dashboard/summary —— 統計 / 各分區
  *   GET /api/admin/settings/activity —— 活動日誌（最新在前）
  */
 import { useNavigate } from 'react-router-dom'
@@ -20,11 +20,10 @@ const ACTION_LABEL: Record<string, string> = {
   member_create: '新增會員',
   member_update: '修改會員',
   member_delete: '刪除會員',
-  round_create: '建立輪次',
+  round_create: '建立進程',
   round_activate: '開啟投票',
   round_close: '關閉投票',
   round_confirm: '確認計票並鎖定',
-  round_runoff: '啟動加賽輪次',
   candidate_create: '新增候選人',
   candidate_update: '修改候選人',
   candidate_delete: '刪除候選人',
@@ -49,8 +48,8 @@ const STAT_STYLE = [
   { color: '#8A6D3B', Icon: IconFileText },
 ]
 
-/** 輪次狀態 → 中文（橫幅標籤用） */
-const ROUND_STATUS_LABEL: Record<string, string> = {
+/** 進程狀態 → 中文（橫幅標籤用） */
+const STATUS_LABEL: Record<string, string> = {
   draft: '未開始',
   active: '進行中',
   closed: '已結束',
@@ -86,12 +85,16 @@ export function DashboardPage() {
   const logs = activity ?? []
 
   /* ── 橫幅 ── */
-  const roundLabel = round
-    ? `CURRENT ROUND · ${ROUND_STATUS_LABEL[round.status] ?? round.status}`
+  const processLabel = round
+    ? `CURRENT · ${STATUS_LABEL[round.status] ?? round.status}`
     : loading
-      ? 'CURRENT ROUND · 載入中'
-      : 'CURRENT ROUND · 尚未建立'
-  const roundTitle = round ? round.name : loading ? '載入中…' : '尚未建立輪次'
+      ? 'CURRENT · 載入中'
+      : 'CURRENT · 尚未建立'
+  const processTitle = round
+    ? STATUS_LABEL[round.status] ?? round.status
+    : loading
+      ? '載入中…'
+      : '尚未建立'
 
   const opensAt = formatDateTime(round?.opens_at ?? null)
   const closesAt = formatDateTime(round?.closes_at ?? null)
@@ -119,17 +122,17 @@ export function DashboardPage() {
 
   return (
     <AdminLayout title="儀表板總覽">
-      {/* ── 當前輪次橫幅 ── */}
+      {/* ── 進程橫幅 ── */}
       <div
         className="h-[132px] rounded-lg px-6 flex items-center justify-between text-white"
         style={{ background: 'linear-gradient(to right, #8B1A1A, #6B1414)' }}
       >
         <div>
           <div className="text-[12px] tracking-[0.16em] text-white/70">
-            {roundLabel}
+            {processLabel}
           </div>
           <h2 className="text-[24px] font-serif font-bold leading-none mt-[13px]">
-            {roundTitle}
+            {processTitle}
           </h2>
           <div className="text-[14px] text-white/75 leading-none mt-[16px]">
             {windowText}

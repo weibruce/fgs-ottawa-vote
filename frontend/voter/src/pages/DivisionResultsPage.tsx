@@ -3,8 +3,8 @@
  * route: /vote/results（可用 ?division={id} 指定分區）
  *
  * 資料：GET /votes/results?round_id&division_id，每 2 秒輪詢（失敗保留上次畫面）
- * 輪次／分區：投票人 session（useVoteStore）；session 不存在時退回
- *            GET /votes/round/active 取當前輪次的第一個分區
+ * 分區：投票人 session（useVoteStore）；session 不存在時退回
+ *      GET /votes/round/active 取當前投票的第一個分區
  *
  * 設計稿量測（416×647，卡片 y29–619 / x27–385）：
  *   進度區塊 y172–267（96px，內距 15）、領先列 y287–370（84px）、列高 59px、
@@ -97,11 +97,11 @@ function ResultRow({
 export function DivisionResultsPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const { t, translateError, roundShort, nameOf } = useI18n()
+  const { t, translateError, nameOf } = useI18n()
   const { session } = useVoteStore()
   const paramDivision = Number(params.get('division') || 0)
 
-  // 輪次名稱（頁首小字用）＋ 無 session 時的後備分區（公開端點）
+  // 無 session 時的後備分區（公開端點）
   const [round, setRound] = useState<RoundPublicInfo | null>(null)
   useEffect(() => {
     let alive = true
@@ -152,16 +152,12 @@ export function DivisionResultsPage() {
     round?.divisions.find((d) => d.id === divisionId)?.name ||
     t('results.thisDivision')
 
-  const activeRoundName =
-    round && (session === null || round.id === session.round_id) ? round.name : null
-  const roundText = roundShort(activeRoundName, round?.round_no)
-
   return (
     <VoteShell>
       <section className="vote-card-body px-[21px] pt-[27px] pb-[28px]">
         {/* ── 頁首 ── */}
         <p className="text-[12px] leading-[16px] font-bold text-primary">
-          {t('results.roundStat', { round: roundText, division: divisionName })}
+          {divisionName}即時統計
         </p>
         <h1 className="mt-[4px] font-serif text-[30px] leading-[36px] font-bold text-ink">
           {t('results.heading')}

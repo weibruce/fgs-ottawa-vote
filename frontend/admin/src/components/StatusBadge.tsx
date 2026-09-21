@@ -1,7 +1,7 @@
 /**
  * 狀態徽章
  */
-import type { RoundStatus } from '../types'
+export type RoundStatus = 'draft' | 'active' | 'closed' | 'locked'
 
 const config: Record<RoundStatus, { label: string; bg: string; text: string }> = {
   draft: { label: '草稿', bg: 'bg-gray-200', text: 'text-gray-700' },

@@ -39,7 +39,7 @@ function fmtDateTime(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-/** 「候選人排序」下拉選項（純 UI 選項；輪次 API 尚未提供排序欄位） */
+/** 「候選人排序」下拉選項（純 UI 選項；API 尚未提供排序欄位） */
 const CANDIDATE_ORDER_OPTIONS = [
   { value: 'fixed', label: '固定順序' },
   { value: 'random', label: '隨機排序' },
@@ -70,7 +70,7 @@ const HEAD_STATS = 'px-5 pt-[20px] pb-[24px] -mb-[18px]' // 標題 14px、標題
 /* ── 頁面 ── */
 
 export function VoteConfigPage() {
-  // 輪次（當前 active）、系統設定（入口連結）、分區進度、儀表板（代理投票數）
+  // 進程（當前 active）、系統設定（入口連結）、分區進度、儀表板（代理投票數）
   const { data, error: loadError, reload } = useAsync(async () => {
     const [rounds, settings, divisions, summary] = await Promise.all([
       listRounds(),
@@ -178,7 +178,7 @@ export function VoteConfigPage() {
     <AdminLayout title="投票配置">
       {/* 頁面說明列（右側無操作鈕） */}
       <p className="text-[14px] leading-[21px] text-gray-deep mb-6">
-        配置當前輪次投票參數、投票視窗及統一入口連結
+        配置投票參數、投票視窗及統一入口連結
       </p>
 
       {loadError && (
@@ -199,11 +199,11 @@ export function VoteConfigPage() {
 
           <div className="px-6 pb-6">
             <div className="grid grid-cols-2 gap-x-5 gap-y-[23px]">
-              <FormField label="投票輪次" hint="當前進行的輪次">
+              <FormField label="進行中的進程" hint="">
                 <Select
                   value={round}
                   onChange={setRound}
-                  options={roundOptions.length ? roundOptions : [{ value: '', label: '尚未建立輪次' }]}
+                  options={roundOptions.length ? roundOptions : [{ value: '', label: '尚未建立' }]}
                 />
               </FormField>
 
@@ -225,7 +225,7 @@ export function VoteConfigPage() {
                 />
               </FormField>
 
-              <FormField label="每人最多票數" hint="當前輪次可投票數">
+              <FormField label="每人最多票數" hint="每人可投票數">
                 <input
                   type="number"
                   min={1}

@@ -1,171 +1,170 @@
 /**
- * 輪次管理 — 1:1 對齊參考稿 docs/ui/admin/voting_system_dashboard_07.png
+ * 進程管理 — 單一選舉進程（狀態／開始結束投票／票數設定／五區進度）＋ 當選結果
  *
- * 幾何量測（CSS px，viewport 1920×940、側欄 256 + 內容 padding 32 → 內容左緣 x=288）：
- *   說明列文字 y 99..111；步驟條卡片 y 139..274；深紅卡 y 299..550（上下間距 24）
- *   底部兩卡 y 575..922（左 288..1075、右 1100..1887，gap 24）
- * 資料來源：admin rounds API（listRounds / fetchRoundProgress / closeRound /
- *   confirmRound / createRunoff），版面與類別不變，只把 mock 值換成 data.*
+ * 沿用既有版面色票與間距節奏（Card / CardHeader / PageIntro / DivisionMark / ProgressBar…），
+ * 不重新設計整頁視覺。資料來源：
+ *   GET  /admin/rounds                     當前進程
+ *   GET  /admin/rounds/{id}/progress       五區投票進度
+ *   PUT  /admin/rounds/{id}                票數上下限
+ *   POST /admin/rounds/{id}/activate|close|confirm
+ *   GET  /admin/divisions/officers         當選結果（會長／副會長）
+ *   PUT  /admin/divisions/{id}/officers    平票時手動指派（兩者都 null = 清除）
  */
-import { Fragment, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
-import { Card, CardHeader, Button, PageIntro, ProgressBar, DivisionMark, TableWrap, LinkMore } from '../components/ui'
-import { IconRefresh, IconLock, IconAlert } from '../components/icons'
+import {
+  Card,
+  CardHeader,
+  Button,
+  PageIntro,
+  ProgressBar,
+  DivisionMark,
+  Field,
+  Tag,
+} from '../components/ui'
+import { IconCheck, IconLock, IconAlert, IconUser } from '../components/icons'
 import { useAsync } from '../hooks/useAsync'
 import { apiError } from '../api/client'
 import {
   listRounds,
   fetchRoundProgress,
+  activateRound,
   closeRound,
   confirmRound,
-  createRunoff,
+  updateRound,
 } from '../api/rounds'
-import type { DivisionProgress, RoundOut } from '../api/types'
+import { fetchDivisionOfficers, assignDivisionOfficers } from '../api/divisions'
+import type { DivisionOfficers, OfficerCandidate, RoundOut } from '../api/types'
 
-/* ── 頁面內自繪圖示（icons.tsx 無對應形狀，依參考稿手繪） ── */
+const TIE_NOTE_COLOR = '#8A6D3B'
+const INNER_BORDER = '#EFE5D0'
 
-/** 第二輪配置標題圖示：節點折線 */
-function IconRoute({ size = 17, className = '' }: { size?: number; className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor"
-      strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
-      <path d="M6.4 4.2v9.6" />
-      <circle cx="6.4" cy="16.8" r="2.6" />
-      <path d="M9 16.8h1.6a4.2 4.2 0 0 0 4.2-4.2v-1.2" />
-      <circle cx="17.4" cy="8.6" r="2.6" />
-    </svg>
-  )
-}
-
-/** 右箭頭（禁用按鈕提示） */
-function IconArrowRight({ size = 16, className = '' }: { size?: number; className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor"
-      strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
-      <path d="M4.4 12h14.4" />
-      <path d="M13.4 6.6L18.8 12l-5.4 5.4" />
-    </svg>
-  )
-}
-
-/* ── 樣式表（狀態 → class），資料驅動、避免寫死在 JSX 深處 ── */
-
-const STEP_TONES: Record<string, { circle: string; title: string; desc: string }> = {
-  active: {
-    circle: 'bg-primary text-white',
-    title: 'text-primary',
-    desc: 'text-gray-deep',
-  },
-  pending: {
-    circle: 'bg-white border border-border text-gray-deep',
-    title: 'text-ink',
-    desc: 'text-gray-deep',
-  },
-}
-
-const TIE_NOTE_COLOR = '#8A6D3B' /* 平票提示字（參考稿量測） */
-const GOLD = '#B8935A' /* 加賽按鈕／警示圖示（＝南區標識色） */
-const INNER_BORDER = '#EFE5D0' /* 卡內白色面板框線（參考稿量測） */
-
-/** 輪次狀態 → 中文標籤 */
+/** 進程狀態 → 中文標籤 */
 const STATUS_LABEL: Record<string, string> = {
-  draft: '草稿',
-  active: '進行中',
-  closed: '已結束',
-  locked: '已鎖定',
-}
-const ROUND2_STATUS: Record<string, string> = {
   draft: '未開始',
   active: '進行中',
   closed: '已結束',
   locked: '已鎖定',
 }
 
-/** ISO 時間 → `YYYY-MM-DD HH:mm`（配合參考稿表格格式） */
-function fmtTime(iso: string | null): string {
-  if (!iso) return ''
-  return iso.slice(0, 16).replace('T', ' ')
-}
+const inputCls =
+  'w-full h-10 rounded-lg bg-light-bg border border-border px-3 text-[14px] text-ink outline-none focus:border-primary disabled:opacity-50'
 
-/** 依輪次狀態推導目前階段（1..5，對應步驟條） */
-function deriveStage(rounds: RoundOut[], hasTie: boolean): number {
-  const r1 = rounds.find((r) => r.round_no === 1 && !r.is_runoff)
-  const r2 = rounds.find((r) => r.round_no === 2 && !r.is_runoff)
-  if (!r1 || r1.status === 'draft' || r1.status === 'active') return 1
-  if (r1.status === 'closed') return 2
-  // 第一輪已鎖定
-  const openRunoff = rounds.some((r) => r.is_runoff && r.status !== 'locked')
-  if (hasTie || openRunoff) return 2
-  if (!r2 || r2.status === 'draft') return 3
-  if (r2.status === 'active' || r2.status === 'closed') return 4
-  return 5
-}
+const selectCls =
+  'w-full h-9 rounded-lg bg-light-bg border border-border px-2 text-[13px] text-ink outline-none focus:border-primary'
 
-/** 卡片標題右側狀態標籤（參考稿為膠囊型、兩種底色） */
-function StatusPill({ children, tone }: { children: ReactNode; tone: 'wait' | 'idle' }) {
+/* ── 卡片標題右側狀態標籤 ── */
+function StatusPill({ children, tone }: { children: ReactNode; tone: 'info' | 'muted' }) {
   return (
     <span
-      className="flex w-fit h-5 items-center rounded-full px-2 text-[12px] leading-none text-gray-deep -mt-0.5"
-      style={{ background: tone === 'wait' ? '#EEE2CD' : 'var(--color-border)' }}
+      className="flex w-fit h-5 items-center rounded-full px-2 text-[12px] leading-none -mt-0.5"
+      style={{
+        background: tone === 'info' ? '#EEE2CD' : 'var(--color-border)',
+        color: 'var(--color-gray-deep)',
+      }}
     >
       {children}
     </span>
   )
 }
 
-/** key-value 列（label 左、value 右） */
-function KvRow({ k, v }: { k: string; v: string }) {
+/** 候選人頭像（無圖時以姓名首字色塊代替） */
+function CandidateAvatar({
+  candidate,
+  size = 44,
+}: {
+  candidate: OfficerCandidate | null
+  size?: number
+}) {
+  const [broken, setBroken] = useState(false)
+  if (!candidate) {
+    return (
+      <span
+        className="shrink-0 rounded-lg bg-light-bg flex items-center justify-center text-gray"
+        style={{ width: size, height: size }}
+      >
+        <IconUser size={Math.round(size * 0.5)} />
+      </span>
+    )
+  }
+  if (!candidate.avatar_url || broken) {
+    return (
+      <span
+        className="shrink-0 rounded-lg flex items-center justify-center text-white font-bold"
+        style={{
+          width: size,
+          height: size,
+          background: 'var(--color-primary)',
+          fontSize: Math.round(size * 0.4),
+        }}
+      >
+        {candidate.name.charAt(0)}
+      </span>
+    )
+  }
   return (
-    <div className="flex items-center justify-between gap-4 py-1.5 text-[14px] leading-5">
-      <span className="text-gray-deep">{k}</span>
-      <span className="text-ink font-medium">{v}</span>
-    </div>
+    <img
+      src={candidate.avatar_url}
+      alt={candidate.name}
+      onError={() => setBroken(true)}
+      className="shrink-0 rounded-lg object-cover"
+      style={{ width: size, height: size, border: `1px solid ${INNER_BORDER}` }}
+    />
   )
 }
 
-/** 卡內白色面板（參考稿：圓角 8、1px #EFE5D0 框） */
-function InnerPanel({ children }: { children: ReactNode }) {
+/** 會長／副會長一列：職稱 + 頭像 + 姓名 + 票數 */
+function OfficerRow({
+  role,
+  candidate,
+  accent,
+}: {
+  role: string
+  candidate: OfficerCandidate | null
+  accent: string
+}) {
   return (
     <div
-      className="mx-6 rounded-lg bg-white px-4 py-2.5"
+      className="flex items-center gap-2.5 rounded-lg bg-white p-2"
       style={{ border: `1px solid ${INNER_BORDER}` }}
     >
-      {children}
+      <CandidateAvatar candidate={candidate} />
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] leading-none" style={{ color: accent }}>
+          {role}
+        </div>
+        <div className="mt-1 text-[14px] font-bold leading-tight text-ink truncate">
+          {candidate ? candidate.name : '未指派'}
+        </div>
+      </div>
+      <div className="shrink-0 text-right">
+        <div className="text-[18px] font-serif font-bold leading-none" style={{ color: accent }}>
+          {candidate ? candidate.vote_count : '—'}
+        </div>
+        <div className="mt-0.5 text-[11px] leading-none text-gray-deep">票</div>
+      </div>
     </div>
   )
 }
 
-/** 目前輪次的分區小卡 */
-function DivisionCard({
-  name,
-  text,
-  tie,
-  tieNote,
-  color,
-}: {
+/** 五區投票進度小卡 */
+function ProgressCard({ name, color, voted, total, pct }: {
   name: string
-  text: string
-  tie?: boolean
-  tieNote?: string
-  color?: string
+  color: string
+  voted: number
+  total: number
+  pct: number
 }) {
-  // 顏色一律由 API（round progress / divisions）提供
-  const markColor = color || 'var(--color-primary)'
-  const pct = Number(text.match(/(\d+)%/)?.[1] ?? 0)
   return (
     <div className="rounded-lg bg-white p-4" style={{ border: `1px solid ${INNER_BORDER}` }}>
       <div className="flex items-center gap-2.5">
-        <DivisionMark name={name} color={markColor} size={24} radius={6} />
+        <DivisionMark name={name} color={color} size={24} radius={6} />
         <span className="text-[14px] font-bold text-ink">{name}</span>
-        {tie && <IconAlert size={16} className="ml-auto text-[#B8935A]" />}
       </div>
-      <ProgressBar pct={pct} color={markColor} height={6} className="mt-2" />
-      <p className="mt-2 text-[12px] leading-[18px] text-gray-deep">{text}</p>
-      {tie && tieNote && (
-        <p className="mt-1.5 text-[12px] leading-4" style={{ color: TIE_NOTE_COLOR }}>
-          {tieNote}
-        </p>
-      )}
+      <ProgressBar pct={pct} color={color} height={6} className="mt-2" />
+      <p className="mt-2 text-[12px] leading-[18px] text-gray-deep">
+        {voted}/{total}人·{pct}%
+      </p>
     </div>
   )
 }
@@ -174,155 +173,171 @@ export function RoundsPage() {
   const roundsState = useAsync(() => listRounds(), [])
   const rounds = roundsState.data ?? []
 
-  const activeRound = rounds.find((r) => r.status === 'active') ?? null
+  /* 目前進程：優先進行中，其次已結束／已鎖定，最後才取最新一筆 */
+  const reversed = [...rounds].reverse()
+  const target: RoundOut | null =
+    rounds.find((r) => r.status === 'active') ??
+    reversed.find((r) => r.status === 'closed' || r.status === 'locked') ??
+    rounds[rounds.length - 1] ??
+    null
+
   const progressState = useAsync(
-    () => (activeRound ? fetchRoundProgress(activeRound.id) : Promise.resolve(null)),
-    [activeRound?.id ?? 0],
+    () => (target ? fetchRoundProgress(target.id) : Promise.resolve(null)),
+    [target?.id ?? 0],
   )
   const progress = progressState.data
 
+  const officersState = useAsync(
+    () => fetchDivisionOfficers(target?.id),
+    [target?.id ?? 0],
+  )
+  const officers = officersState.data ?? []
+
   const [busy, setBusy] = useState(false)
+  const [savingVotes, setSavingVotes] = useState(false)
+  const [savingOfficers, setSavingOfficers] = useState<number | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  const tieDivision: DivisionProgress | undefined = progress?.divisions.find((d) => d.is_tie)
-  const hasTie = Boolean(tieDivision)
-  const stage = deriveStage(rounds, hasTie)
+  /* 票數上下限（可直接編輯） */
+  const [minVotes, setMinVotes] = useState(1)
+  const [maxVotes, setMaxVotes] = useState(2)
+  useEffect(() => {
+    if (!target) return
+    setMinVotes(target.min_votes)
+    setMaxVotes(target.max_votes)
+  }, [target?.id, target?.min_votes, target?.max_votes])
 
-  /* ── 步驟條（依輪次狀態推導） ── */
-  const steps = [
-    { no: 1, title: '第一輪·分區選舉', desc: '五區並行獨立選舉' },
-    { no: 2, title: '平票再投', desc: '若某區平票則觸發加賽' },
-    { no: 3, title: '第二輪·總會副會長', desc: '小範圍白名單選舉' },
-    { no: 4, title: '幹部指派', desc: '各區會長指派會務幹部' },
-    { no: 5, title: '完成', desc: '結果公告' },
-  ].map((s) => ({ ...s, state: s.no <= stage ? 'active' : 'pending' }))
+  /* 手動指派選擇（division_id → 會長／副會長候選人 id 字串） */
+  const [assign, setAssign] = useState<Record<number, { chair: string; vice: string }>>({})
+  useEffect(() => {
+    if (!officersState.data) return
+    const next: Record<number, { chair: string; vice: string }> = {}
+    for (const d of officersState.data) {
+      next[d.division_id] = {
+        chair: d.chair_candidate_id ? String(d.chair_candidate_id) : '',
+        vice: d.vice_candidate_id ? String(d.vice_candidate_id) : '',
+      }
+    }
+    setAssign(next)
+  }, [officersState.data])
 
-  /* ── 目前輪次（深紅卡） ── */
-  const current = {
-    tag: activeRound ? `ROUND ${activeRound.round_no} · ${STATUS_LABEL[activeRound.status] ?? ''}` : '—',
-    title: activeRound ? activeRound.name : '目前無進行中的輪次',
-    divisions: progress?.divisions ?? [],
-  }
-  const totalVoted = (progress?.divisions ?? []).reduce((s, d) => s + d.voted_count, 0)
-  const totalMembers = (progress?.divisions ?? []).reduce((s, d) => s + d.total_members, 0)
-
-  /* ── 平票再投（加賽） ── */
-  const existingRunoff = activeRound && tieDivision
-    ? rounds.find(
-        (r) => r.is_runoff && r.parent_round_id === activeRound.id && r.division_id === tieDivision.division_id,
-      )
-    : undefined
-  const rerunStatus = existingRunoff
-    ? (STATUS_LABEL[existingRunoff.status] ?? existingRunoff.status)
-    : tieDivision
-      ? '待啟動'
-      : '無平票'
-  const rerunRows = [
-    { k: '加賽分區', v: tieDivision ? `${tieDivision.name}（候選）` : '—' },
-    {
-      k: '平票候選人',
-      v: tieDivision
-        ? `${tieDivision.tie_candidates.map((c) => c.name).join('、')}（${tieDivision.tie_candidates.length} 人）`
-        : '—',
-    },
-    { k: '投票人範圍', v: '本區全部會員' },
-    { k: '每人票數', v: `${existingRunoff?.max_votes ?? 1} 票` },
-    { k: '加賽次數上限', v: '最多 2 次' },
-  ]
-
-  /* ── 第二輪配置 ── */
-  const round2 = rounds.find((r) => r.round_no === 2 && !r.is_runoff)
-  const round2View = {
-    status: round2 ? (ROUND2_STATUS[round2.status] ?? round2.status) : '未開始',
-    rows: [
-      { k: '候選人數', v: round2 && round2.candidate_ids.length ? `${round2.candidate_ids.length} 人` : '尚未設定' },
-      {
-        k: '投票人白名單',
-        v: round2?.allowed_member_nos ? `${round2.allowed_member_nos.length} 人` : '尚未匯入',
-      },
-      { k: '每人票數', v: `${round2?.max_votes ?? 1} 票（預設）` },
-      { k: '投票連結', v: '將獨立產生' },
-    ],
-  }
-
-  /* ── 所有輪次（表格） ── */
-  const table = rounds.map((r) => ({
-    id: `R${r.id}`,
-    title: r.name,
-    window: r.opens_at && r.closes_at ? `${fmtTime(r.opens_at)} → ${fmtTime(r.closes_at)}` : '未設定',
-    progress:
-      r.id === activeRound?.id
-        ? `${totalVoted} / ${totalMembers}`
-        : `0 / ${r.allowed_member_nos?.length ?? 0}`,
-    status: STATUS_LABEL[r.status] ?? r.status,
-  }))
+  const divisions = progress?.divisions ?? []
+  const totalVoted = divisions.reduce((s, d) => s + d.voted_count, 0)
+  const totalMembers = divisions.reduce((s, d) => s + d.total_members, 0)
+  const statusLabel = target ? (STATUS_LABEL[target.status] ?? target.status) : '—'
+  const votesValid = minVotes >= 1 && maxVotes >= minVotes
+  const votesChanged = Boolean(target && (minVotes !== target.min_votes || maxVotes !== target.max_votes))
 
   async function reloadAll() {
     await roundsState.reload()
     await progressState.reload()
+    await officersState.reload()
   }
 
-  /** 確認計票完成：active → close → confirm（鎖定） */
-  async function handleConfirm() {
-    if (!activeRound) return
+  async function runAction(fn: () => Promise<unknown>, okMessage: string) {
     setBusy(true)
     setActionError(null)
     setNotice(null)
     try {
-      if (activeRound.status === 'active') await closeRound(activeRound.id)
-      const res = (await confirmRound(activeRound.id)) as RoundOut & {
-        has_tie?: boolean
-        tie_divisions?: { division_id: number; name: string }[]
-      }
-      const ties = res.tie_divisions ?? []
-      setNotice(
-        ties.length
-          ? `計票已確認並鎖定。${ties.map((t) => t.name).join('、')}平票，請啟動加賽輪次。`
-          : '計票已確認並鎖定。',
+      await fn()
+      setNotice(okMessage)
+      await reloadAll()
+    } catch (e) {
+      setActionError(apiError(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleSaveVotes() {
+    if (!target || !votesValid) return
+    setSavingVotes(true)
+    setActionError(null)
+    setNotice(null)
+    try {
+      await updateRound(target.id, { min_votes: minVotes, max_votes: maxVotes })
+      setNotice(`票數設定已更新：每人 ${minVotes}–${maxVotes} 票。`)
+      await roundsState.reload()
+    } catch (e) {
+      setActionError(apiError(e))
+    } finally {
+      setSavingVotes(false)
+    }
+  }
+
+  function setAssignField(divId: number, field: 'chair' | 'vice', value: string) {
+    setAssign((prev) => {
+      const cur = prev[divId] ?? { chair: '', vice: '' }
+      return { ...prev, [divId]: { ...cur, [field]: value } }
+    })
+  }
+
+  /** 直接點選平票候選人：先填會長、再填副會長，再次點選則取消 */
+  function pickTie(divId: number, candidateId: number) {
+    setAssign((prev) => {
+      const cur = prev[divId] ?? { chair: '', vice: '' }
+      const id = String(candidateId)
+      if (cur.chair === id) return { ...prev, [divId]: { ...cur, chair: '' } }
+      if (cur.vice === id) return { ...prev, [divId]: { ...cur, vice: '' } }
+      if (!cur.chair) return { ...prev, [divId]: { ...cur, chair: id } }
+      if (!cur.vice) return { ...prev, [divId]: { ...cur, vice: id } }
+      return { ...prev, [divId]: { chair: id, vice: cur.chair } }
+    })
+  }
+
+  async function handleAssign(div: DivisionOfficers) {
+    if (!target) return
+    const st = assign[div.division_id] ?? { chair: '', vice: '' }
+    setSavingOfficers(div.division_id)
+    setActionError(null)
+    setNotice(null)
+    try {
+      await assignDivisionOfficers(
+        div.division_id,
+        {
+          chair_candidate_id: st.chair ? Number(st.chair) : null,
+          vice_candidate_id: st.vice ? Number(st.vice) : null,
+        },
+        target.id,
       )
-      await reloadAll()
+      setNotice(`${div.division_name} 會長／副會長已手動指派。`)
+      await officersState.reload()
     } catch (e) {
       setActionError(apiError(e))
     } finally {
-      setBusy(false)
+      setSavingOfficers(null)
     }
   }
 
-  /** 啟動加賽輪次：以目前平票分區的平票候選人建立新輪次 */
-  async function handleRunoff() {
-    if (!activeRound || !tieDivision) return
-    setBusy(true)
+  async function handleClear(div: DivisionOfficers) {
+    if (!target) return
+    setSavingOfficers(div.division_id)
     setActionError(null)
     setNotice(null)
     try {
-      await createRunoff(activeRound.id, {
-        division_id: tieDivision.division_id,
-        candidate_ids: tieDivision.tie_candidates.map((c) => c.id),
-        min_votes: 1,
-        max_votes: 1,
-        voter_scope: 'all',
-        max_runoffs: 2,
-      })
-      setNotice(`已建立${tieDivision.name}加賽輪次（草稿）。`)
-      await reloadAll()
+      await assignDivisionOfficers(
+        div.division_id,
+        { chair_candidate_id: null, vice_candidate_id: null },
+        target.id,
+      )
+      setNotice(`${div.division_name} 已清除手動指派，回復票數自動結果。`)
+      await officersState.reload()
     } catch (e) {
       setActionError(apiError(e))
     } finally {
-      setBusy(false)
+      setSavingOfficers(null)
     }
   }
 
-  const pageError = roundsState.error || progressState.error
+  const pageError = roundsState.error || progressState.error || officersState.error
 
   return (
-    <AdminLayout title="輪次管理">
-      {/* 說明列（參考稿此列無按鈕、僅 21px 高，覆寫 PageIntro 內距以對齊 y=139） */}
+    <AdminLayout title="進程管理">
       <div className="[&>div]:min-h-0 [&>div]:mb-[23px]">
-        <PageIntro>管理選舉輪次進程·確認計票·鎖定資料·新增加賽</PageIntro>
+        <PageIntro>管理選舉進程·開始／結束投票·票數設定·當選結果與平票指派</PageIntro>
       </div>
 
-      {/* 載入／錯誤提示（僅在需要時出現，不影響版面骨架） */}
       {pageError && (
         <div className="mb-5 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5 text-[13px] text-primary">
           {pageError}
@@ -334,172 +349,308 @@ export function RoundsPage() {
         </div>
       )}
       {notice && (
-        <div className="mb-5 rounded-lg border px-4 py-2.5 text-[13px]" style={{ borderColor: INNER_BORDER, color: TIE_NOTE_COLOR, background: '#FBF6EC' }}>
+        <div
+          className="mb-5 rounded-lg border px-4 py-2.5 text-[13px]"
+          style={{ borderColor: INNER_BORDER, color: TIE_NOTE_COLOR, background: '#FBF6EC' }}
+        >
           {notice}
         </div>
       )}
 
-      {/* ── 步驟條 ── */}
-      <Card className="px-5 py-6">
-        <div className="flex items-start">
-          {steps.map((s, i) => {
-            const tone = STEP_TONES[s.state] ?? STEP_TONES.pending
-            return (
-              <Fragment key={s.no}>
-                <div className="flex-1 flex flex-col items-center text-center">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[14px] font-bold ${tone.circle}`}>
-                    {s.no}
-                  </div>
-                  <div className={`mt-2 text-[14px] font-bold leading-5 ${tone.title}`}>{s.title}</div>
-                  <div className={`mt-0.5 text-[12px] leading-4 ${tone.desc}`}>{s.desc}</div>
-                </div>
-                {i < steps.length - 1 && <span className="shrink-0 w-8 h-px bg-border mt-[22px]" />}
-              </Fragment>
-            )
-          })}
-        </div>
-      </Card>
-
-      {/* ── 目前輪次（深紅卡） ── */}
-      <Card className="mt-6 border-2! border-primary! overflow-hidden">
+      {/* ── 進程卡（深紅） ── */}
+      <Card className="border-2! border-primary! overflow-hidden">
         <header className="flex items-center justify-between gap-4 bg-primary px-6 pt-5 pb-[18px]">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold tracking-[0.15em] text-white/80 leading-none">{current.tag}</p>
-            <h2 className="mt-1.5 text-[20px] font-bold text-white font-serif leading-tight">{current.title}</h2>
+            <p className="text-[11px] font-semibold tracking-[0.15em] text-white/80 leading-none">
+              選舉進程
+            </p>
+            <h2 className="mt-1.5 text-[20px] font-bold text-white font-serif leading-tight">
+              {target ? '分區會長選舉' : '尚未建立選舉進程'}
+            </h2>
           </div>
-          <Button
-            variant="primary"
-            className="shrink-0 bg-white/10 border-white/40 text-white hover:bg-white/20"
-            onClick={() => void handleConfirm()}
-            disabled={!activeRound || busy || activeRound.status === 'locked'}
-          >
-            <IconLock size={15} />
-            確認計票完成
-          </Button>
-        </header>
-        <div className="px-6 pt-6 pb-6">
-          <div className="grid grid-cols-5 gap-3">
-            {current.divisions.length === 0 && (
-              <p className="col-span-5 py-6 text-center text-[12px] text-gray-deep">載入中…</p>
+          <div className="shrink-0 flex items-center gap-3">
+            <span className="flex h-6 items-center rounded-full bg-white/15 px-3 text-[12px] leading-none text-white">
+              {statusLabel}
+            </span>
+            {target?.status === 'draft' && (
+              <Button
+                variant="primary"
+                className="bg-white/10 border-white/40 text-white hover:bg-white/20"
+                onClick={() => void runAction(() => activateRound(target.id), '投票已開始。')}
+                disabled={busy}
+              >
+                開始投票
+              </Button>
             )}
-            {current.divisions.map((d) => (
-              <DivisionCard
+            {target?.status === 'active' && (
+              <Button
+                variant="primary"
+                className="bg-white/10 border-white/40 text-white hover:bg-white/20"
+                onClick={() => void runAction(() => closeRound(target.id), '投票已結束。')}
+                disabled={busy}
+              >
+                結束投票
+              </Button>
+            )}
+            {target?.status === 'closed' && (
+              <Button
+                variant="primary"
+                className="bg-white/10 border-white/40 text-white hover:bg-white/20"
+                onClick={() =>
+                  void runAction(() => confirmRound(target.id), '計票已確認並鎖定。')
+                }
+                disabled={busy}
+              >
+                <IconLock size={15} />
+                確認計票完成
+              </Button>
+            )}
+          </div>
+        </header>
+
+        <div className="px-6 pt-6 pb-6">
+          {/* 票數設定 + 總票數 */}
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <div
+              className="rounded-lg bg-white px-4 py-3"
+              style={{ border: `1px solid ${INNER_BORDER}` }}
+            >
+              <div className="flex items-end gap-4">
+                <Field label="最少票數（每人）" className="w-[132px]">
+                  <input
+                    type="number"
+                    min={1}
+                    value={minVotes}
+                    onChange={(e) => setMinVotes(Number(e.target.value))}
+                    disabled={busy || target?.status === 'locked'}
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="最多票數（每人）" className="w-[132px]">
+                  <input
+                    type="number"
+                    min={1}
+                    value={maxVotes}
+                    onChange={(e) => setMaxVotes(Number(e.target.value))}
+                    disabled={busy || target?.status === 'locked'}
+                    className={inputCls}
+                  />
+                </Field>
+                <Button
+                  variant="primary"
+                  onClick={() => void handleSaveVotes()}
+                  disabled={!target || savingVotes || !votesValid || !votesChanged}
+                >
+                  <IconCheck size={15} />
+                  儲存票數設定
+                </Button>
+              </div>
+              {!votesValid && (
+                <p className="mt-2 text-[12px] text-primary">
+                  最多票數不可小於最少票數，且最少為 1 票。
+                </p>
+              )}
+            </div>
+
+            <div className="text-right">
+              <div className="font-serif text-[30px] font-bold leading-none text-primary">
+                {totalVoted}
+                <span className="text-[14px] text-gray-deep"> / {totalMembers}</span>
+              </div>
+              <div className="mt-1 text-[12px] text-gray-deep">已投票人數</div>
+            </div>
+          </div>
+
+          {/* 五區投票進度 */}
+          <div className="mt-5 grid grid-cols-5 gap-3">
+            {divisions.length === 0 && (
+              <p className="col-span-5 py-6 text-center text-[12px] text-gray-deep">
+                {progressState.loading ? '載入中…' : '尚無投票進度'}
+              </p>
+            )}
+            {divisions.map((d) => (
+              <ProgressCard
                 key={d.division_id}
                 name={d.name}
                 color={d.color}
-                text={`${d.voted_count}/${d.total_members}人·${d.progress_pct}%`}
-                tie={d.is_tie}
-                tieNote={d.is_tie ? '❗ 最高票平票' : undefined}
+                voted={d.voted_count}
+                total={d.total_members}
+                pct={d.progress_pct}
               />
             ))}
           </div>
         </div>
       </Card>
 
-      {/* ── 平票再投（加賽）＋ 第二輪配置 ── */}
-      <div className="grid grid-cols-2 gap-6 mt-6">
-        <Card className="pb-6">
-          <CardHeader
-            divider={false}
-            className="items-start px-6! pt-[26px]! pb-[14px]! [&_p]:mt-1!"
-            title={
-              <span className="flex items-center gap-2 text-[16px] font-bold leading-6 text-ink">
-                <IconRefresh size={17} className="text-[#B8935A]" />
-                平票再投（加賽）
-              </span>
-            }
-            sub={<span className="block text-[12px] leading-5 text-gray">當某分區出現平票，可啟動加賽輪次</span>}
-            action={<StatusPill tone="wait">{rerunStatus}</StatusPill>}
-          />
-          <InnerPanel>
-            {rerunRows.map((row) => (
-              <KvRow key={row.k} k={row.k} v={row.v} />
-            ))}
-          </InnerPanel>
-          <div className="px-6 mt-4">
-            <button
-              type="button"
-              onClick={() => void handleRunoff()}
-              disabled={!tieDivision || Boolean(existingRunoff) || busy}
-              className="w-full h-9 rounded-lg inline-flex items-center justify-center gap-1.5 text-[14px] font-medium text-white transition-[filter] hover:brightness-95"
-              style={{ background: GOLD }}
-            >
-              <IconRefresh size={16} />
-              啟動加賽輪次
-            </button>
-          </div>
-        </Card>
+      {/* ── 當選結果 ── */}
+      <Card className="mt-6 pb-6">
+        <CardHeader
+          divider={false}
+          className="items-start px-6! pt-[26px]! pb-[14px]! [&_p]:mt-1!"
+          title={
+            <span className="flex items-center gap-2 text-[16px] font-bold leading-6 text-ink">
+              <IconUser size={17} className="text-primary" />
+              當選結果
+            </span>
+          }
+          sub={
+            <span className="block text-[12px] leading-5 text-gray">
+              各分區會長（第一名）／副會長（第二名）· 平票時請手動指派
+            </span>
+          }
+          action={
+            <StatusPill tone={officers.some((d) => d.is_final) ? 'muted' : 'info'}>
+              {officers.length === 0
+                ? '—'
+                : officers.every((d) => d.is_final)
+                  ? '最終結果'
+                  : '即時預估'}
+            </StatusPill>
+          }
+        />
 
-        <Card className="pb-6">
-          <CardHeader
-            divider={false}
-            className="items-start px-6! pt-[26px]! pb-[14px]! [&_p]:mt-1!"
-            title={
-              <span className="flex items-center gap-2 text-[16px] font-bold leading-6 text-ink">
-                <IconRoute size={17} className="text-[#8A6D3B]" />
-                第二輪配置
-              </span>
-            }
-            sub={<span className="block text-[12px] leading-5 text-gray">總會副會長選舉 · 白名單存取</span>}
-            action={<StatusPill tone="idle">{round2View.status}</StatusPill>}
-          />
-          <InnerPanel>
-            {round2View.rows.map((row) => (
-              <KvRow key={row.k} k={row.k} v={row.v} />
-            ))}
-          </InnerPanel>
-          <div className="px-6 mt-4">
-            <button
-              type="button"
-              disabled
-              className="w-full h-9 rounded-lg inline-flex items-center justify-center gap-1.5 text-[14px] text-gray-deep cursor-not-allowed"
-              style={{ background: INNER_BORDER }}
-            >
-              <IconArrowRight size={16} />
-              需完成第一輪後開啟
-            </button>
-          </div>
-        </Card>
-      </div>
+        <div className="px-6 grid grid-cols-5 gap-4">
+          {officers.length === 0 && (
+            <p className="col-span-5 py-6 text-center text-[12px] text-gray-deep">
+              {officersState.loading ? '載入中…' : '尚無當選結果'}
+            </p>
+          )}
 
-      {/* ── 所有輪次（參考稿此表在視窗下方，保留供後續接 API） ── */}
-      <Card className="mt-6">
-        <CardHeader title="所有輪次" divider={false} />
-        <TableWrap className="px-5 pb-5">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>標題</th>
-              <th>時間視窗</th>
-              <th>進度</th>
-              <th>狀態</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {table.map((row) => (
-              <tr key={row.id}>
-                <td className="font-mono text-[13px]">{row.id}</td>
-                <td className="font-medium">{row.title}</td>
-                <td className="font-mono text-[12px] text-gray-deep">{row.window}</td>
-                <td>{row.progress}</td>
-                <td>
+          {officers.map((div) => {
+            const st = assign[div.division_id] ?? { chair: '', vice: '' }
+            const findCand = (id: number | null) =>
+              id ? (div.candidates.find((c) => c.id === id) ?? null) : null
+            const chair = findCand(div.chair_candidate_id)
+            const vice = findCand(div.vice_candidate_id)
+            const tieCands = div.candidates.filter((c) => div.tie_candidate_ids.includes(c.id))
+            const editable = div.has_tie || div.officers_manual
+            const viceOptions = div.candidates.filter((c) => String(c.id) !== st.chair)
+
+            return (
+              <div key={div.division_id} className="flex flex-col">
+                <div className="flex items-center gap-2.5">
+                  <DivisionMark name={div.division_name} color={div.color} size={24} radius={6} />
+                  <span className="text-[14px] font-bold text-ink">{div.division_name}</span>
                   <span
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] ${
-                      row.status === '進行中' ? 'text-primary bg-primary/5' : 'text-gray-deep bg-cream'
-                    }`}
+                    className="ml-auto flex h-5 items-center rounded-full px-2 text-[11px] leading-none whitespace-nowrap"
+                    style={{
+                      background: div.is_final ? '#E7F3E8' : '#EEE2CD',
+                      color: div.is_final ? '#15803d' : TIE_NOTE_COLOR,
+                    }}
                   >
-                    {row.status === '進行中' && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
-                    {row.status}
+                    {div.is_final ? '最終結果' : '即時預估'}
                   </span>
-                </td>
-                <td>
-                  <LinkMore>查看</LinkMore>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </TableWrap>
+                </div>
+
+                <div className="mt-2.5 space-y-2">
+                  <OfficerRow role="會長" candidate={chair} accent="var(--color-primary)" />
+                  <OfficerRow role="副會長" candidate={vice} accent="#B8935A" />
+                </div>
+
+                {div.has_tie && !div.officers_manual && (
+                  <div
+                    className="mt-2 flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[12px] leading-4"
+                    style={{
+                      background: '#FBF6EC',
+                      border: `1px solid ${INNER_BORDER}`,
+                      color: TIE_NOTE_COLOR,
+                    }}
+                  >
+                    <IconAlert size={14} className="shrink-0" />
+                    平票，請手動指派
+                  </div>
+                )}
+
+                {editable && (
+                  <div
+                    className="mt-3 border-t pt-3 space-y-2"
+                    style={{ borderColor: INNER_BORDER }}
+                  >
+                    {div.officers_manual && (
+                      <div className="flex items-center justify-between gap-2">
+                        <Tag color="warning">已手動指派</Tag>
+                        <button
+                          type="button"
+                          onClick={() => void handleClear(div)}
+                          disabled={savingOfficers === div.division_id}
+                          className="text-[12px] text-primary hover:underline disabled:opacity-50"
+                        >
+                          清除回復自動
+                        </button>
+                      </div>
+                    )}
+
+                    {div.has_tie && tieCands.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {tieCands.map((c) => {
+                          const picked =
+                            st.chair === String(c.id) || st.vice === String(c.id)
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => pickTie(div.division_id, c.id)}
+                              className="inline-flex items-center gap-1 h-6 rounded-full border px-2 text-[12px] transition-colors"
+                              style={{
+                                borderColor: picked ? 'var(--color-primary)' : 'var(--color-border)',
+                                background: picked ? 'var(--color-primary)' : '#fff',
+                                color: picked ? '#fff' : 'var(--color-ink-soft)',
+                              }}
+                            >
+                              {c.name}·{c.vote_count}票
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 gap-2">
+                      <label className="block">
+                        <span className="mb-1 block text-[12px] text-gray-deep">會長</span>
+                        <select
+                          className={selectCls}
+                          value={st.chair}
+                          onChange={(e) => setAssignField(div.division_id, 'chair', e.target.value)}
+                        >
+                          <option value="">未指派</option>
+                          {div.candidates.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}（{c.vote_count} 票）
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-[12px] text-gray-deep">副會長</span>
+                        <select
+                          className={selectCls}
+                          value={st.vice}
+                          onChange={(e) => setAssignField(div.division_id, 'vice', e.target.value)}
+                        >
+                          <option value="">未指派</option>
+                          {viceOptions.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}（{c.vote_count} 票）
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+
+                    <Button
+                      variant="primary"
+                      className="w-full"
+                      onClick={() => void handleAssign(div)}
+                      disabled={savingOfficers === div.division_id}
+                    >
+                      儲存指派
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
       </Card>
     </AdminLayout>
   )

@@ -7,7 +7,7 @@
  * 資料來源：/admin/tally（單區）、/admin/tally/overview（五區）、/admin/tally/voters（明細）
  * 輪詢間隔取自 /admin/settings.poll_interval_sec（讀不到預設 2 秒）。
  */
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
 import {
   Card,
@@ -19,11 +19,12 @@ import {
 } from '../components/ui'
 import { IconRefresh } from '../components/icons'
 import { listDivisions } from '../api/divisions'
+import { listCandidates } from '../api/candidates'
 import { fetchTally, fetchTallyOverview, fetchVoters } from '../api/tally'
 import { fetchSettings } from '../api/settings'
 import { listRounds } from '../api/rounds'
 import { useAsync, usePolling } from '../hooks/useAsync'
-import type { TallyOut, VoterDetail, DivisionOut } from '../api/types'
+import type { TallyOut, VoterDetail, DivisionOut, CandidateOut } from '../api/types'
 
 /* ── 常數 ── */
 
@@ -35,11 +36,20 @@ const TALLY_TITLE = '會長/副會長選舉'
 
 const ANONYMOUS_NOTE = '匿名模式下不顯示投票人身份'
 
+/** 前兩名名次色（第一名紅、第二名灰） */
+const RANK1_COLOR = '#C41E24'
+const RANK2_COLOR = '#A59F94'
+
 interface TallyCandidate {
+  /** 候選人 id（五區總覽時為分區 id，僅作 key 用） */
+  id: number
   rank: number
   name: string
+  /** 職位標示；計票頁不再顯示職稱，分區檢視一律為空字串 */
   label: string
   votes: number
+  /** 候選人照片；無資料時退回姓氏圓形 */
+  avatarUrl: string
 }
 
 interface TallyDetailRow {
@@ -101,6 +111,103 @@ function IconCrown({ size = 16, className }: { size?: number; className?: string
   )
 }
 
+/* ── 名次小花（純 SVG 自繪，無外部依賴） ── */
+
+/** 六瓣小花；第一名用紅、第二名用灰 */
+function IconFlower({ size = 16, color }: { size?: number; color: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      className="shrink-0"
+      aria-hidden="true"
+    >
+      {[0, 60, 120, 180, 240, 300].map((deg) => {
+        const rad = (deg * Math.PI) / 180
+        return (
+          <circle
+            key={deg}
+            cx={12 + Math.cos(rad) * 5.4}
+            cy={12 + Math.sin(rad) * 5.4}
+            r="3.7"
+            fill={color}
+          />
+        )
+      })}
+      <circle cx="12" cy="12" r="3.2" fill="#fbf6ea" />
+    </svg>
+  )
+}
+
+/* ── 前兩名並排卡 ── */
+
+/** 候選人照片；無照片或載入失敗時退回姓氏圓形 */
+function CandidateAvatar({ src, name, accent }: { src: string; name: string; accent: string }) {
+  const [failed, setFailed] = useState(false)
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt={name}
+        onError={() => setFailed(true)}
+        className="h-14 w-14 shrink-0 rounded-full border border-border object-cover"
+      />
+    )
+  }
+  return (
+    <span
+      className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-[18px] font-bold text-white"
+      style={{ background: accent }}
+    >
+      {name.trim().charAt(0) || '—'}
+    </span>
+  )
+}
+
+/** 第 1／2 名：只顯示照片、姓名、票數，外加同色小花 + No1／No2（無得票 bar） */
+function TopCandidateCard({
+  rank,
+  name,
+  votes,
+  avatarUrl,
+  accent,
+}: {
+  rank: 1 | 2
+  name: string
+  votes: number
+  avatarUrl: string
+  accent: string
+}) {
+  const badgeColor = rank === 1 ? RANK1_COLOR : RANK2_COLOR
+  return (
+    <div className="flex min-w-0 items-center gap-4 rounded-lg border border-border-soft bg-light-bg/50 px-5 py-4">
+      <CandidateAvatar src={avatarUrl} name={name} accent={accent} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-[16px] font-bold leading-none" style={{ color: accent }}>
+            {name}
+          </span>
+          <span
+            className="inline-flex shrink-0 items-center gap-[3px]"
+            style={{ color: badgeColor }}
+          >
+            <IconFlower size={16} color={badgeColor} />
+            <span className="text-[12px] font-bold leading-none">No{rank}</span>
+          </span>
+        </div>
+        <p
+          className="mt-[10px] font-serif text-[22px] font-bold leading-none"
+          style={{ color: accent }}
+        >
+          {votes} 票
+        </p>
+      </div>
+    </div>
+  )
+}
+
 /* ── 候選人列 ── */
 
 function CandidateRow({
@@ -133,7 +240,7 @@ function CandidateRow({
             <IconCrown size={16} />
           </span>
         )}
-        <span className="text-[12px] leading-none text-gray-deep">{label}</span>
+        {label && <span className="text-[12px] leading-none text-gray-deep">{label}</span>}
         <span
           className="ml-auto font-serif text-[19px] font-bold leading-none"
           style={{ color: accent }}
@@ -155,10 +262,10 @@ function CandidateRow({
 /* ── 頁面 ── */
 
 export function TallyPage() {
-  const [division, setDivision] = useState('東區')
+  const [division, setDivision] = useState(ALL_DIVISIONS)
   const [refreshError, setRefreshError] = useState<string | null>(null)
 
-  // 當前輪次（優先 active，其次最後一個）與輪詢間隔
+  // 當前進程（優先 active，其次最後一個）與輪詢間隔
   const roundsState = useAsync(listRounds, [])
   const round =
     roundsState.data?.find((r) => r.status === 'active') ??
@@ -193,6 +300,20 @@ export function TallyPage() {
     [roundId, divId],
   )
 
+  // 候選人照片：計票 API 不含 avatar_url，另取分區候選人清單補上（純顯示用）
+  const candidatesState = useAsync<CandidateOut[]>(
+    () =>
+      roundId !== null && divId !== null
+        ? listCandidates(divId, roundId)
+        : Promise.resolve([]),
+    [roundId, divId],
+  )
+  const avatarById = useMemo(() => {
+    const map: Record<number, string> = {}
+    for (const c of candidatesState.data ?? []) map[c.id] = c.avatar_url ?? ''
+    return map
+  }, [candidatesState.data])
+
   const tally = tallyState.data
   const voters = votersState.data
 
@@ -221,10 +342,17 @@ export function TallyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roundId, division])
 
-  // enabled 僅在首次 render 生效，而輪次是非同步載入；固定啟用，未取得輪次時 reloadAll 直接返回
+  // enabled 僅在首次 render 生效，而進程是非同步載入；固定啟用，未取得進程時 reloadAll 直接返回
   const polling = usePolling(reloadAll, intervalSec * 1000)
 
   // 分頁列：優先用計票總覽的分區，其次用分區清單（兩者都來自 API）
+  // 分區名單是非同步載入的；若目前選取不在名單中（且非「五區總覽」）就切到第一個分區
+  useEffect(() => {
+    if (division === ALL_DIVISIONS) return
+    const names = overview?.map((r) => r.name) ?? divisions.map((d) => d.name)
+    if (names.length > 0 && !names.includes(division)) setDivision(names[0])
+  }, [division, overview, divisions])
+
   const divisionTabs = useMemo(() => {
     const names = overview?.map((r) => r.name) ?? divisions.map((d) => d.name)
     return [ALL_DIVISIONS, ...names]
@@ -244,10 +372,12 @@ export function TallyPage() {
         total,
         pct: total > 0 ? Math.round((voted / total) * 100) : 0,
         candidates: rows.map((r, i) => ({
+          id: r.division_id,
           rank: i + 1,
           name: r.name,
           label: '分區票數',
           votes: r.voted_count,
+          avatarUrl: '',
         })),
         detailNote: '五區彙總 · 請切換分區查看投票人明細',
         detailRows: [],
@@ -272,16 +402,21 @@ export function TallyPage() {
       voted: tally.voted_count,
       total: tally.total_members,
       pct: tally.progress_pct,
-      candidates: tally.candidates.map((c, i) => ({
-        rank: i + 1,
-        name: c.name,
-        label: c.title,
-        votes: c.vote_count,
-      })),
+      // 依票數高→低排序，第 1／2 名並排（No1／No2），第 3 名起沿用原本列樣式
+      candidates: [...tally.candidates]
+        .sort((a, b) => b.vote_count - a.vote_count)
+        .map((c, i) => ({
+          id: c.id,
+          rank: i + 1,
+          name: c.name,
+          label: '',
+          votes: c.vote_count,
+          avatarUrl: avatarById[c.id] ?? '',
+        })),
       detailNote: tally.round.anonymous ? ANONYMOUS_NOTE : `共 ${items.length} 筆投票紀錄`,
       detailRows: items.map(toDetailRow),
     }
-  }, [division, overview, tally, voters])
+  }, [division, overview, tally, voters, avatarById])
 
   const maxVotes = t.candidates.reduce((max, c) => Math.max(max, c.votes), 0)
   const error =
@@ -355,17 +490,54 @@ export function TallyPage() {
         </div>
 
         <div className="space-y-5 px-6 pt-7 pb-6">
-          {t.candidates.map((c) => (
-            <CandidateRow
-              key={c.name}
-              rank={c.rank}
-              name={c.name}
-              label={c.label}
-              votes={c.votes}
-              maxVotes={maxVotes}
-              accent={accent}
-            />
-          ))}
+          {division === ALL_DIVISIONS ? (
+            // 五區總覽：維持原本的候選人列樣式（含 bar）
+            t.candidates.map((c) => (
+              <CandidateRow
+                key={c.id}
+                rank={c.rank}
+                name={c.name}
+                label={c.label}
+                votes={c.votes}
+                maxVotes={maxVotes}
+                accent={accent}
+              />
+            ))
+          ) : (
+            <>
+              {/* 前兩名並排、各佔一半寬度：只有照片、姓名、票數 + 小花 No1／No2 */}
+              {t.candidates.length > 0 && (
+                <div className="grid grid-cols-2 gap-5">
+                  {t.candidates.slice(0, 2).map((c, i) => (
+                    <TopCandidateCard
+                      key={c.id}
+                      rank={i === 0 ? 1 : 2}
+                      name={c.name}
+                      votes={c.votes}
+                      avatarUrl={c.avatarUrl}
+                      accent={accent}
+                    />
+                  ))}
+                </div>
+              )}
+              {/* 第 3–N 名：維持原本樣式（含得票 bar 與排列） */}
+              {t.candidates.length > 2 && (
+                <div className="space-y-5">
+                  {t.candidates.slice(2).map((c) => (
+                    <CandidateRow
+                      key={c.id}
+                      rank={c.rank}
+                      name={c.name}
+                      label={c.label}
+                      votes={c.votes}
+                      maxVotes={maxVotes}
+                      accent={accent}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </Card>
 

@@ -1,7 +1,7 @@
 /**
  * 投票視窗狀態頁（route /vote/window）
- * 依當前輪次狀態顯示「投票尚未開始」或「投票已結束」。
- * 統一入口（/vote/verify）在輪次非 active 時會自動導到這裡。
+ * 依當前投票狀態顯示「投票尚未開始」或「投票已結束」。
+ * 統一入口（/vote/verify）在非 active 時會自動導到這裡。
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -45,7 +45,7 @@ export function VoteWindowPage() {
   const closed = status === 'closed' || status === 'locked'
   const notStarted = !closed
 
-  // 輪次已開始 → 直接進驗證頁
+  // 投票已開始 → 直接進驗證頁
   if (status === 'active') {
     return (
       <VoteShell>
@@ -93,15 +93,6 @@ export function VoteWindowPage() {
                 ? t('window.notStartedDesc', { time: fmt(round.opens_at) })
                 : t('window.notStartedNoTime')}
           </p>
-
-          {round && (
-            <div className="mt-[24px] w-full rounded-[12px] border border-[#E3D8C2] bg-cream px-[16px] py-[18px]">
-              <div className="flex items-baseline gap-[14px]">
-                <span className="text-[14px] leading-[20px] text-gray">{t('window.roundLabel')}</span>
-                <span className="text-[14px] font-bold leading-[20px] text-ink">{round.name}</span>
-              </div>
-            </div>
-          )}
 
           {error && (
             <p className="mt-[16px] text-center text-[13px] leading-[20px] text-danger">{error}</p>

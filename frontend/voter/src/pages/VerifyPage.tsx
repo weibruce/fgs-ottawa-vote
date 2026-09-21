@@ -1,9 +1,9 @@
 /**
  * P1 身份驗證頁 — 1:1 對齊設計稿 docs/ui/voting/voting_system_01.png
  *
- * 流程：GET /votes/round/active 取得當前輪次 → POST /votes/confirm 驗證身份
+ * 流程：GET /votes/round/active 取得當前投票資訊 → POST /votes/confirm 驗證身份
  * 代他人投票已移至 /vote/proxy 頁，本頁僅驗證會員本人
- * 輪次非 active → 轉往 /vote/window（第 6 點閘門）
+ * 狀態非 active → 轉往 /vote/window（第 6 點閘門）
  */
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
@@ -27,7 +27,7 @@ export function VerifyPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // 統一入口：自動取得當前輪次（公開端點）
+  // 統一入口：自動取得當前投票（公開端點）
   const [round, setRound] = useState<RoundPublicInfo | null>(null)
   const [roundError, setRoundError] = useState<string | null>(null)
   const [roundReload, setRoundReload] = useState(0)
@@ -149,7 +149,7 @@ export function VerifyPage() {
           </Field>
         </div>
 
-        {/* 輪次載入 / 送出錯誤 */}
+        {/* 投票資訊載入 / 送出錯誤 */}
         {(error || roundError) && (
           <div className="mt-[18px]">
             <ErrorBanner

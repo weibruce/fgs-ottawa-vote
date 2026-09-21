@@ -28,7 +28,7 @@ const NAV = [
   { to: '/members', label: '會員名單', Icon: IconMembers },
   { to: '/vote-config', label: '投票配置', Icon: IconVoteConfig },
   { to: '/tally', label: '實時計票', Icon: IconTally },
-  { to: '/rounds', label: '輪次管理', Icon: IconRounds },
+  { to: '/rounds', label: '進程管理', Icon: IconRounds },
   { to: '/appointments', label: '幹部指派', Icon: IconAppointments },
   { to: '/export', label: '資料匯出', Icon: IconExport },
   { to: '/settings', label: '系統設定', Icon: IconSettings },

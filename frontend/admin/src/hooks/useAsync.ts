@@ -58,7 +58,7 @@ export function usePolling(
   const [running, setRunning] = useState(enabled)
   const timer = useRef<number | null>(null)
 
-  // enabled 可能非同步才成立（例如輪次載入後），要同步到內部狀態
+  // enabled 可能非同步才成立（例如進程載入後），要同步到內部狀態
   useEffect(() => {
     setRunning(enabled)
   }, [enabled])

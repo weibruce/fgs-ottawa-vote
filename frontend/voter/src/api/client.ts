@@ -42,7 +42,7 @@ api.interceptors.response.use(
   }
 )
 
-/** 公開輪次資訊（GET /votes/round/active）— 統一入口用，不需參數 */
+/** 公開投票資訊（GET /votes/round/active）— 統一入口用，不需參數 */
 export interface RoundPublicInfo {
   id: number
   name: string

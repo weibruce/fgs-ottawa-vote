@@ -102,7 +102,7 @@ function AvatarThumb({ src, name }: { src: string; name: string }) {
 }
 
 export function CandidatesPage() {
-  // 同時取得分區（名稱↔ID）、輪次（取 active 以帶出得票數）、候選人
+  // 同時取得分區（名稱↔ID）、進程（取 active 以帶出得票數）、候選人
   const { data, loading, error, reload } = useAsync(async () => {
     const [rounds, divisions] = await Promise.all([listRounds(), fetchDivisionOverview()])
     const cur = rounds.find((r) => r.status === 'active') ?? rounds[0] ?? null

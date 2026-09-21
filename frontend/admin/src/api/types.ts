@@ -162,13 +162,12 @@ export interface ImportResult {
   errors: { row: number; member_no?: string; reason: string }[]
 }
 
-/* ── 輪次 ── */
+/* ── 選舉進程 ── */
 export type RoundStatus = 'draft' | 'active' | 'closed' | 'locked'
 
 export interface RoundOut {
   id: number
   name: string
-  round_no: number
   status: RoundStatus
   min_votes: number
   max_votes: number
@@ -176,8 +175,6 @@ export interface RoundOut {
   opens_at: string | null
   closes_at: string | null
   allowed_member_nos: string[] | null
-  is_runoff: boolean
-  parent_round_id: number | null
   division_id: number | null
   notes: string
   created_at: string
@@ -196,18 +193,15 @@ export interface TieDivision {
   tie_candidates: { id: number; name: string; vote_count: number }[]
 }
 
-export interface RoundInput {
-  name: string
-  round_no: number
-  min_votes: number
-  max_votes: number
+/** PUT /admin/rounds/{id} 可更新欄位 */
+export interface RoundUpdateInput {
+  name?: string
+  min_votes?: number
+  max_votes?: number
   anonymous?: boolean
   opens_at?: string | null
   closes_at?: string | null
   allowed_member_nos?: string[] | null
-  is_runoff?: boolean
-  parent_round_id?: number | null
-  division_id?: number | null
   notes?: string
   candidate_ids?: number[]
 }
@@ -228,13 +222,46 @@ export interface RoundProgress {
   divisions: DivisionProgress[]
 }
 
-export interface RunoffInput {
+/* ── 當選結果（會長／副會長） ── */
+export interface OfficerCandidate {
+  id: number
+  name: string
+  name_simp: string
+  name_en: string
+  givenname: string
+  surname: string
+  avatar_url: string
+  title: string
+  vote_count: number
+  rank: number
+}
+
+export interface DivisionOfficers {
   division_id: number
-  candidate_ids: number[]
-  min_votes?: number
-  max_votes?: number
-  voter_scope?: 'all' | 'voted'
-  max_runoffs?: number
+  division_name: string
+  color: string
+  total_members: number
+  voted_count: number
+  /** 已依票數排序（rank 1 起） */
+  candidates: OfficerCandidate[]
+  /** 會長（手動指派優先，否則第一名） */
+  chair_candidate_id: number | null
+  /** 副會長（手動指派優先，否則第二名） */
+  vice_candidate_id: number | null
+  /** 純由票數推導的結果 */
+  auto_chair_candidate_id: number | null
+  auto_vice_candidate_id: number | null
+  /** 最高票並列 → 需手動指派 */
+  has_tie: boolean
+  tie_candidate_ids: number[]
+  officers_manual: boolean
+  is_final: boolean
+}
+
+/** PUT /admin/divisions/{id}/officers；兩者皆 null = 清除手動指派 */
+export interface OfficerAssignInput {
+  chair_candidate_id: number | null
+  vice_candidate_id: number | null
 }
 
 /* ── 實時計票 ── */
@@ -371,7 +398,6 @@ export interface DashboardSummary {
   current_round: {
     id: number
     name: string
-    round_no: number
     status: RoundStatus
     opens_at: string | null
     closes_at: string | null

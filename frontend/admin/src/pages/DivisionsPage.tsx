@@ -37,7 +37,7 @@ interface DivisionCardData {
   address: string
 }
 
-const ROUND_STATUS_LABEL: Record<string, string> = {
+const PROCESS_STATUS_LABEL: Record<string, string> = {
   draft: '未開始',
   active: '進行中',
   closed: '已結束',
@@ -53,7 +53,7 @@ function toCardData(d: DivisionOverview): DivisionCardData {
     members: d.member_count,
     candidates: d.candidate_count,
     voted: d.voted_count,
-    status: ROUND_STATUS_LABEL[d.status] ?? d.status,
+    status: PROCESS_STATUS_LABEL[d.status] ?? d.status,
     address: `佛光山總會 ${d.name}`,
   }
 }

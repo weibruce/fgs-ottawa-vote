@@ -137,7 +137,7 @@ export interface OverviewResult {
   divisions: DivisionResult[]
 }
 
-/** 輪次 */
+/** 當前投票資訊 */
 export interface Round {
   id: number
   name: string

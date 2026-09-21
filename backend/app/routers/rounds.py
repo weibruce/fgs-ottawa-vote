@@ -15,16 +15,7 @@ from app.models.division import Division
 from app.models.member import Member
 from app.models.vote import Vote, VoteCandidate
 from app.services.activity import log_action
-from app.schemas.round import (
-    RoundCreate,
-    RoundUpdate,
-    RoundOut,
-    DivisionProgressOut,
-    RoundProgressOut,
-    RunoffCreate,
-    TieCandidateOut,
-    TieDivisionOut,
-)
+from app.schemas.round import (RoundUpdate, RoundOut, DivisionProgressOut, RoundProgressOut, TieCandidateOut, TieDivisionOut)
 
 router = APIRouter(prefix="/admin/rounds", tags=["admin-rounds"])
 
@@ -206,35 +197,6 @@ def round_progress(round_id: int, db: Session = Depends(get_db), _admin=Depends(
     return RoundProgressOut(round_id=r.id, divisions=divisions)
 
 
-@router.post("", response_model=RoundOut)
-def create_round(body: RoundCreate, db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
-    """建立輪次（含候選人關聯）"""
-    if body.max_votes < body.min_votes:
-        raise HTTPException(status_code=400, detail="max_votes 不能小於 min_votes")
-    r = Round(
-        name=body.name,
-        round_no=body.round_no,
-        min_votes=body.min_votes,
-        max_votes=body.max_votes,
-        anonymous=body.anonymous,
-        opens_at=body.opens_at,
-        closes_at=body.closes_at,
-        allowed_member_nos=json.dumps(body.allowed_member_nos) if body.allowed_member_nos else None,
-        is_runoff=body.is_runoff,
-        parent_round_id=body.parent_round_id,
-        division_id=body.division_id,
-        notes=body.notes,
-        status="draft",
-    )
-    db.add(r)
-    db.flush()  # 取得 r.id
-    if body.candidate_ids:
-        _sync_round_candidates(db, r.id, body.candidate_ids)
-    db.commit()
-    db.refresh(r)
-    return _round_to_out(r, db)
-
-
 @router.put("/{round_id}", response_model=RoundOut)
 def update_round(
     round_id: int,
@@ -330,94 +292,3 @@ def confirm_round(round_id: int, db: Session = Depends(get_db), _admin=Depends(g
     db.commit()
     db.refresh(r)
     return _round_to_out(r, db, tie_divisions=_tie_divisions(db, r))
-
-
-@router.post("/{round_id}/runoff", response_model=RoundOut)
-def create_runoff(
-    round_id: int,
-    body: RunoffCreate,
-    db: Session = Depends(get_db),
-    _admin=Depends(get_current_admin),
-):
-    """由父輪次的平票分區啟動加賽輪次（is_runoff=true, parent_round_id={id}, status=draft）"""
-    parent = db.get(Round, round_id)
-    if parent is None:
-        raise HTTPException(status_code=404, detail="輪次不存在")
-    division = db.get(Division, body.division_id)
-    if division is None:
-        raise HTTPException(status_code=400, detail="分區不存在")
-
-    # 同 parent + 同分區已有加賽輪次 → 409
-    exists = (
-        db.query(Round)
-        .filter(
-            Round.parent_round_id == parent.id,
-            Round.division_id == division.id,
-            Round.is_runoff == True,  # noqa: E712
-        )
-        .first()
-    )
-    if exists is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=f"{division.name}已存在加賽輪次（#{exists.id}），不可重複建立",
-        )
-
-    candidate_ids = list(dict.fromkeys(body.candidate_ids))
-    cands = db.query(Candidate).filter(Candidate.id.in_(candidate_ids)).all()
-    if len(cands) != len(candidate_ids):
-        raise HTTPException(status_code=400, detail="候選人不存在")
-    for c in cands:
-        if c.division_id != division.id:
-            raise HTTPException(status_code=400, detail=f"候選人「{c.name}」不屬於{division.name}")
-
-    prog = _division_progress(db, parent, division)
-    if not prog.is_tie:
-        raise HTTPException(status_code=400, detail=f"{division.name}目前無最高票平票，無法啟動加賽")
-    tie_ids = {t.id for t in prog.tie_candidates}
-    bad = [cid for cid in candidate_ids if cid not in tie_ids]
-    if bad:
-        names = "、".join(next((c.name for c in cands if c.id == cid), str(cid)) for cid in bad)
-        raise HTTPException(status_code=400, detail=f"候選人非平票者：{names}")
-
-    min_votes = body.min_votes if body.min_votes is not None else 1
-    max_votes = body.max_votes if body.max_votes is not None else 1
-    if max_votes < min_votes:
-        raise HTTPException(status_code=400, detail="max_votes 不能小於 min_votes")
-
-    # 投票人範圍：voted = 僅原投票人（存白名單卡號）；all = 本區全部會員
-    allowed: list[str] | None = None
-    if body.voter_scope == "voted":
-        allowed = [
-            row[0]
-            for row in db.query(Vote.member_no)
-            .filter(Vote.round_id == parent.id, Vote.division_id == division.id)
-            .distinct()
-            .all()
-        ]
-
-    notes = f"由「{parent.name}」{division.name}平票加賽"
-    if body.max_runoffs:
-        notes += f"（加賽次數上限 {body.max_runoffs} 次）"
-
-    r = Round(
-        name=f"{division.name}加賽",
-        round_no=parent.round_no,
-        status="draft",
-        min_votes=min_votes,
-        max_votes=max_votes,
-        anonymous=parent.anonymous,
-        opens_at=None,
-        closes_at=None,
-        allowed_member_nos=json.dumps(allowed) if allowed else None,
-        is_runoff=True,
-        parent_round_id=parent.id,
-        division_id=division.id,
-        notes=notes,
-    )
-    db.add(r)
-    db.flush()  # 取得 r.id
-    _sync_round_candidates(db, r.id, candidate_ids)
-    db.commit()
-    db.refresh(r)
-    return _round_to_out(r, db)

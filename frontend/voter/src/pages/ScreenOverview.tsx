@@ -2,7 +2,7 @@
  * P6 各分區投票狀態（五區即時總覽大屏）— 1:1 對齊設計稿 docs/ui/voting/voting_system_06.png
  * route: /screen（截圖代號 06_screen）— 獨立大屏，不需投票人 session
  *
- * 輪次：GET /votes/round/active（公開端點）
+ * 當前投票：GET /votes/round/active（公開端點）
  * 資料：GET /votes/results?round_id=N（五區彙總），每 3 秒輪詢；失敗保留上次畫面
  *
  * 設計稿量測（415×808）：
@@ -31,8 +31,8 @@ const RANKS = ['①', '②', '③'] as const
 const BAR_TONE = ['bg-primary', 'bg-gold', 'bg-gold-light/70'] as const
 
 export function ScreenOverview() {
-  const { t, translateError, roundShort } = useI18n()
-  // 輪次（公開端點）
+  const { t, translateError } = useI18n()
+  // 當前投票（公開端點）
   const [round, setRound] = useState<RoundPublicInfo | null>(null)
   const [roundError, setRoundError] = useState<string | null>(null)
 
@@ -50,7 +50,7 @@ export function ScreenOverview() {
     }
   }, [translateError])
 
-  /** 重新取得輪次（錯誤橫幅的重試鍵用） */
+  /** 重新取得投票資訊（錯誤橫幅的重試鍵用） */
   const retryRound = useCallback(() => {
     setRoundError(null)
     getActiveRound()
@@ -75,17 +75,13 @@ export function ScreenOverview() {
     }
   )
 
-  // 小字用輪次短名（「第一輪 · 分區選舉」→「第一輪」；简中/English → 「第 1 輪」/「Round 1」）
-  const roundText = roundShort(round?.name, round?.round_no)
   const divisions = data?.divisions ?? []
 
   return (
     <VoteShell>
       <section className="vote-card-body px-4 pt-[26px] pb-6">
         {/* ── 頁首 ── */}
-        <p className="text-[12px] leading-[16px] font-bold text-primary">
-          {t('screen.roundOverview', { round: roundText })}
-        </p>
+        <p className="text-[12px] leading-[16px] font-bold text-primary">五區即時總覽</p>
         <h1 className="mt-[5px] font-serif text-[30px] leading-[36px] font-bold text-ink">
           {t('screen.heading')}
         </h1>

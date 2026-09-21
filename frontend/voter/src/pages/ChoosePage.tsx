@@ -4,7 +4,7 @@
  *                docs/ui/voting/voting_system_03_1.png（已選取：大頭照 + 英文名）
  *
  * 資料：session（useVoteStore）→ round_id / voter.division_id / min_votes / max_votes
- *       GET /votes/round/active                            → 輪次名（卡片頂部小字）
+ *       GET /votes/round/active                            → 投票狀態（投票視窗閘門）
  *       GET /votes/round/{round_id}/division/{division_id} → 候選人名單
  *       POST /votes/submit                                 → 成功更新 session 並導向 /vote/done
  *
@@ -27,7 +27,7 @@ export function ChoosePage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const { session, save } = useVoteStore()
-  const { t, translateError, roundShort, nameOf } = useI18n()
+  const { t, translateError, nameOf } = useI18n()
 
   // 唯讀模式：已投票後從「查看投票」進入（第 8 點）
   const isView = params.get('view') === '1'
@@ -42,8 +42,7 @@ export function ChoosePage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [roundInfo, setRoundInfo] = useState<{ name?: string; roundNo?: number }>({})
-  /** 投票視窗閘門：輪次非 active → 導到 /vote/window（第 6 點） */
+  /** 投票視窗閘門：狀態非 active → 導到 /vote/window（第 6 點） */
   const [windowActive, setWindowActive] = useState<boolean | null>(null)
 
   // 唯讀模式預選先前投的候選人；正常模式一律從空開始（第 8 點）
@@ -56,17 +55,16 @@ export function ChoosePage() {
   const [notice, setNotice] = useState<{ kind: 'min' | 'api'; text?: string } | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  // 輪次名（公開端點：卡片頂部小字 + 投票視窗閘門；失敗時沿用預設輪次、不擋）
+  // 投票狀態（公開端點：投票視窗閘門；失敗時不擋）
   useEffect(() => {
     let alive = true
     getActiveRound()
       .then((res) => {
         if (!alive) return
-        setRoundInfo({ name: res.data.name, roundNo: res.data.round_no })
         setWindowActive(res.data.status === 'active')
       })
       .catch(() => {
-        /* 標題小字非關鍵，失敗時沿用預設輪次；閘門遇錯誤不擋（後續 API 自會報錯） */
+        /* 閘門非關鍵，遇錯誤不擋（後續 API 自會報錯） */
         if (alive) setWindowActive(true)
       })
     return () => {
@@ -179,10 +177,9 @@ export function ChoosePage() {
 
   // 無 session → 回身份驗證
   if (!session) return <Navigate to="/vote/verify" replace />
-  // 輪次非 active → 轉往投票視窗狀態頁（第 6 點閘門）
+  // 狀態非 active → 轉往投票視窗狀態頁（第 6 點閘門）
   if (windowActive === false) return <Navigate to="/vote/window" replace />
 
-  const roundLabel = roundShort(roundInfo.name, roundInfo.roundNo)
   const divisionName = data?.division.name ?? session.voter.division_name
   const selectedNames = selected
     .map((id) => {
@@ -195,11 +192,6 @@ export function ChoosePage() {
   return (
     <VoteShell>
       <section className="vote-card-body px-[16px] pt-[14px] pb-[25px]">
-        {/* ── 卡片頂部：輪次 · 分區（13px 主紅粗體） ── */}
-        <p className="text-[13px] font-bold leading-[18px] tracking-[0.01em] text-primary">
-          {roundLabel} · {divisionName}
-        </p>
-
         {/* ── 大標（襯線 23px 粗體；設計稿實測 ink 寬 221 / 高 21px） ── */}
         <h1 className="mt-[3px] font-serif text-[23px] font-bold leading-[32px] text-ink">
           {isView ? t('view.heading') : t('choose.heading', { division: divisionName })}

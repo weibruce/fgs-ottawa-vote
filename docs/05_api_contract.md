@@ -434,3 +434,76 @@ query：`?division_id=&round_id=&anonymous=&format=csv|xlsx`
 #### 匯出欄位（`POST /admin/exports/members`）
 `佛光會員卡號、姓名(繁)、姓名(簡)、givenname、surname、所屬分會、性別、手機號、
 Email、地址、已投票、投票時間、狀態`
+
+---
+
+## 14. 進程（原輪次）與當選結果
+
+### 14.1 去輪次化（2026-09 調整）
+
+產品上只有**一個選舉進程**，不再有多輪與加賽：
+
+| 端點 | 狀態 |
+|------|------|
+| `POST /admin/rounds`（建立輪次） | ❌ **已移除** |
+| `POST /admin/rounds/{id}/runoff`（平票再投／加賽） | ❌ **已移除** |
+| `GET/PUT /admin/rounds/{id}`、`.../activate`、`.../close`、`.../confirm` | ✅ 保留（單一進程的狀態控制） |
+| `GET /votes/round/active` | ✅ 保留（回傳唯一的進程；前端**不再顯示**輪次名稱） |
+
+- `rounds.is_runoff` / `parent_round_id` 欄位保留以相容既有資料，**恆為 `false` / `null`**，UI 不得顯示。
+- 進程狀態機：`draft → active → closed → locked`（僅能往前）。
+  對應 UI：未開始 → 進行中 → 已結束。
+
+### 14.2 當選結果：會長／副會長
+
+**規則**：投票結束後，各分區**第一名為會長、第二名為副會長**；
+最高票並列（平票）時**無法自動決定**，由管理員在進程管理頁手動指派。
+
+| 方法 | 路徑 | 說明 |
+|------|------|------|
+| GET | `/admin/divisions/officers` | 五區當選結果（可帶 `?round_id=`） |
+| PUT | `/admin/divisions/{division_id}/officers` | 手動指派（平票時） |
+
+`GET` 回應（陣列，每分區一筆）：
+```jsonc
+{
+  "division_id": 61,
+  "division_name": "東區分會",
+  "color": "#8B1A1A",
+  "total_members": 68,
+  "voted_count": 52,
+  "candidates": [                       // 已依票數排序，rank 從 1 起
+    { "id": 141, "name": "陳慧儀", "name_simp": "陈慧仪", "name_en": "Amanda Chen",
+      "givenname": "Amanda", "surname": "Chen",
+      "avatar_url": "/candidates/photo01.jpg",
+      "title": "會長候選人", "vote_count": 30, "rank": 1 }
+  ],
+  "chair_candidate_id": 141,            // 手動指派優先，否則取第一名
+  "vice_candidate_id": 142,
+  "auto_chair_candidate_id": 141,       // 純由票數推導的結果（供對照）
+  "auto_vice_candidate_id": 142,
+  "has_tie": false,                     // 最高票並列 → 需手動指派
+  "tie_candidate_ids": [],
+  "officers_manual": false,             // 是否已手動指派
+  "is_final": false                     // 投票是否已結束（closed / locked）
+}
+```
+- `has_tie: true` 時，`chair_candidate_id` 與 `vice_candidate_id` 皆為 `null`，等待手動指派。
+- 只有 1 位候選人的分區，`vice_candidate_id` 為 `null`。
+
+`PUT` 請求：
+```jsonc
+{ "chair_candidate_id": 141, "vice_candidate_id": 142 }
+// 兩個都給 null → 清除手動指派，回到自動推導
+```
+錯誤：`404` 分區不存在／`400` 候選人不存在／`400` 候選人不屬於該分區／`400` 會長與副會長不可為同一人。
+指派會寫入 `divisions.chair_candidate_id / vice_candidate_id / officers_manual` 並留下活動紀錄。
+
+### 14.3 相關資料表欄位
+
+`divisions` 新增：
+| 欄位 | 說明 |
+|------|------|
+| `chair_candidate_id` | 會長（FK candidates，可空＝由票數自動推導） |
+| `vice_candidate_id` | 副會長（FK candidates，可空） |
+| `officers_manual` | 是否為手動指派（true 時忽略自動推導） |

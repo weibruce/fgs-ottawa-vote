@@ -12,7 +12,7 @@
  * 因此儲存＝更新前端 session（useVoteStore.save），讓後續頁面顯示修改後內容；
  * 頁面文案也明確說明這只影響本次操作顯示。之後若後端提供投票端更新端點，再改為呼叫 API。
  *
- * 無 session → /vote/verify；輪次非 active → /vote/window（與 ConfirmedPage 相同閘門）。
+ * 無 session → /vote/verify；狀態非 active → /vote/window（與 ConfirmedPage 相同閘門）。
  */
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'

@@ -18,7 +18,7 @@ export function SuccessPage() {
   const { session } = useVoteStore()
   const { t, nameOf } = useI18n()
 
-  /** 投票視窗閘門：輪次非 active → 一律導到 /vote/window（第 6 點） */
+  /** 投票視窗閘門：狀態非 active → 一律導到 /vote/window（第 6 點） */
   const [windowActive, setWindowActive] = useState<boolean | null>(null)
   useEffect(() => {
     let alive = true
