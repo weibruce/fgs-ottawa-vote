@@ -410,17 +410,24 @@ def _parse_import_rows(raw: bytes, filename: str, divisions: list[Division]) -> 
                 if cell and cell in aliases:
                     found[key] = idx
                     break
-        if "member_no" in found and "name" in found:
+        if "member_no" in found and ("name" in found or "name_simp" in found):
             header_idx, column_map = i, found
             break
     if header_idx is None:
-        raise ValueError("找不到表頭，需包含「佛光會員卡號」與「姓名」欄位")
+        raise ValueError("找不到表頭，需包含「佛光會員卡號」與「姓名」（或「姓名(簡)」）欄位")
+
+    def _div_key(text: str) -> str:
+        """分區名稱歸一：去空白、去「分會／分会」後綴，讓「東區」與「東區分會」互通"""
+        t = re.sub(r"[\s\u3000]+", "", str(text or "")).strip()
+        return re.sub(r"(分會|分会)$", "", t)
 
     div_lookup: dict[str, int] = {}
     for d in divisions:
-        div_lookup[d.name] = d.id
-        div_lookup[d.code.lower()] = d.id
-        div_lookup[str(d.id)] = d.id
+        # 原始名稱、去後綴名稱、代碼、ID 全部登錄（大小寫不敏感）
+        for key in (d.name, _div_key(d.name), d.code, str(d.id)):
+            if key:
+                div_lookup[str(key)] = d.id
+                div_lookup[str(key).lower()] = d.id
 
     rows: list[dict] = []
     errors: list[ImportErrorItem] = []
@@ -461,7 +468,12 @@ def _parse_import_rows(raw: bytes, filename: str, divisions: list[Division]) -> 
             errors.append(ImportErrorItem(row=row_no, member_no=member_no, reason="所屬分區不可為空"))
             continue
 
-        division_id = div_lookup.get(division_raw) or div_lookup.get(division_raw.lower())
+        division_id = (
+            div_lookup.get(division_raw)
+            or div_lookup.get(division_raw.lower())
+            or div_lookup.get(_div_key(division_raw))
+            or div_lookup.get(_div_key(division_raw).lower())
+        )
         if division_id is None:
             errors.append(ImportErrorItem(row=row_no, member_no=member_no, reason=f"分區不存在：{division_raw}"))
             continue

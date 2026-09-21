@@ -110,13 +110,13 @@ export function VerifyPage() {
               alt={t('app.logoAlt')}
               className="h-[52px] w-[52px] shrink-0 object-contain"
             />
-            <p className="text-left text-[15px] font-bold leading-[21px] text-primary">
+            <p className="text-left text-[18px] font-bold leading-[24px] text-primary">
               {t('app.orgLine1')}
               <br />
               {t('app.orgLine2')}
             </p>
           </div>
-          <h2 className="mt-[14px] font-serif text-[20px] font-bold leading-[28px] text-ink">
+          <h2 className="mt-[14px] font-serif text-[16px] font-bold leading-[20px] text-ink">
             {t('verify.heading')}
           </h2>
         </div>
