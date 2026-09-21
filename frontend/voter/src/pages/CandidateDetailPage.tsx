@@ -32,16 +32,23 @@ interface DetailLocationState {
 
 /**
  * 來源（?from=）：決定「返回」要回到哪裡（第 4 點）
- *   view       → 唯讀的「查看我的投票」/vote/choose?view=1
+ *   view       → 唯讀的「查看我的投票」/vote/choose?view=1（來源＝核驗完成頁）
+ *   done       → 唯讀的「查看我的投票」/vote/choose?view=1&from=done（來源＝完成投票頁）
+ *                ⚠️ 必須與 view 分開，否則返回後「查看最終投票結果」會變回「返回」
  *   candidates → 「查看候選人信息」/vote/candidates
  *   其他/省略  → 一般投票頁 /vote/choose
  */
-type DetailFrom = 'view' | 'candidates' | 'choose'
+type DetailFrom = 'view' | 'done' | 'candidates' | 'choose'
 
 /** 返回鍵文字：i18n 檔不可改，唯讀／信息兩來源用頁內三語字面值；
  *  一般投票頁沿用既有 key `detail.back`。 */
-const BACK_LABEL: Record<'view' | 'candidates', Record<Lang, string>> = {
+const BACK_LABEL: Record<'view' | 'done' | 'candidates', Record<Lang, string>> = {
   view: {
+    'zh-Hant': '返回查看我的投票',
+    'zh-Hans': '返回查看我的投票',
+    en: 'Back to my vote',
+  },
+  done: {
     'zh-Hant': '返回查看我的投票',
     'zh-Hans': '返回查看我的投票',
     en: 'Back to my vote',
@@ -61,7 +68,10 @@ export function CandidateDetailPage() {
   const { session } = useVoteStore()
   const { t, lang, nameOf } = useI18n()
 
-  /** 投票視窗閘門：狀態非 active → 一律導到 /vote/window（第 6 點） */
+  /** 投票視窗閘門：狀態非 active → 導到 /vote/window。
+   *  例外：從唯讀的「查看我的投票」（from=view / from=done）或「查看候選人信息」
+   *  （from=candidates）進來時**不擋** —— 這三條路徑本來就是投票前後都能看的，
+   *  尤其投票結束後還要能從唯讀頁點進詳情、再返回看最終結果。 */
   const [windowActive, setWindowActive] = useState<boolean | null>(null)
   useEffect(() => {
     let alive = true
@@ -84,7 +94,13 @@ export function CandidateDetailPage() {
   // 來源：view（唯讀投票頁）／candidates（候選人信息頁）／其他（一般投票頁）
   const rawFrom = params.get('from')
   const from: DetailFrom =
-    rawFrom === 'view' ? 'view' : rawFrom === 'candidates' ? 'candidates' : 'choose'
+    rawFrom === 'view'
+      ? 'view'
+      : rawFrom === 'done'
+        ? 'done'
+        : rawFrom === 'candidates'
+          ? 'candidates'
+          : 'choose'
 
   const [candidate, setCandidate] = useState<Candidate | null>(state.candidate ?? null)
   const [divisionName, setDivisionName] = useState(
@@ -136,7 +152,8 @@ export function CandidateDetailPage() {
     }
   }, [state.candidate, state.divisionName, session, targetId, queryRound, queryDivision])
 
-  if (windowActive === false) return <Navigate to="/vote/window" replace />
+  const readOnlyEntry = from === 'view' || from === 'done' || from === 'candidates'
+  if (windowActive === false && !readOnlyEntry) return <Navigate to="/vote/window" replace />
 
   if (windowActive === null || loading) {
     return (
@@ -161,7 +178,9 @@ export function CandidateDetailPage() {
   const backTo =
     from === 'view'
       ? `/vote/choose?division=${backDivisionId}&view=1`
-      : from === 'candidates'
+      : from === 'done'
+        ? `/vote/choose?division=${backDivisionId}&view=1&from=done`
+        : from === 'candidates'
         ? '/vote/candidates'
         : `/vote/choose?division=${backDivisionId}`
   const backLabel = from === 'choose' ? t('detail.back') : BACK_LABEL[from][lang]

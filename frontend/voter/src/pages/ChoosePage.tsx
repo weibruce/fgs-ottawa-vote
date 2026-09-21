@@ -141,11 +141,13 @@ export function ChoosePage() {
 
   const openDetail = useCallback(
     (id: number) => {
-      // 帶上來來源：唯讀模式 → from=view，一般模式 → from=choose（詳情頁據此決定返回目的地）
-      const from = isView ? 'view' : 'choose'
+      // 帶上來來源（詳情頁據此決定返回目的地）：
+      //   唯讀 + from=done → 'done'（要保留「查看最終投票結果」的狀態）
+      //   唯讀（其他來源）→ 'view'；一般模式 → 'choose'
+      const from = isView ? (fromDone ? 'done' : 'view') : 'choose'
       navigate(`/vote/candidate/${id}?division=${divisionId}&round=${roundId}&from=${from}`)
     },
-    [navigate, divisionId, roundId, isView]
+    [navigate, divisionId, roundId, isView, fromDone]
   )
 
   /** 設計稿主按鈕恆為實心 → 點擊時才檢查票數下限（不以 disabled 淡化） */
