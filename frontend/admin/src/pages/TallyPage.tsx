@@ -4,7 +4,8 @@
  *   說明列 y95..133｜膠囊分頁 y157..206｜實時結果卡 y231..759｜投票人明細卡 y784..
  *   卡頭色帶 110px（primary 5%）｜候選人列距 64px、進度條 12px
  *
- * 資料來源：/admin/tally（單區）、/admin/tally/overview（五區）、/admin/tally/voters（明細）
+ * 資料來源：/admin/tally（單區）、/admin/divisions/officers（五區總覽分區卡）、
+ *          /admin/tally/voters（明細，匿名時整個模組不顯示）
  * 輪詢間隔取自 /admin/settings.poll_interval_sec（讀不到預設 2 秒）。
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -16,15 +17,23 @@ import {
   Button,
   ProgressBar,
   TableWrap,
+  Tag,
+  DivisionTag,
 } from '../components/ui'
 import { IconRefresh } from '../components/icons'
-import { listDivisions } from '../api/divisions'
+import { listDivisions, fetchDivisionOfficers } from '../api/divisions'
 import { listCandidates } from '../api/candidates'
 import { fetchTally, fetchTallyOverview, fetchVoters } from '../api/tally'
 import { fetchSettings } from '../api/settings'
 import { listRounds } from '../api/rounds'
 import { useAsync, usePolling } from '../hooks/useAsync'
-import type { TallyOut, VoterDetail, DivisionOut, CandidateOut } from '../api/types'
+import type {
+  TallyOut,
+  VoterDetail,
+  DivisionOut,
+  CandidateOut,
+  DivisionOfficers,
+} from '../api/types'
 
 /* ── 常數 ── */
 
@@ -34,14 +43,12 @@ const ALL_DIVISIONS = '五區總覽'
 /** 選舉名稱（契約的 TallyOut 未提供，版面固定文案） */
 const TALLY_TITLE = '會長/副會長選舉'
 
-const ANONYMOUS_NOTE = '匿名模式下不顯示投票人身份'
-
 /** 前兩名名次色（第一名紅、第二名灰） */
 const RANK1_COLOR = '#C41E24'
 const RANK2_COLOR = '#A59F94'
 
 interface TallyCandidate {
-  /** 候選人 id（五區總覽時為分區 id，僅作 key 用） */
+  /** 候選人 id（候選人列 key） */
   id: number
   rank: number
   name: string
@@ -143,23 +150,35 @@ function IconFlower({ size = 16, color }: { size?: number; color: string }) {
 
 /* ── 前兩名並排卡 ── */
 
-/** 候選人照片；無照片或載入失敗時退回姓氏圓形 */
-function CandidateAvatar({ src, name, accent }: { src: string; name: string; accent: string }) {
+/** 候選人照片；無照片或載入失敗時退回姓氏圓形（size 為直徑 px） */
+function CandidateAvatar({
+  src,
+  name,
+  accent,
+  size = 56,
+}: {
+  src: string
+  name: string
+  accent: string
+  size?: number
+}) {
   const [failed, setFailed] = useState(false)
+  const box = { width: size, height: size }
   if (src && !failed) {
     return (
       <img
         src={src}
         alt={name}
         onError={() => setFailed(true)}
-        className="h-14 w-14 shrink-0 rounded-full border border-border object-cover"
+        className="shrink-0 rounded-full border border-border object-cover"
+        style={box}
       />
     )
   }
   return (
     <span
-      className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-[18px] font-bold text-white"
-      style={{ background: accent }}
+      className="flex shrink-0 items-center justify-center rounded-full font-bold text-white"
+      style={{ ...box, background: accent, fontSize: Math.round(size * 0.4) }}
     >
       {name.trim().charAt(0) || '—'}
     </span>
@@ -182,11 +201,11 @@ function TopCandidateCard({
 }) {
   const badgeColor = rank === 1 ? RANK1_COLOR : RANK2_COLOR
   return (
-    <div className="flex min-w-0 items-center gap-4 rounded-lg border border-border-soft bg-light-bg/50 px-5 py-4">
-      <CandidateAvatar src={avatarUrl} name={name} accent={accent} />
+    <div className="flex min-w-0 items-center gap-5 rounded-lg border border-border-soft bg-light-bg/50 px-5 py-4">
+      <CandidateAvatar src={avatarUrl} name={name} accent={accent} size={112} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-[16px] font-bold leading-none" style={{ color: accent }}>
+          <span className="truncate text-[18px] font-bold leading-none" style={{ color: accent }}>
             {name}
           </span>
           <span
@@ -198,7 +217,7 @@ function TopCandidateCard({
           </span>
         </div>
         <p
-          className="mt-[10px] font-serif text-[22px] font-bold leading-none"
+          className="mt-[12px] font-serif text-[26px] font-bold leading-none"
           style={{ color: accent }}
         >
           {votes} 票
@@ -259,6 +278,73 @@ function CandidateRow({
   )
 }
 
+/* ── 五區總覽：單一分區結果卡 ── */
+
+/** 每區一張卡：分區標籤＋投票進度＋該區候選人得票（照片／姓名／票數，依票數高→低） */
+function DivisionResultCard({ row }: { row: DivisionOfficers }) {
+  const pct = row.total_members > 0 ? Math.round((row.voted_count / row.total_members) * 100) : 0
+  const maxVotes = row.candidates.reduce((max, c) => Math.max(max, c.vote_count), 0)
+  return (
+    <div className="flex min-w-0 flex-col rounded-lg border border-border bg-light-bg/40 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <DivisionTag name={row.division_name} color={row.color} />
+        <div className="flex shrink-0 items-center gap-1.5">
+          {row.has_tie && <Tag color="warning">平票</Tag>}
+          {row.is_final && <Tag color="gray">最終</Tag>}
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <p className="text-[12px] leading-none text-gray">已投 / 總人數</p>
+        <p className="font-serif text-[20px] font-bold leading-none text-ink">
+          {row.voted_count} / {row.total_members}
+        </p>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <ProgressBar
+          className="flex-1"
+          pct={pct}
+          height={8}
+          color={row.color}
+          track="#efe5d0"
+        />
+        <span className="shrink-0 text-[12px] leading-none text-gray-deep">{pct}%</span>
+      </div>
+
+      <ul className="mt-4 space-y-3">
+        {row.candidates.map((c) => (
+          <li key={c.id} className="flex min-w-0 items-center gap-3">
+            <CandidateAvatar src={c.avatar_url} name={c.name} accent={row.color} size={48} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span
+                  className="truncate text-[15px] font-bold leading-none"
+                  style={{ color: row.color }}
+                >
+                  {c.name}
+                </span>
+                <span
+                  className="ml-auto shrink-0 font-serif text-[17px] font-bold leading-none"
+                  style={{ color: row.color }}
+                >
+                  {c.vote_count} 票
+                </span>
+              </div>
+              <ProgressBar
+                className="mt-[7px]"
+                pct={maxVotes > 0 ? (c.vote_count / maxVotes) * 100 : 0}
+                height={5}
+                color={c.rank === 1 ? row.color : '#c9b99a'}
+                track="#efe5d0"
+              />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 /* ── 頁面 ── */
 
 export function TallyPage() {
@@ -282,6 +368,13 @@ export function TallyPage() {
     [roundId],
   )
   const overview = overviewState.data
+
+  // 五區總覽卡片：直接用 /admin/divisions/officers（單一 API，含各區候選人照片與票數）
+  const officersState = useAsync<DivisionOfficers[]>(
+    () => (roundId !== null ? fetchDivisionOfficers(roundId) : Promise.resolve([])),
+    [roundId],
+  )
+  const officers = useMemo(() => officersState.data ?? [], [officersState.data])
 
   // 分區清單（名稱 + 標識色）：分頁與顏色一律來自 API，載入中不借用 mock
   const divisionsState = useAsync<DivisionOut[]>(() => listDivisions(), [])
@@ -321,8 +414,12 @@ export function TallyPage() {
   const reloadAll = useCallback(async () => {
     if (roundId === null) return
     try {
-      const ov = await fetchTallyOverview(roundId)
+      const [ov, off] = await Promise.all([
+        fetchTallyOverview(roundId),
+        fetchDivisionOfficers(roundId),
+      ])
       overviewState.setData(ov)
+      officersState.setData(off)
       if (division !== ALL_DIVISIONS) {
         const row = ov.find((r) => r.name === division)
         if (row) {
@@ -371,15 +468,9 @@ export function TallyPage() {
         voted,
         total,
         pct: total > 0 ? Math.round((voted / total) * 100) : 0,
-        candidates: rows.map((r, i) => ({
-          id: r.division_id,
-          rank: i + 1,
-          name: r.name,
-          label: '分區票數',
-          votes: r.voted_count,
-          avatarUrl: '',
-        })),
-        detailNote: '五區彙總 · 請切換分區查看投票人明細',
+        // 五區總覽改以分區卡呈現（officersState），此處不需候選人列
+        candidates: [],
+        detailNote: '',
         detailRows: [],
       }
     }
@@ -391,12 +482,12 @@ export function TallyPage() {
         total: 0,
         pct: 0,
         candidates: [],
-        detailNote: ANONYMOUS_NOTE,
+        detailNote: '',
         detailRows: [],
       }
     }
 
-    const items = voters?.anonymous ? [] : voters?.items ?? []
+    const items = voters?.items ?? []
     return {
       title: TALLY_TITLE,
       voted: tally.voted_count,
@@ -413,14 +504,22 @@ export function TallyPage() {
           votes: c.vote_count,
           avatarUrl: avatarById[c.id] ?? '',
         })),
-      detailNote: tally.round.anonymous ? ANONYMOUS_NOTE : `共 ${items.length} 筆投票紀錄`,
+      detailNote: `共 ${items.length} 筆投票紀錄`,
       detailRows: items.map(toDetailRow),
     }
   }, [division, overview, tally, voters, avatarById])
 
+  // 匿名投票：整個「投票人明細」模組不顯示（tally 未載入時退回進程設定）
+  const anonymous = tally?.round.anonymous ?? round?.anonymous ?? false
+
   const maxVotes = t.candidates.reduce((max, c) => Math.max(max, c.votes), 0)
   const error =
-    roundsState.error || overviewState.error || tallyState.error || votersState.error || refreshError
+    roundsState.error ||
+    overviewState.error ||
+    officersState.error ||
+    tallyState.error ||
+    votersState.error ||
+    refreshError
 
   return (
     <AdminLayout title="實時計票">
@@ -491,18 +590,18 @@ export function TallyPage() {
 
         <div className="space-y-5 px-6 pt-7 pb-6">
           {division === ALL_DIVISIONS ? (
-            // 五區總覽：維持原本的候選人列樣式（含 bar）
-            t.candidates.map((c) => (
-              <CandidateRow
-                key={c.id}
-                rank={c.rank}
-                name={c.name}
-                label={c.label}
-                votes={c.votes}
-                maxVotes={maxVotes}
-                accent={accent}
-              />
-            ))
+            // 五區總覽：每個分區一張卡（一行 2 個），呈現該區投票結果
+            officers.length === 0 ? (
+              <p className="py-8 text-center text-[13px] text-gray">
+                {officersState.loading ? '載入中…' : '尚無分區結果'}
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-5">
+                {officers.map((row) => (
+                  <DivisionResultCard key={row.division_id} row={row} />
+                ))}
+              </div>
+            )
           ) : (
             <>
               {/* 前兩名並排、各佔一半寬度：只有照片、姓名、票數 + 小花 No1／No2 */}
@@ -541,46 +640,48 @@ export function TallyPage() {
         </div>
       </Card>
 
-      {/* 投票人明細 */}
-      <Card className="mt-6">
-        <CardHeader title="投票人明細" sub={t.detailNote} divider={false} />
-        {/* 參考稿的表頭底色滿版，儲存格左右內距 20px */}
-        <TableWrap className="[&_td]:px-5 [&_th]:px-5">
-          <thead className="bg-cream">
-            <tr>
-              <th className="border-t border-t-border border-b-0">卡號</th>
-              <th className="border-t border-t-border border-b-0">姓名</th>
-              <th className="border-t border-t-border border-b-0">代理</th>
-              <th className="border-t border-t-border border-b-0">投給</th>
-              <th className="border-t border-t-border border-b-0 text-right">時間</th>
-            </tr>
-          </thead>
-          <tbody>
-            {t.detailRows.length === 0 && (
+      {/* 投票人明細：匿名投票時整個模組不顯示 */}
+      {!anonymous && (
+        <Card className="mt-6">
+          <CardHeader title="投票人明細" sub={t.detailNote} divider={false} />
+          {/* 參考稿的表頭底色滿版，儲存格左右內距 20px */}
+          <TableWrap className="[&_td]:px-5 [&_th]:px-5">
+            <thead className="bg-cream">
               <tr>
-                <td colSpan={5} className="py-8 text-center text-[13px] text-gray">
-                  {tallyState.loading || votersState.loading
-                    ? '載入中…'
-                    : division === ALL_DIVISIONS
-                      ? '請切換分區查看投票人明細'
-                      : '此分區尚無投票明細'}
-                </td>
+                <th className="border-t border-t-border border-b-0">卡號</th>
+                <th className="border-t border-t-border border-b-0">姓名</th>
+                <th className="border-t border-t-border border-b-0">代理</th>
+                <th className="border-t border-t-border border-b-0">投給</th>
+                <th className="border-t border-t-border border-b-0 text-right">時間</th>
               </tr>
-            )}
-            {t.detailRows.map((r) => (
-              <tr key={r.card}>
-                <td className="font-mono text-[11px] text-ink-soft">{r.card}</td>
-                <td className="text-ink">{r.name}</td>
-                <td className="text-gray-deep">{r.proxy}</td>
-                <td className="text-ink">{r.votedFor}</td>
-                <td className="whitespace-nowrap text-right font-mono text-[11px] text-gray-deep">
-                  {r.time}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </TableWrap>
-      </Card>
+            </thead>
+            <tbody>
+              {t.detailRows.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-[13px] text-gray">
+                    {tallyState.loading || votersState.loading
+                      ? '載入中…'
+                      : division === ALL_DIVISIONS
+                        ? '請切換分區查看投票人明細'
+                        : '此分區尚無投票明細'}
+                  </td>
+                </tr>
+              )}
+              {t.detailRows.map((r) => (
+                <tr key={r.card}>
+                  <td className="font-mono text-[11px] text-ink-soft">{r.card}</td>
+                  <td className="text-ink">{r.name}</td>
+                  <td className="text-gray-deep">{r.proxy}</td>
+                  <td className="text-ink">{r.votedFor}</td>
+                  <td className="whitespace-nowrap text-right font-mono text-[11px] text-gray-deep">
+                    {r.time}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </TableWrap>
+        </Card>
+      )}
     </AdminLayout>
   )
 }

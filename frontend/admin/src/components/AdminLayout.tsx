@@ -3,6 +3,7 @@
  * 幾何依參考稿量測：側欄 255px｜頂欄 62px｜內容 padding 32px
  */
 import { useEffect, useRef, useState } from 'react'
+import logo from '../assets/blia-logo.png'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { clearToken } from '../api/client'
 import type { ReactNode } from 'react'
@@ -67,9 +68,11 @@ export function AdminLayout({
       {/* ── 側欄 ── */}
       <aside className="w-[256px] shrink-0 bg-shell border-r border-border flex flex-col">
         <div className="h-[88px] shrink-0 px-6 flex items-center gap-[14px] border-b border-border">
-          <div className="w-[39px] h-[39px] rounded-[10px] bg-primary flex items-center justify-center text-white font-serif text-[20px] leading-none">
-            佛
-          </div>
+          <img
+            src={logo}
+            alt="國際佛光會"
+            className="w-[39px] h-[39px] shrink-0 object-contain"
+          />
           <div className="min-w-0">
             <div className="font-serif font-bold text-ink text-[16px] leading-tight whitespace-nowrap">
               佛光山投票系統
