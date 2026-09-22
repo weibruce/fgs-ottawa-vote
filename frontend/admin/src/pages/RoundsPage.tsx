@@ -12,17 +12,8 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
-import {
-  Card,
-  CardHeader,
-  Button,
-  PageIntro,
-  ProgressBar,
-  DivisionMark,
-  Field,
-  Tag,
-} from '../components/ui'
-import { IconCheck, IconLock, IconAlert, IconUser, IconRefresh } from '../components/icons'
+import {Card, CardHeader, Button, PageIntro, ProgressBar, DivisionMark, Tag } from '../components/ui'
+import { IconLock, IconAlert, IconUser, IconRefresh } from '../components/icons'
 import { useAsync } from '../hooks/useAsync'
 import { apiError } from '../api/client'
 import {
@@ -32,7 +23,6 @@ import {
   closeRound,
   resetRound,
   confirmRound,
-  updateRound,
 } from '../api/rounds'
 import { fetchDivisionOfficers, assignDivisionOfficers } from '../api/divisions'
 import type { DivisionOfficers, OfficerCandidate, RoundOut } from '../api/types'
@@ -48,8 +38,6 @@ const STATUS_LABEL: Record<string, string> = {
   locked: '已鎖定',
 }
 
-const inputCls =
-  'w-full h-10 rounded-lg bg-light-bg border border-border px-3 text-[14px] text-ink outline-none focus:border-primary disabled:opacity-50'
 
 const selectCls =
   'w-full h-9 rounded-lg bg-light-bg border border-border px-2 text-[13px] text-ink outline-none focus:border-primary'
@@ -195,19 +183,9 @@ export function RoundsPage() {
   const officers = officersState.data ?? []
 
   const [busy, setBusy] = useState(false)
-  const [savingVotes, setSavingVotes] = useState(false)
   const [savingOfficers, setSavingOfficers] = useState<number | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-
-  /* 票數上下限（可直接編輯） */
-  const [minVotes, setMinVotes] = useState(1)
-  const [maxVotes, setMaxVotes] = useState(2)
-  useEffect(() => {
-    if (!target) return
-    setMinVotes(target.min_votes)
-    setMaxVotes(target.max_votes)
-  }, [target?.id, target?.min_votes, target?.max_votes])
 
   /* 手動指派選擇（division_id → 會長／副會長候選人 id 字串） */
   const [assign, setAssign] = useState<Record<number, { chair: string; vice: string }>>({})
@@ -227,8 +205,6 @@ export function RoundsPage() {
   const totalVoted = divisions.reduce((s, d) => s + d.voted_count, 0)
   const totalMembers = divisions.reduce((s, d) => s + d.total_members, 0)
   const statusLabel = target ? (STATUS_LABEL[target.status] ?? target.status) : '—'
-  const votesValid = minVotes >= 1 && maxVotes >= minVotes
-  const votesChanged = Boolean(target && (minVotes !== target.min_votes || maxVotes !== target.max_votes))
 
   async function reloadAll() {
     await roundsState.reload()
@@ -248,22 +224,6 @@ export function RoundsPage() {
       setActionError(apiError(e))
     } finally {
       setBusy(false)
-    }
-  }
-
-  async function handleSaveVotes() {
-    if (!target || !votesValid) return
-    setSavingVotes(true)
-    setActionError(null)
-    setNotice(null)
-    try {
-      await updateRound(target.id, { min_votes: minVotes, max_votes: maxVotes })
-      setNotice(`票數設定已更新：每人 ${minVotes}–${maxVotes} 票。`)
-      await roundsState.reload()
-    } catch (e) {
-      setActionError(apiError(e))
-    } finally {
-      setSavingVotes(false)
     }
   }
 
@@ -428,47 +388,6 @@ export function RoundsPage() {
         <div className="px-6 pt-6 pb-6">
           {/* 票數設定 + 總票數 */}
           <div className="flex flex-wrap items-end justify-between gap-6">
-            <div
-              className="rounded-lg bg-white px-4 py-3"
-              style={{ border: `1px solid ${INNER_BORDER}` }}
-            >
-              <div className="flex items-end gap-4">
-                <Field label="最少票數（每人）" className="w-[132px]">
-                  <input
-                    type="number"
-                    min={1}
-                    value={minVotes}
-                    onChange={(e) => setMinVotes(Number(e.target.value))}
-                    disabled={busy || target?.status === 'locked'}
-                    className={inputCls}
-                  />
-                </Field>
-                <Field label="最多票數（每人）" className="w-[132px]">
-                  <input
-                    type="number"
-                    min={1}
-                    value={maxVotes}
-                    onChange={(e) => setMaxVotes(Number(e.target.value))}
-                    disabled={busy || target?.status === 'locked'}
-                    className={inputCls}
-                  />
-                </Field>
-                <Button
-                  variant="primary"
-                  onClick={() => void handleSaveVotes()}
-                  disabled={!target || savingVotes || !votesValid || !votesChanged}
-                >
-                  <IconCheck size={15} />
-                  儲存票數設定
-                </Button>
-              </div>
-              {!votesValid && (
-                <p className="mt-2 text-[12px] text-primary">
-                  最多票數不可小於最少票數，且最少為 1 票。
-                </p>
-              )}
-            </div>
-
             <div className="text-right">
               <div className="font-serif text-[30px] font-bold leading-none text-primary">
                 {totalVoted}

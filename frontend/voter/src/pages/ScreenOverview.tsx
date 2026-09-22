@@ -30,6 +30,26 @@ const RANKS = ['①', '②', '③'] as const
 /** 進度條顏色：第一名主紅 / 第二名金 / 第三名淺金（設計稿為更淡的淺金，用 /70 貼近） */
 const BAR_TONE = ['bg-primary', 'bg-gold', 'bg-gold-light/70'] as const
 
+/** 得票 bar 色調：第 1／2 名不在列內（前兩名不顯示 bar），
+ *  第 3 名之後全部沿用第 3 名的色調。
+ *  ⚠️ 原本直接取 BAR_TONE[i]，候選人超過 3 位時 i>=3 會是 undefined → bar 沒有背景色而看不見。 */
+const barTone = (rank: number) => BAR_TONE[Math.min(rank, BAR_TONE.length - 1)]
+
+const RANK1_COLOR = '#C41E25'
+const RANK2_COLOR = '#A59F94'
+
+/** 六瓣小花（No1 紅／No2 灰），純裝飾 */
+function RankFlower({ size = 12, color }: { size?: number; color: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden fill={color}>
+      {[0, 60, 120, 180, 240, 300].map((deg) => (
+        <ellipse key={deg} cx="12" cy="6.5" rx="4.2" ry="5.2" transform={`rotate(${deg} 12 12)`} />
+      ))}
+      <circle cx="12" cy="12" r="2.6" fill="#fff" />
+    </svg>
+  )
+}
+
 export function ScreenOverview() {
   const { t, translateError } = useI18n()
   // 當前投票（公開端點）
@@ -159,48 +179,71 @@ function DivisionBlock({ data }: { data: DivisionResult }) {
         </span>
       </div>
 
-      {/* 全部候選人 */}
-      <div className="mt-[7px] space-y-[6px]">
-        {ranked.map((r, i) => (
-          <div key={r.candidate_id}>
-            <div
-              className={`flex items-center gap-[9px] text-[12px] leading-[20px] ${
-                i === 0 ? 'text-primary' : 'text-gray'
-              }`}
-            >
-              {/* 第 1／2 名顯示長方形頭像 */}
-              {i < 2 && (
-                <span className="flex h-[38px] w-[30px] shrink-0 items-center justify-center overflow-hidden rounded-[5px] border border-gold-light bg-avatar">
+      {/* 第 1／2 名：同一行各佔一半、長方形照片、無得票 bar，附同色小花 + No1／No2 */}
+      {ranked.length > 0 && (
+        <div className="mt-[7px] grid grid-cols-2 gap-[8px]">
+          {ranked.slice(0, 2).map((r, i) => {
+            const badge = i === 0 ? RANK1_COLOR : RANK2_COLOR
+            return (
+              <div
+                key={r.candidate_id}
+                data-top-candidate={i + 1}
+                className="flex min-w-0 items-center gap-[8px] rounded-[10px] border border-gold-light bg-card px-[8px] py-[8px]"
+              >
+                <span className="flex h-[52px] w-[42px] shrink-0 items-center justify-center overflow-hidden rounded-[6px] border border-gold-light bg-avatar">
                   {r.avatar_url ? (
                     <img src={r.avatar_url} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <span className="font-serif text-[13px] font-bold leading-none text-primary">
+                    <span className="font-serif text-[16px] font-bold leading-none text-primary">
                       {nameOf(r).trim().charAt(0) || '—'}
                     </span>
                   )}
                 </span>
-              )}
-              <span className="min-w-0 flex-1">
-                <span className="flex items-baseline gap-[11px]">
-                  <span className="shrink-0">
-                    <span className={i === 0 ? 'text-primary/60' : 'text-gray/75'}>
-                      {RANKS[i] ?? `${i + 1}.`}
-                    </span>{' '}
-                    {nameOf(r)}
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline gap-[4px]">
+                    <span className="truncate text-[12px] font-bold leading-[16px] text-ink">
+                      {nameOf(r)}
+                    </span>
+                    <span className="inline-flex shrink-0 items-center gap-[2px]" style={{ color: badge }}>
+                      <RankFlower size={12} color={badge} />
+                      <span className="text-[10px] font-bold leading-none">No{i + 1}</span>
+                    </span>
                   </span>
-                  <span className="ml-auto shrink-0">{t('common.votes', { n: r.votes })}</span>
+                  <span
+                    className="mt-[5px] block font-serif text-[15px] font-bold leading-none"
+                    style={{ color: division.color || '#8C1D25' }}
+                  >
+                    {t('common.votes', { n: r.votes })}
+                  </span>
                 </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* 第 3–N 位：維持原本樣式（序號 + 姓名 + 票數 + 得票 bar，無照片） */}
+      <div className="mt-[7px] space-y-[6px]">
+        {ranked.slice(2).map((r, idx) => {
+          const i = idx + 2
+          return (
+          <div key={r.candidate_id} data-rest-row>
+            <div className="flex items-baseline gap-[11px] text-[12px] leading-[20px] text-gray">
+              <span className="shrink-0">
+                <span className="text-gray/75">{RANKS[i] ?? `${i + 1}.`}</span> {nameOf(r)}
               </span>
+              <span className="ml-auto shrink-0">{t('common.votes', { n: r.votes })}</span>
             </div>
             {/* 進度條：長度 = 該候選人票數 / 該區最高票（設計稿無可見軌道） */}
             <div className="mt-[6px] h-[6px] w-full overflow-hidden rounded-full">
               <div
-                className={`h-full rounded-full transition-[width] duration-500 ${BAR_TONE[i]}`}
+                className={`h-full rounded-full transition-[width] duration-500 ${barTone(i)}`}
                 style={{ width: `${maxVotes > 0 ? (r.votes / maxVotes) * 100 : 0}%` }}
               />
             </div>
           </div>
-        ))}
+          )
+        })}
         {ranked.length === 0 && (
           <p className="text-[12px] leading-[18px] text-gray">{t('screen.empty')}</p>
         )}
