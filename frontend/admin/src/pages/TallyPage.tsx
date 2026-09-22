@@ -198,32 +198,48 @@ function TopCandidateCard({
   votes,
   avatarUrl,
   accent,
+  compact = false,
 }: {
   rank: 1 | 2
   name: string
   votes: number
   avatarUrl: string
   accent: string
+  /** 五區總覽卡內空間較小 → 縮小照片與間距（單區檢視維持原本尺寸） */
+  compact?: boolean
 }) {
   const badgeColor = rank === 1 ? RANK1_COLOR : RANK2_COLOR
+  // 單區檢視用原本尺寸；五區總覽卡內空間較小 → compact 縮一級
+  const avatarSize = compact ? 64 : 112
+  const flowerSize = compact ? 13 : 16
+  const noSize = compact ? 'text-[10px]' : 'text-[12px]'
+  const nameSize = compact ? 'text-[14px]' : 'text-[18px]'
+  const voteSize = compact ? 'text-[18px]' : 'text-[26px]'
   return (
-    <div className="flex min-w-0 items-center gap-5 rounded-lg border border-border-soft bg-light-bg/50 px-5 py-4">
-      <CandidateAvatar src={avatarUrl} name={name} accent={accent} size={112} shape="rect" />
+    <div
+      className={`flex min-w-0 items-center rounded-lg border border-border-soft bg-light-bg/50 ${
+        compact ? 'gap-2.5 px-2.5 py-2.5' : 'gap-5 px-5 py-4'
+      }`}
+    >
+      <CandidateAvatar src={avatarUrl} name={name} accent={accent} size={avatarSize} shape="rect" />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-[18px] font-bold leading-none" style={{ color: accent }}>
+        <div className={`flex items-center ${compact ? 'gap-1' : 'gap-2'}`}>
+          <span
+            className={`truncate font-bold leading-none ${nameSize}`}
+            style={{ color: accent }}
+          >
             {name}
           </span>
           <span
-            className="inline-flex shrink-0 items-center gap-[3px]"
+            className={`inline-flex shrink-0 items-center ${compact ? 'gap-[2px]' : 'gap-[3px]'}`}
             style={{ color: badgeColor }}
           >
-            <IconFlower size={16} color={badgeColor} />
-            <span className="text-[12px] font-bold leading-none">No{rank}</span>
+            <IconFlower size={flowerSize} color={badgeColor} />
+            <span className={`font-bold leading-none ${noSize}`}>No{rank}</span>
           </span>
         </div>
         <p
-          className="mt-[12px] font-serif text-[26px] font-bold leading-none"
+          className={`mt-[10px] font-serif font-bold leading-none ${voteSize}`}
           style={{ color: accent }}
         >
           {votes} 票
@@ -317,36 +333,48 @@ function DivisionResultCard({ row }: { row: DivisionOfficers }) {
         <span className="shrink-0 text-[12px] leading-none text-gray-deep">{pct}%</span>
       </div>
 
-      <ul className="mt-4 space-y-3">
-        {row.candidates.map((c) => (
-          <li key={c.id} className="flex min-w-0 items-center gap-3">
-            <CandidateAvatar src={c.avatar_url} name={c.name} accent={row.color} size={48} />
-            <div className="min-w-0 flex-1">
+      {/* 第 1／2 名：同一行各佔一半、長方形照片、無得票 bar */}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        {row.candidates.slice(0, 2).map((c, i) => (
+          <TopCandidateCard
+            key={c.id}
+            rank={i === 0 ? 1 : 2}
+            name={c.name}
+            votes={c.vote_count}
+            avatarUrl={c.avatar_url}
+            accent={row.color}
+            compact
+          />
+        ))}
+      </div>
+
+      {/* 第 3 名之後：一行一位，不顯示照片，只留姓名／得票 bar／票數 */}
+      {row.candidates.length > 2 && (
+        <ul className="mt-3 space-y-[9px]">
+          {row.candidates.slice(2).map((c) => (
+            <li key={c.id} className="min-w-0">
               <div className="flex items-center gap-2">
                 <span
-                  className="truncate text-[15px] font-bold leading-none"
+                  className="truncate text-[14px] font-bold leading-none"
                   style={{ color: row.color }}
                 >
                   {c.name}
                 </span>
-                <span
-                  className="ml-auto shrink-0 font-serif text-[17px] font-bold leading-none"
-                  style={{ color: row.color }}
-                >
+                <span className="ml-auto shrink-0 font-serif text-[15px] font-bold leading-none text-ink">
                   {c.vote_count} 票
                 </span>
               </div>
               <ProgressBar
-                className="mt-[7px]"
+                className="mt-[6px]"
                 pct={maxVotes > 0 ? (c.vote_count / maxVotes) * 100 : 0}
                 height={5}
-                color={c.rank === 1 ? row.color : '#c9b99a'}
+                color="#c9b99a"
                 track="#efe5d0"
               />
-            </div>
-          </li>
-        ))}
-      </ul>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
