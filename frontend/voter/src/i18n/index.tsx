@@ -179,7 +179,7 @@ const zhHant: Dict = {
 
   // ── P6 各分區投票狀態 ──
   'screen.heading': '各分區投票狀態',
-  'screen.sub': '僅顯示各區目前排名前三的候選人',
+  'screen.sub': '顯示各區全部候選人得票',
   'screen.loading': '正在載入各分區投票狀態…',
   'screen.empty': '尚無投票資料',
   'screen.footer': '資料依各區投票進度同步更新；最終結果以投票結束後公告為準。',
@@ -344,7 +344,7 @@ const zhHans: Dict = {
   'results.thisDivision': '本区',
 
   'screen.heading': '各分区投票状态',
-  'screen.sub': '仅显示各区目前排名前三的候选人',
+  'screen.sub': '显示各区全部候选人得票',
   'screen.loading': '正在载入各分区投票状态…',
   'screen.empty': '尚无投票资料',
   'screen.footer': '资料依各区投票进度同步更新；最终结果以投票结束后公告为准。',
@@ -509,7 +509,7 @@ const en: Dict = {
   'results.thisDivision': 'This division',
 
   'screen.heading': 'Division Voting Status',
-  'screen.sub': 'Top three candidates in each division',
+  'screen.sub': 'All candidates and votes by division',
   'screen.loading': 'Loading division status…',
   'screen.empty': 'No votes yet',
   'screen.footer':

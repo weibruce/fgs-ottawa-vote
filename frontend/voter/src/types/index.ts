@@ -123,6 +123,7 @@ export interface CandidateResult {
   name_en?: string | null
   givenname?: string | null
   surname?: string | null
+  avatar_url?: string | null
   votes: number
   is_leading: boolean
 }

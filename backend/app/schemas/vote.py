@@ -151,6 +151,7 @@ class FrontendCandidateResult(BaseModel):
     givenname: str = ""
     surname: str = ""
     name_en: str = ""
+    avatar_url: str = ""
     votes: int
     is_leading: bool = False
 

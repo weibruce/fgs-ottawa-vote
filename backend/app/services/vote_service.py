@@ -474,6 +474,7 @@ def _division_result_dict(db: Session, rnd: Round, div: Division, round_id: int)
                 "givenname": c.givenname,
                 "surname": c.surname,
                 "name_en": c.name_en,
+                "avatar_url": c.avatar_url or "",
                 "votes": cand_votes.get(c.id, 0),
                 "is_leading": max_v > 0 and cand_votes.get(c.id, 0) == max_v,
             }
@@ -552,6 +553,7 @@ def get_results(db: Session, round_id: int) -> dict:
                     "givenname": c.givenname,
                     "surname": c.surname,
                     "name_en": c.name_en,
+                    "avatar_url": c.avatar_url or "",
                     "title": c.title,
                     "avatar_url": c.avatar_url or "",
                     "votes": cand_votes.get(c.id, 0),

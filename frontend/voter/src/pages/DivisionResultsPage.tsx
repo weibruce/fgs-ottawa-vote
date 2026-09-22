@@ -78,7 +78,7 @@ function RankFlower({ size = 15, color }: { size?: number; color: string }) {
 function RankAvatar({
   src,
   name,
-  size = 54,
+  size = 84,
 }: {
   src: string | null | undefined
   name: string
@@ -87,18 +87,20 @@ function RankAvatar({
   const [failed, setFailed] = useState(false)
   const showPhoto = Boolean(src) && !failed
   const surname = name.trim().charAt(0) || '—'
+  // 長方形（人像照用直式比例），比原圓形更大
+  const box = { width: size, height: Math.round(size * 1.25) }
   return (
     <span
-      className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full ${
+      className={`flex shrink-0 items-center justify-center overflow-hidden rounded-[10px] ${
         showPhoto ? 'border-[1.5px] border-gold' : 'bg-avatar'
       }`}
-      style={{ width: size, height: size }}
+      style={box}
     >
       {showPhoto ? (
         <img
           src={src as string}
           alt={name}
-          className="h-full w-full rounded-full object-cover"
+          className="h-full w-full object-cover"
           onError={() => setFailed(true)}
         />
       ) : (

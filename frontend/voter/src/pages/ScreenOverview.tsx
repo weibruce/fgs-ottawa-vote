@@ -123,15 +123,16 @@ export function ScreenOverview() {
 /**
  * 單一分區區塊 — 淡金底 + 淡金框 + 圓角 12 + 內距 13
  * 上列：區名（16px 粗體深墨）＋ 右側「已投 / 總人數 人」
- * 下列：前三名（序號 + 姓名 + 票數 + 進度條）
+ * 下列：全部候選人（序號 + 姓名 + 票數 + 進度條）；第 1／2 名額外顯示長方形頭像
  * 整塊可點擊 → /vote/results?division={id}（Enter / Space 亦可）
  */
 function DivisionBlock({ data }: { data: DivisionResult }) {
   const { t, nameOf } = useI18n()
   const navigate = useNavigate()
   const { division, voted_count, total_count, results } = data
-  const top3 = results.slice(0, 3)
-  const maxVotes = top3.reduce((m, r) => Math.max(m, r.votes), 0)
+  // 依票數高→低排序；顯示**全部**候選人（後端已回傳全部）
+  const ranked = [...results].sort((a, b) => b.votes - a.votes)
+  const maxVotes = ranked.reduce((m, r) => Math.max(m, r.votes), 0)
 
   const openResults = () => navigate('/vote/results?division=' + division.id)
 
@@ -158,20 +159,38 @@ function DivisionBlock({ data }: { data: DivisionResult }) {
         </span>
       </div>
 
-      {/* 前三名 */}
+      {/* 全部候選人 */}
       <div className="mt-[7px] space-y-[6px]">
-        {top3.map((r, i) => (
+        {ranked.map((r, i) => (
           <div key={r.candidate_id}>
             <div
-              className={`flex items-baseline gap-[11px] text-[12px] leading-[20px] ${
+              className={`flex items-center gap-[9px] text-[12px] leading-[20px] ${
                 i === 0 ? 'text-primary' : 'text-gray'
               }`}
             >
-              <span className="shrink-0">
-                <span className={i === 0 ? 'text-primary/60' : 'text-gray/75'}>{RANKS[i]}</span>{' '}
-                {nameOf(r)}
+              {/* 第 1／2 名顯示長方形頭像 */}
+              {i < 2 && (
+                <span className="flex h-[38px] w-[30px] shrink-0 items-center justify-center overflow-hidden rounded-[5px] border border-gold-light bg-avatar">
+                  {r.avatar_url ? (
+                    <img src={r.avatar_url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="font-serif text-[13px] font-bold leading-none text-primary">
+                      {nameOf(r).trim().charAt(0) || '—'}
+                    </span>
+                  )}
+                </span>
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="flex items-baseline gap-[11px]">
+                  <span className="shrink-0">
+                    <span className={i === 0 ? 'text-primary/60' : 'text-gray/75'}>
+                      {RANKS[i] ?? `${i + 1}.`}
+                    </span>{' '}
+                    {nameOf(r)}
+                  </span>
+                  <span className="ml-auto shrink-0">{t('common.votes', { n: r.votes })}</span>
+                </span>
               </span>
-              <span className="shrink-0">{t('common.votes', { n: r.votes })}</span>
             </div>
             {/* 進度條：長度 = 該候選人票數 / 該區最高票（設計稿無可見軌道） */}
             <div className="mt-[6px] h-[6px] w-full overflow-hidden rounded-full">
@@ -182,7 +201,7 @@ function DivisionBlock({ data }: { data: DivisionResult }) {
             </div>
           </div>
         ))}
-        {top3.length === 0 && (
+        {ranked.length === 0 && (
           <p className="text-[12px] leading-[18px] text-gray">{t('screen.empty')}</p>
         )}
       </div>
