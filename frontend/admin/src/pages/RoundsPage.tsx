@@ -22,7 +22,7 @@ import {
   Field,
   Tag,
 } from '../components/ui'
-import { IconCheck, IconLock, IconAlert, IconUser } from '../components/icons'
+import { IconCheck, IconLock, IconAlert, IconUser, IconRefresh } from '../components/icons'
 import { useAsync } from '../hooks/useAsync'
 import { apiError } from '../api/client'
 import {
@@ -30,6 +30,7 @@ import {
   fetchRoundProgress,
   activateRound,
   closeRound,
+  resetRound,
   confirmRound,
   updateRound,
 } from '../api/rounds'
@@ -390,6 +391,22 @@ export function RoundsPage() {
                 disabled={busy}
               >
                 結束投票
+              </Button>
+            )}
+            {(target?.status === 'closed' || target?.status === 'locked') && (
+              <Button
+                variant="primary"
+                className="bg-white/10 border-white/40 text-white hover:bg-white/20"
+                onClick={() =>
+                  void runAction(
+                    () => resetRound(target.id),
+                    '已重新開始一輪投票（狀態回到未開始；投票紀錄未清除）。',
+                  )
+                }
+                disabled={busy}
+              >
+                <IconRefresh size={15} />
+                重新開始一輪
               </Button>
             )}
             {target?.status === 'closed' && (

@@ -30,6 +30,14 @@ export async function confirmRound(id: number): Promise<RoundOut> {
   return http.post<RoundOut>(`/admin/rounds/${id}/confirm`)
 }
 
+/**
+ * 重新開始一輪投票：狀態退回 draft（未開始），可再次開啟。
+ * ⚠️ 不清除任何投票紀錄。
+ */
+export async function resetRound(id: number): Promise<RoundOut> {
+  return http.post<RoundOut>(`/admin/rounds/${id}/reset`)
+}
+
 /** 各分區投票進度 + 平票偵測 */
 export async function fetchRoundProgress(id: number): Promise<RoundProgress> {
   return http.get<RoundProgress>(`/admin/rounds/${id}/progress`)

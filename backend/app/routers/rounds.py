@@ -292,3 +292,27 @@ def confirm_round(round_id: int, db: Session = Depends(get_db), _admin=Depends(g
     db.commit()
     db.refresh(r)
     return _round_to_out(r, db, tie_divisions=_tie_divisions(db, r))
+
+
+@router.post("/{round_id}/reset", response_model=RoundOut)
+def reset_round(round_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    """
+    重新開始一輪投票：把進程狀態**退回 draft**（未開始），讓它可以再次開啟投票。
+
+    ⚠️ **不會清除任何投票紀錄**（票數、已投票名單、Redis 計數都保留）；
+    只是把狀態機從 closed/locked 拉回可再次 activate 的位置。
+    已在 active 的進程不需要重置（可直接結束）。
+    """
+    r = db.get(Round, round_id)
+    if r is None:
+        raise HTTPException(status_code=404, detail="進程不存在")
+    if r.status not in ("closed", "locked"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"狀態 {r.status} 不可重新開始（僅已結束／已鎖定可重置）",
+        )
+    r.status = "draft"
+    log_action(db, "round_reset", f"重新開始投票：{r.name}", operator=admin.username)
+    db.commit()
+    db.refresh(r)
+    return _round_to_out(r, db)

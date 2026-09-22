@@ -156,28 +156,34 @@ function CandidateAvatar({
   name,
   accent,
   size = 56,
+  shape = 'circle',
 }: {
   src: string
   name: string
   accent: string
   size?: number
+  /** circle＝圓形（預設）；rect＝長方形照片（第 1／2 名用） */
+  shape?: 'circle' | 'rect'
 }) {
   const [failed, setFailed] = useState(false)
-  const box = { width: size, height: size }
+  // 長方形：維持同樣寬度、高度多一些（人像照用直式比例）
+  const box =
+    shape === 'rect' ? { width: size, height: Math.round(size * 1.25) } : { width: size, height: size }
+  const radius = shape === 'rect' ? 'rounded-[10px]' : 'rounded-full'
   if (src && !failed) {
     return (
       <img
         src={src}
         alt={name}
         onError={() => setFailed(true)}
-        className="shrink-0 rounded-full border border-border object-cover"
+        className={`shrink-0 ${radius} border border-border object-cover`}
         style={box}
       />
     )
   }
   return (
     <span
-      className="flex shrink-0 items-center justify-center rounded-full font-bold text-white"
+      className={`flex shrink-0 items-center justify-center ${radius} font-bold text-white`}
       style={{ ...box, background: accent, fontSize: Math.round(size * 0.4) }}
     >
       {name.trim().charAt(0) || '—'}
@@ -202,7 +208,7 @@ function TopCandidateCard({
   const badgeColor = rank === 1 ? RANK1_COLOR : RANK2_COLOR
   return (
     <div className="flex min-w-0 items-center gap-5 rounded-lg border border-border-soft bg-light-bg/50 px-5 py-4">
-      <CandidateAvatar src={avatarUrl} name={name} accent={accent} size={112} />
+      <CandidateAvatar src={avatarUrl} name={name} accent={accent} size={112} shape="rect" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-[18px] font-bold leading-none" style={{ color: accent }}>

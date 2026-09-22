@@ -1,0 +1,59 @@
+中文姓名	Given Name	Surname	分會	Subchapter	會員卡號 Member Card Number
+袁晨媗	Jocelyn	Yuan	渥太華佛光青年團	BLIA YAD Ottawa, Canada	B20225716826267
+龔莉喬	Leia		渥太華佛光青年團	BLIA YAD Ottawa, Canada	B20225716827804
+吳瑾萱	Sherry	Wu	渥太華佛光青年團	BLIA YAD Ottawa, Canada	B20225716841218
+馮心言	Alyssia	Feng	渥太華佛光青年團	BLIA YAD Ottawa, Canada	B20225716831710
+迖依心	Cindy	Da	渥太華佛光青年團	BLIA YAD Ottawa, Canada	B20225716832425
+李佳禾	Jiahe	Li	渥太華佛光青年團	BLIA YAD Ottawa, Canada	B20225716832426
+易芊妘	Jacqueline	Sin	渥太華菩提分會	Bodhi Subchapter	B20225719874576
+張秋菊	Chiew Kieok	Chong	渥太華菩提分會	Bodhi Subchapter	B20225701987937
+黎瑞桃	Swee Too	Lai	渥太華菩提分會	Bodhi Subchapter	B20225701987939
+葉錫思	Sik Sya	Yap	渥太華菩提分會	Bodhi Subchapter	B20225700018867
+陳梅卿	Mui Heng	Tan	渥太華菩提分會	Bodhi Subchapter	B20225700018866
+梁翠玉	Cui Yu	Liang	渥太華菩提分會	Bodhi Subchapter	B20225700018865
+林志偉	Andy	Lim	渥太華菩提分會	Bodhi Subchapter	B20225700011002
+林美鸞	Ghet Muoi	Lam	渥太華菩提分會	Bodhi Subchapter	B20225719874574
+孫國珍	Kwok Chun	Suen	渥太華菩提分會	Bodhi Subchapter	B20225719875454
+孫國華	BRONYA	SUN	渥太華菩提分會	Bodhi Subchapter	B20225719875455
+譚美妙	Mee Mee	Hum	渥太華東區分會	East Sub Chapter	B20225719875962
+胡艶輝	YANHUI	HU	渥太華東區分會	East Sub Chapter	B20225719877440
+沈瑞芝	Jui Chih	Shen	渥太華東區分會	East Sub Chapter	B20225719877535
+李紅	Hong	Li	渥太華東區分會	East Sub Chapter	B20225719878144
+邱淑芳	Shih Fang	Chiou	渥太華東區分會	East Sub Chapter	B20225716546524
+楊楊	Yang	Yang	渥太華東區分會	East Sub Chapter	B20225700018863
+王章杰	Zhang Jie	Wang	渥太華東區分會	East Sub Chapter	B20225719870106
+李月姣	Yuejiao	Li	渥太華東區分會	East Sub Chapter	B20225716566461
+羅毅	Yi	Luo	渥太華南區分會	South Sub Chapter	B20225700009161
+孫俊	June	Sun	渥太華南區分會	South Sub Chapter	B20225719870105
+鄭督	Du	Zheng	渥太華南區分會	South Sub Chapter	B20225700014350
+顧蘊芳	Yunfang	Gu	渥太華南區分會	South Sub Chapter	B20225700014348
+王雲雁	Lydia Yun Yen	Wang	渥太華南區分會	South Sub Chapter	B20225700018868
+吳遺娟	Yijuan	Wu	渥太華南區分會	South Sub Chapter	B20225700018871
+張世悅	Nancy	Zhang	渥太華南區分會	South Sub Chapter	B20225700009163
+陳小虹	Xiao Hong	Chen	渥太華南區分會	South Sub Chapter	B20225700001159
+王曉妹	Angela	Wang	渥太華南區分會	South Sub Chapter	B20225700008297
+饒孝康	Hsiao-Kang	Jao	渥太華西區分會	West Sub Chapter	B20225700008298
+武台廣	Tony	Wu	渥太華西區分會	West Sub Chapter	B20225719875450
+李淑貞	Su-Cheng	Lee	渥太華西區分會	West Sub Chapter	B20225719876732
+劉小玲	Siu Ling	Lau	渥太華西區分會	West Sub Chapter	B20225719877680
+鄭涵摯	Harn Jyh	Teh	渥太華西區分會	West Sub Chapter	B20225700000855
+楊慧慧	Wei Wei	Yong	渥太華西區分會	West Sub Chapter	B20225700001158
+李進	Jin	Li	渥太華西區分會	West Sub Chapter	B20225700009164
+謝黎	Li	Xie	渥太華西區分會	West Sub Chapter	B20225702576324
+武慧芝	Hui-Chih	Wu	渥太華西區分會	West Sub Chapter	B20225702576321
+吳思嘉	Szu Chia	Wu	渥太華西區分會	West Sub Chapter	B20225719874570
+王睿	Rui	Wang	渥太華中區分會	Center Sub Chapter	B20225709901157
+曾令英	Ling Ying	Zeng	渥太華中區分會	Center Sub Chapter	B20225700501156
+陸正炯	Zheng Jiong	Lu	渥太華中區分會	Center Sub Chapter	B20225702001155
+席軍	Jun	Xi	渥太華中區分會	Center Sub Chapter	B20225700341160
+周菲菲	Feifei	Zhou	渥太華中區分會	Center Sub Chapter	B20225700001154
+王穎	Ying	Wang	渥太華中區分會	Center Sub Chapter	B20225700007163
+吳楊	Yang	Wu	渥太華中區分會	Center Sub Chapter	B20225700007162
+林麗英	Li Ying	Seto	渥太華中區分會	Center Sub Chapter	B20225700008299
+馬瑜	Yu	Ma	渥太華中區分會	Center Sub Chapter	B20225719870108
+張薇	Wei	Zhang	渥太華中區分會	Center Sub Chapter	B20225719874572
+鄺藝兒			渥太華中區分會	Center Sub Chapter	B20225700014347
+馬琍	Li	Ma	渥太華中區分會	Center Sub Chapter	B20225719876730
+李竹曦	Zhuxi	Li	渥太華中區分會	Center Sub Chapter	B20225719876729
+王永忠	Yong Zhong	Wang	渥太華中區分會	Center Sub Chapter	B20225719876731
+楊彬彬	Grace Binbin	Yang	渥太華中區分會	Center Sub Chapter	B20225700009166

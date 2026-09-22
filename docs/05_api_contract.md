@@ -448,11 +448,16 @@ Email、地址、已投票、投票時間、狀態`
 | `POST /admin/rounds`（建立輪次） | ❌ **已移除** |
 | `POST /admin/rounds/{id}/runoff`（平票再投／加賽） | ❌ **已移除** |
 | `GET/PUT /admin/rounds/{id}`、`.../activate`、`.../close`、`.../confirm` | ✅ 保留（單一進程的狀態控制） |
+| `POST /admin/rounds/{id}/reset` | ✅ **新增**：重新開始一輪（狀態退回 `draft`） |
 | `GET /votes/round/active` | ✅ 保留（回傳唯一的進程；前端**不再顯示**輪次名稱） |
 
 - `rounds.is_runoff` / `parent_round_id` 欄位保留以相容既有資料，**恆為 `false` / `null`**，UI 不得顯示。
 - 進程狀態機：`draft → active → closed → locked`（僅能往前）。
   對應 UI：未開始 → 進行中 → 已結束。
+- **重新開始一輪**：`POST /admin/rounds/{id}/reset` 可把 `closed` / `locked`
+  退回 `draft`，讓同一進程能再次 `activate`。
+  **不會清除任何投票紀錄**（票數、已投票名單、Redis 計數全部保留）。
+  `active` / `draft` 狀態呼叫會回 `409`。
 
 ### 14.2 當選結果：會長／副會長
 
