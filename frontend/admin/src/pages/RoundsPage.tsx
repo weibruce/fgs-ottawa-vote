@@ -428,47 +428,6 @@ export function RoundsPage() {
         <div className="px-6 pt-6 pb-6">
           {/* 票數設定 + 總票數 */}
           <div className="flex flex-wrap items-end justify-between gap-6">
-            <div
-              className="rounded-lg bg-white px-4 py-3"
-              style={{ border: `1px solid ${INNER_BORDER}` }}
-            >
-              <div className="flex items-end gap-4">
-                <Field label="最少票數（每人）" className="w-[132px]">
-                  <input
-                    type="number"
-                    min={1}
-                    value={minVotes}
-                    onChange={(e) => setMinVotes(Number(e.target.value))}
-                    disabled={busy || target?.status === 'locked'}
-                    className={inputCls}
-                  />
-                </Field>
-                <Field label="最多票數（每人）" className="w-[132px]">
-                  <input
-                    type="number"
-                    min={1}
-                    value={maxVotes}
-                    onChange={(e) => setMaxVotes(Number(e.target.value))}
-                    disabled={busy || target?.status === 'locked'}
-                    className={inputCls}
-                  />
-                </Field>
-                <Button
-                  variant="primary"
-                  onClick={() => void handleSaveVotes()}
-                  disabled={!target || savingVotes || !votesValid || !votesChanged}
-                >
-                  <IconCheck size={15} />
-                  儲存票數設定
-                </Button>
-              </div>
-              {!votesValid && (
-                <p className="mt-2 text-[12px] text-primary">
-                  最多票數不可小於最少票數，且最少為 1 票。
-                </p>
-              )}
-            </div>
-
             <div className="text-right">
               <div className="font-serif text-[30px] font-bold leading-none text-primary">
                 {totalVoted}
