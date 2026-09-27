@@ -47,6 +47,8 @@ HEADER_ALIASES: dict[str, set[str]] = {
     "phone": {"手機號", "手机号", "手機", "手机", "手機號碼", "手机号码", "電話", "电话", "phone", "mobile"},
     "email": {"email", "e-mail", "電子郵件", "电子邮件", "信箱"},
     "address": {"地址", "住址", "address"},
+    "paid_2026_dues": {"是否繳納2026年會費", "是否繳納2026年会費", "2026年會費", "2026年会費",
+                       "會費", "会費", "會費(2026)", "会费(2026)", "dues_2026", "paid_2026_dues"},
 }
 
 
@@ -226,10 +228,10 @@ def member_stats(
 def import_template(_admin=Depends(get_current_admin)):
     """下載 CSV 匯入範本（含 UTF-8 BOM，Excel 開中文不亂碼）"""
     lines = [
-        "佛光會員卡號,姓名,姓名(簡),givenname,surname,所屬分會,性別,手機號,Email,地址",
-        "BGS-2024-0001,林明德,林明德,Richard,Lin,東區,男,0912-345-678,richard@example.com,渥太華市 1 號 1 街",
-        "BGS-2024-0002,陳慧儀,陈慧仪,Amanda,Chen,南區,女,0912-345-679,amanda@example.com,",
-        "BGS-2024-0003,王志遠,王志远,Vincent,Wang,西區,男,,,",
+        "佛光會員卡號,姓名,姓名(簡),givenname,surname,所屬分會,性別,手機號,Email,地址,是否繳納2026年會費",
+        "BGS-2024-0001,林明德,林明德,Richard,Lin,東區,男,0912-345-678,richard@example.com,渥太華市 1 號 1 街,是",
+        "BGS-2024-0002,陳慧儀,陈慧仪,Amanda,Chen,南區,女,0912-345-679,amanda@example.com,,否",
+        "BGS-2024-0003,王志遠,王志远,Vincent,Wang,西區,男,,,,",
     ]
     content = "\ufeff" + "\r\n".join(lines) + "\r\n"
     return Response(
@@ -269,6 +271,7 @@ def create_member(
         phone=(body.phone or "").strip(),
         email=(body.email or "").strip(),
         address=(body.address or "").strip(),
+        paid_2026_dues=body.paid_2026_dues,
         is_active=body.is_active,
     )
     db.add(member)
@@ -323,6 +326,8 @@ def update_member(
             setattr(member, _f, str(data[_f]).strip())
     if "is_active" in data and data["is_active"] is not None:
         member.is_active = data["is_active"]
+    if "paid_2026_dues" in data and data["paid_2026_dues"] is not None:
+        member.paid_2026_dues = data["paid_2026_dues"]
 
     log_action(db, "member_update", f"修改會員 {member.member_no} {member.name_trad}", operator=admin.username)
     db.commit()
@@ -453,6 +458,7 @@ def _parse_import_rows(raw: bytes, filename: str, divisions: list[Division]) -> 
         phone = pick("phone")
         email = pick("email")
         address = pick("address")
+        dues_raw = pick("paid_2026_dues")
 
         if not any([member_no, name, division_raw, phone]):
             continue
@@ -495,6 +501,7 @@ def _parse_import_rows(raw: bytes, filename: str, divisions: list[Division]) -> 
                 "phone": phone,
                 "email": email,
                 "address": address,
+                "paid_2026_dues": dues_raw.strip().lower() in ("是", "已繳", "已缴", "y", "yes", "true", "1", "已繳納", "已缴纳"),
             }
         )
 
@@ -558,6 +565,7 @@ async def import_members(
                 phone=r.get("phone", ""),
                 email=r.get("email", ""),
                 address=r.get("address", ""),
+                paid_2026_dues=bool(r.get("paid_2026_dues", False)),
                 is_active=True,
             )
         )

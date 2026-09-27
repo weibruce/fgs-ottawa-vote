@@ -16,6 +16,7 @@ class MemberCreate(BaseModel):
     phone: str = Field("", max_length=32, description="手機號")
     email: str = Field("", max_length=254)
     address: str = Field("", max_length=512)
+    paid_2026_dues: bool = Field(False, description="是否已繳納 2026 年會費")
     is_active: bool = True
 
 
@@ -30,6 +31,7 @@ class MemberUpdate(BaseModel):
     phone: str | None = Field(None, max_length=32)
     email: str | None = Field(None, max_length=254)
     address: str | None = Field(None, max_length=512)
+    paid_2026_dues: bool | None = Field(None, description="是否已繳納 2026 年會費")
     is_active: bool | None = None
 
 
@@ -46,6 +48,7 @@ class MemberOut(BaseModel):
     phone: str = ""
     email: str = ""
     address: str = ""
+    paid_2026_dues: bool = False
     is_active: bool = True
     has_voted: bool = False
     voted_at: datetime | None = None

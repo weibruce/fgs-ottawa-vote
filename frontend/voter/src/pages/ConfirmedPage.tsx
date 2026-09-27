@@ -17,7 +17,7 @@
  *        未投票 → /vote/choose；已投票 → /vote/choose?view=1 唯讀查看）
  *     ② 查看候選人信息 → /vote/candidates
  *     ③ 個人資料更新 → /vote/edit
- *     ④ 委託票 → /vote/proxy
+ *     ④ 委託投票 → /vote/proxy
  *   已投票時於按鈕上方顯示 confirmed.votedNote，若 voted_by_proxy 再顯示
  *   confirmed.votedByProxyNote。
  *
@@ -135,7 +135,7 @@ export function ConfirmedPage() {
         )}
 
         {/* ── 四顆動作按鈕：2×2 grid、全部沿用 .vote-btn（第 2、3 點） ── */}
-        {/* 順序：① 開始投票／查看我的投票（依 already_voted）② 查看候選人信息 ③ 個人資料更新 ④ 委託票 */}
+        {/* 順序：① 開始投票／查看我的投票（依 already_voted）② 查看候選人信息 ③ 個人資料更新 ④ 委託投票 */}
         <div className="mt-[19px] grid grid-cols-2 gap-[10px]">
           <button
             type="button"

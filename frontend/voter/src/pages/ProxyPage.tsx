@@ -108,6 +108,11 @@ export function ProxyPage() {
         setNotice({ kind: 'i18n', key: 'proxy.errAlreadyVoted' })
         return
       }
+      // 5.5 該會員已被他人委託過（每位會員只能被委託一次）→ 顯示提示，不繼續
+      if (res.data.already_proxied) {
+        setNotice({ kind: 'i18n', key: 'proxy.errAlreadyProxied' })
+        return
+      }
       // 6. 成功且未投票 → 跳出核對 popup
       setPending(res.data)
     } catch (e) {

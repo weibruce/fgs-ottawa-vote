@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 佛光山投票系統 — 一鍵啟動整套環境（PostgreSQL + Redis + FastAPI）
+# 渥太華佛光會投票系統 — 一鍵啟動整套環境（PostgreSQL + Redis + FastAPI）
 # 用法: bash scripts/start_all.sh [start|stop|status]
 set -e
 REPO="$(cd "$(dirname "$0")/.." && pwd)"

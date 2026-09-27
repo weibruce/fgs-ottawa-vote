@@ -36,7 +36,7 @@ export function LoginPage() {
           <div className="w-12 h-12 rounded-xl bg-primary text-white flex items-center justify-center font-bold text-2xl mx-auto">
             佛
           </div>
-          <h1 className="text-xl font-bold text-ink text-center mt-4">佛光山投票系統</h1>
+          <h1 className="text-xl font-bold text-ink text-center mt-4">渥太華佛光會投票系統</h1>
           <p className="text-sm text-gray text-center mt-1">後台管理 · 請輸入管理員帳號</p>
 
           <div className="mt-6 space-y-4">

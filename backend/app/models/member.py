@@ -23,5 +23,7 @@ class Member(Base):
     phone: Mapped[str] = mapped_column(String(32), default="")
     email: Mapped[str] = mapped_column(String(254), default="")
     address: Mapped[str] = mapped_column(String(512), default="")
+    # 是否已繳納 2026 年會費（未繳者不可投票；後臺手動標註）
+    paid_2026_dues: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

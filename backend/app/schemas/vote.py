@@ -8,10 +8,16 @@ class ConfirmRequest(BaseModel):
     member_no: str = Field(..., min_length=1, max_length=64, description="佛光會員卡號")
     round_id: int = Field(1, description="輪次 ID")
     is_proxy: bool = Field(False, description="是否代投")
+    proxy: bool = Field(False, description="是否代投（前端欄位名，與 is_proxy 等價）")
     proxy_note: str = Field("", max_length=255, description="代投備註（保留相容）")
     # 代投人（is_proxy=true 時必填，需與會員名單比對）
     proxy_name: str = Field("", max_length=128, description="代投人姓名（簡/繁皆可）")
     proxy_member_no: str = Field("", max_length=64, description="代投人佛光會員卡號")
+
+    @property
+    def effective_is_proxy(self) -> bool:
+        """前端用 proxy、後端內部用 is_proxy，取任一為 True 即視為代投"""
+        return self.is_proxy or self.proxy
 
 
 class VoterInfo(BaseModel):
@@ -45,6 +51,7 @@ class ConfirmResponse(BaseModel):
     min_votes: int
     max_votes: int
     already_voted: bool = False
+    already_proxied: bool = False
     # 已投票時回傳既有投票內容（供「查看投票」唯讀顯示）
     voted_candidate_ids: list[int] = []
     voted_by_proxy: bool = False

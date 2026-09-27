@@ -61,6 +61,13 @@ def confirm_identity(
     ):
         raise HTTPException(status_code=400, detail="姓名與卡號不匹配")
 
+    # 3.2 會費檢查：未繳 2026 年會費者不可投票
+    if not member.paid_2026_dues:
+        raise HTTPException(
+            status_code=403,
+            detail="您尚未繳納2026年會費，無法投票，請聯繫渥太華佛光會秘書處",
+        )
+
     # 3.5 代投人驗證（勾選代投時，兩組姓名＋卡號都要通過）
     proxy_member = None
     if is_proxy:
@@ -91,6 +98,13 @@ def confirm_identity(
     voted_proxy_name_simp = ""
     voted_proxy_givenname = ""
     voted_proxy_surname = ""
+    # 4.5 已被委託偵測（需求第 8 點：一位會員只能被委託一次）
+    #     查本輪是否存在「代理投票給該會員」的票（is_proxy=True 且 proxy_member_no=本人卡號）
+    already_proxied = db.query(Vote).filter(
+        Vote.round_id == round_id,
+        Vote.is_proxy == True,  # noqa: E712
+        Vote.proxy_member_no == member_no,
+    ).first()
     if already is not None:
         voted_by_proxy = bool(already.is_proxy)
         voted_proxy_name = already.proxy_name or ""
@@ -130,12 +144,29 @@ def confirm_identity(
     # 8. 生成 voter_token（JWT，含 member_no + division_id + round_id + proxy）
     token = _make_voter_token(member_no, member.division_id, round_id, is_proxy)
 
+    # 8.5 候選人不可被委託（需求第 8 點）
+    #     該會員若是本輪任何分區的候選人，禁止別人替他代投
+    if is_proxy:
+        is_candidate = (
+            db.query(RoundCandidate)
+            .join(Candidate, Candidate.id == RoundCandidate.candidate_id)
+            .filter(
+                RoundCandidate.round_id == round_id,
+                Candidate.member_no == member_no,
+            )
+            .first()
+            is not None
+        )
+        if is_candidate:
+            raise HTTPException(status_code=400, detail="該會員是本輪候選人，不可被委託投票")
+
     return {
         "voter_token": token,
         "round_id": round_id,
         "min_votes": min_votes,
         "max_votes": max_votes,
         "already_voted": already is not None,
+        "already_proxied": already_proxied is not None,
         "voted_candidate_ids": voted_candidate_ids,
         "voted_by_proxy": voted_by_proxy,
         "voted_proxy_name": voted_proxy_name,
@@ -249,7 +280,7 @@ def submit_vote(
         raise HTTPException(status_code=400, detail="部分候選人不存在")
     for c in cands:
         if c.division_id != member.division_id:
-            raise HTTPException(status_code=403, detail="不可投票其他分區的候選人")
+            raise HTTPException(status_code=403, detail="不可投票其他分會的候選人")
 
     # 7. 防重：Redis 只當快速路徑，**PG 才是唯一判據**
     #

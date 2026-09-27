@@ -102,7 +102,7 @@ def confirm_identity(
     錯誤：404 卡號不存在 / 400 姓名不匹配 / 409 已投票 / 403 白名單外
     """
     result = vote_service.confirm_identity(
-        db, body.name, body.member_no, body.round_id, body.is_proxy, body.proxy_note,
+        db, body.name, body.member_no, body.round_id, body.effective_is_proxy, body.proxy_note,
         proxy_name=body.proxy_name, proxy_member_no=body.proxy_member_no,
     )
     return result

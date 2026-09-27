@@ -191,6 +191,7 @@ interface MemberForm {
   phone: string
   email: string
   address: string
+  paid_2026_dues: boolean
 }
 
 function initialForm(initial: MemberOut | null, divisions: MemberStats[]): MemberForm {
@@ -209,6 +210,7 @@ function initialForm(initial: MemberOut | null, divisions: MemberStats[]): Membe
     phone: initial?.phone ?? '',
     email: initial?.email ?? '',
     address: initial?.address ?? '',
+    paid_2026_dues: initial?.paid_2026_dues ?? false,
   }
 }
 
@@ -360,6 +362,18 @@ function MemberModal({
               className="ui-input"
             />
           </Field>
+
+          <Field label="是否繳納2026年會費" hint="未繳會費的會員不可投票">
+            <label className="flex items-center gap-2 h-[40px] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.paid_2026_dues}
+                onChange={(e) => set('paid_2026_dues', e.target.checked)}
+                className="w-4 h-4 accent-[#8B1A1A]"
+              />
+              <span className="text-[14px] text-ink">{form.paid_2026_dues ? '已繳納' : '未繳納'}</span>
+            </label>
+          </Field>
         </div>
 
         <div className="flex items-center justify-end gap-3 mt-7">
@@ -484,6 +498,7 @@ export function MembersPage() {
       phone: form.phone.trim(),
       email: form.email.trim(),
       address: form.address.trim(),
+      paid_2026_dues: form.paid_2026_dues,
     }
     setSaving(true)
     try {
@@ -644,6 +659,7 @@ export function MembersPage() {
                 <th>手機號</th>
                 <th>Email</th>
                 <th>地址</th>
+                <th>2026會費</th>
                 <th>投票狀態</th>
                 <th>投票時間</th>
                 <th className="pr-5">操作</th>
@@ -670,6 +686,24 @@ export function MembersPage() {
                   </td>
                   <td>
                     <Ellipsis value={m.address} maxWidth={240} />
+                  </td>
+                  <td className="whitespace-nowrap">
+                    {m.paid_2026_dues ? (
+                      <span
+                        className="inline-flex items-center gap-[2px] text-[12px] leading-none whitespace-nowrap"
+                        style={{ color: VOTED_GREEN }}
+                      >
+                        <IconCheckCircle size={16} />
+                        已繳
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-[2px] px-[6px] py-[2px] rounded-[4px] border border-[#E3D8C2] text-[12px] leading-none bg-[#FBF3E4] text-[#8A6D3B] whitespace-nowrap"
+                        title="未繳會費者不可投票"
+                      >
+                        未繳
+                      </span>
+                    )}
                   </td>
                   <td>
                     <VoteStatus
@@ -707,7 +741,7 @@ export function MembersPage() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-gray-deep">
+                  <td colSpan={14} className="py-12 text-center text-gray-deep">
                     {membersQuery.loading ? '載入中…' : '無符合條件的會員'}
                   </td>
                 </tr>

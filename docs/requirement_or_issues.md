@@ -83,17 +83,67 @@
 
 
 會議修改意見：
-1. 後臺管理頁面，佛光會票務管理系統
-2. EditProfilePage页面，請聯繫渥太華佛光會秘書處 張秘書 mishu@gmail.com
-3. 東區分會會長/副會長選舉
-4. 您已完成投票，請等待11月01日選舉結果公佈。
-5. 分會改選通知說明
-6. 會員信息，加一個報錯，如果會員沒有繳會費，會顯示報錯，阻止會員登錄。
-7. 委託票，委託人（實際投票人）姓名
-8. 正在為以下會員進行投票-》正在代理。。。 
-9. 候選人可以投票，但不能被委託
-10. 委託票 -》 委託投票
+1. 後臺管理頁面，標題“佛光山投票系統”改為“渥太華佛光會投票系統”
+2. 後臺管理頁面，會員名單頁，在後臺數據庫的會員信息表裡，加一列“是否繳納2026年會費”，我可以在後臺手動標註是否繳納2026年會費，
+3. VerifyPage頁面，加一個報錯，如果會員沒有繳會費，會顯示報錯信息，您還未繳納2026年的會費，可以聯繫佛光山或分區會長進行繳費，之後再進行投票，之類的文字，並阻止會員登錄。
+4. EditProfilePage页面，“如果發現姓名或分會登記有誤，請聯繫渥太華佛光山相關負責人。”改為“如果發現姓名或分會登記有誤，請聯繫渥太華佛光會秘書處”
+5. ChoosePage頁面，把“東區分會幹部改選”改為“東區分會會長/副會長選舉”
+6. 您已完成投票，請等待11月01日選舉結果公佈。 
+7. ProxyPage頁面，把“正在為以下會員進行投票”-》“正在代理以下會員進行投票” 
+8. 委託投票邏輯，只能一位會員只能被委託投票一次，候選人不能被委託投票
+9. “委託票”改為“委託投票”
+10. “其他分區”改為“其他分會”
 
+## 2026-09-27 會議修改 — 完成記錄
+
+以上 10 項全部完成，實測通過。
+
+### 完成項目對照
+| # | 項目 | 狀態 | 驗證結果 |
+|---|------|------|---------|
+| 1 | 後台標題「佛光山投票系統」→「渥太華佛光會投票系統」 | ✅ | 5 處（AdminLayout, LoginPage, index.html×2, start_all.sh） |
+| 2 | 會員表加「是否繳納2026年會費」+ 後台手動標註 | ✅ | DB migration 已執行，後台 MembersPage 有 toggle 和表格顯示 |
+| 3 | VerifyPage 未繳會費報錯 + 阻止登錄 | ✅ | 後端 confirm_identity 加 403 檢查，實測 403 |
+| 4 | EditProfilePage「請聯繫渥太華佛光會秘書處」 | ✅ | i18n zh-Hant/zh-Hans/en 三套 |
+| 5 | ChoosePage「東區分會會長/副會長選舉」 | ✅ | i18n choose.heading |
+| 6 | 投票完成頁「請等待11月01日選舉結果公佈」 | ✅ | i18n done.title + success.footer |
+| 7 | ProxyPage「正在代理以下會員進行投票」 | ✅ | i18n proxy.confirmLine1 |
+| 8 | 委託投票：一位會員只能被委託一次 + 候選人不能被委託 | ✅ | 後端 already_proxied 偵測 + is_candidate 檢查，實測 400 |
+| 9 | 「委託票」→「委託投票」 | ✅ | i18n + ConfirmedPage 註解 |
+| 10 | 「其他分區」→「其他分會」 | ✅ | i18n + 後端 vote_service |
+
+### 額外修正的 Bug
+- **ConfirmRequest schema 缺 `proxy` 欄位**：前端傳 `proxy: true` 但 Pydantic schema 只有 `is_proxy`，導致代投邏輯從未被觸發。新增 `proxy: bool` 欄位 + `effective_is_proxy` property 取兩者任一為 True。
+- **ConfirmResponse schema 缺 `already_proxied` 欄位**：後端回傳但 Pydantic 驗證時被丟掉。新增 `already_proxied: bool = False`。
+
+### DB Migration
+- `4636de6aa5e4`: members 表新增 `paid_2026_dues` (BOOLEAN, NOT NULL, DEFAULT false)
+
+### 修改的檔案清單
+**後端:**
+- `app/models/member.py` — 新增 paid_2026_dues
+- `app/schemas/member.py` — MemberCreate/Update/Out 加 paid_2026_dues
+- `app/schemas/vote.py` — ConfirmRequest 加 proxy 欄位 + effective_is_proxy; ConfirmResponse 加 already_proxied
+- `app/routers/votes.py` — confirm 路由改用 body.effective_is_proxy
+- `app/routers/members.py` — 會費欄位 CRUD + CSV import/export
+- `app/services/vote_service.py` — 會費 403 檢查 + already_proxied 偵測 + 候選人不可被委託 400 + 分區→分會
+- `alembic/versions/4636de6aa5e4_members_paid_2026_dues.py` — 新增 migration
+
+**前端 (voter):**
+- `src/i18n/index.tsx` — 繁中/简中/英 三套字典更新 + 新增 err.duesNotPaid / err.proxyCandidateBlocked / proxy.errAlreadyProxied
+- `src/types/index.ts` — ConfirmResponse 加 already_proxied
+- `src/pages/ProxyPage.tsx` — 處理 already_proxied
+- `src/pages/ConfirmedPage.tsx` — 委託票→委託投票
+
+**前端 (admin):**
+- `src/components/AdminLayout.tsx` — 標題
+- `src/pages/LoginPage.tsx` — 標題
+- `src/pages/MembersPage.tsx` — 會費欄位 toggle + 表格
+- `src/api/types.ts` — Member/MemberCreate 加 paid_2026_dues
+- `index.html` — 標題
+
+**其他:**
+- `scripts/start_all.sh` — 標題註解
 
 
 

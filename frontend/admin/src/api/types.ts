@@ -123,6 +123,8 @@ export interface MemberOut {
   phone: string
   email: string
   address: string
+  /** 是否已繳納 2026 年會費（未繳者不可投票） */
+  paid_2026_dues: boolean
   is_active: boolean
   has_voted: boolean
   voted_at: string | null
@@ -152,6 +154,8 @@ export interface MemberInput {
   phone?: string
   email?: string
   address?: string
+  /** 是否已繳納 2026 年會費 */
+  paid_2026_dues?: boolean
   is_active?: boolean
 }
 

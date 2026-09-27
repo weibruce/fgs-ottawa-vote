@@ -75,7 +75,7 @@ export function AdminLayout({
           />
           <div className="min-w-0">
             <div className="font-serif font-bold text-ink text-[16px] leading-tight whitespace-nowrap">
-              佛光山投票系統
+              渥太華佛光會投票系統
             </div>
             <div className="text-[12px] text-gray leading-tight mt-[3px]">
               後台管理

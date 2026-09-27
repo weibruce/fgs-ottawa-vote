@@ -84,6 +84,8 @@ export interface ConfirmResponse {
   min_votes: number
   max_votes: number
   already_voted: boolean
+  /** 已被他人委託過（需求第 8 點：一位會員只能被委託一次） */
+  already_proxied?: boolean
   /** 已投票時回傳該票投給哪些候選人（供「查看投票」唯讀顯示） */
   voted_candidate_ids?: number[]
   /** 該票是否由他人代投；是的話帶代投人姓名 */
