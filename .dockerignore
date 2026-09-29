@@ -1,0 +1,18 @@
+# 不要把開發產物與大型目錄送進 Docker build context
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/*.pyc
+.git
+.ui-check
+deploy/data
+
+# .env 含密鑰與連線設定，容器改用環境變數傳入，不要烤進映像
+**/.env
+**/*.env
+
+# 匯出的資料庫 dump 含個資，不要進映像、也不要進版控
+deploy/db/init/*.sql
+*.sql
+!backend/**/*.sql

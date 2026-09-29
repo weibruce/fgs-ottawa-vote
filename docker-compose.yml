@@ -1,0 +1,115 @@
+# 佛光山幹部改選投票系統 — QNAP Container Station 部署
+#
+# 使用方式（在 NAS 上、本檔所在目錄）：
+#   cp deploy/.env.example .env    # 先改好密碼
+#   docker compose up -d --build
+#
+# 對外入口：
+#   http://<NAS-IP>:8080  投票端（手機掃 QR 進來的那個）
+#   http://<NAS-IP>:8081  管理後台
+#
+# 映像都是 multi-arch，x86_64 與 ARM 機型皆可。
+version: "3.8"
+
+services:
+  db:
+    image: postgres:18-alpine
+    # 若 NAS 上抓不到 18，可改用 postgres:16-alpine（資料庫結構相容）
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fgs_vote}
+      POSTGRES_USER: ${POSTGRES_USER:-fgs_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?請在 .env 設定 POSTGRES_PASSWORD}
+      TZ: ${TZ:-America/Toronto}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 首次啟動（資料卷還是空的）時會依序執行這裡的 .sql
+      # 可把匯出的 dump 放進來，第一次啟動就自動匯入
+      - ./deploy/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fgs_app} -d ${POSTGRES_DB:-fgs_vote}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [fgs]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--requirepass",
+        "${REDIS_PASSWORD:?請在 .env 設定 REDIS_PASSWORD}",
+        "--appendonly",
+        "yes",
+      ]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a '${REDIS_PASSWORD}' ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [fgs]
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      # ⚠️ 後端 app/config.py 是讀個別欄位（db_host/db_user/…），
+      #    不是 DATABASE_URL —— 這裡務必用 DB_* / REDIS_* 才會生效
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-fgs_vote}
+      DB_USER: ${DB_USER:-fgs_app}
+      DB_PASSWORD: ${DB_PASSWORD:?請在 .env 設定 DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?請在 .env 設定 REDIS_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?請在 .env 設定 JWT_SECRET}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
+      VOTER_TOKEN_EXPIRE_HOURS: ${VOTER_TOKEN_EXPIRE_HOURS:-12}
+      API_PREFIX: /api
+      DEBUG: ${DEBUG:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TZ: ${TZ:-America/Toronto}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # 啟動前先等 DB 真的可連（避免 depends_on 條件在某些 compose 版本失效）
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "until python -c \"import os,psycopg2;psycopg2.connect(dbname=os.environ['DB_NAME'],user=os.environ['DB_USER'],password=os.environ['DB_PASSWORD'],host=os.environ['DB_HOST'],port=os.environ.get('DB_PORT','5432')).close()\" 2>/dev/null; do echo '等待 PostgreSQL…'; sleep 2; done; alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'",
+      ]
+    networks: [fgs]
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${VOTER_PORT:-8080}:80"
+      - "${ADMIN_PORT:-8081}:81"
+    depends_on:
+      - api
+    environment:
+      TZ: ${TZ:-America/Toronto}
+    networks: [fgs]
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  fgs:
+    driver: bridge

@@ -4,6 +4,23 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class TieCandidateOut(BaseModel):
+    """平票候選人（最高票並列者）"""
+
+    id: int
+    name: str
+    vote_count: int
+
+
+class TieDivisionOut(BaseModel):
+    """有平票的分區"""
+
+    division_id: int
+    division_name: str
+    candidates: list[TieCandidateOut] = []
+    vote_count: int = 0
+
+
 class DivisionProgressOut(BaseModel):
     """單一分區的計票進度 + 平票偵測"""
 
@@ -36,21 +53,6 @@ class RoundUpdate(BaseModel):
     candidate_ids: list[int] | None = None
 
 
-class TieCandidateOut(BaseModel):
-    """平票候選人（最高票並列者）"""
-
-    id: int
-    name: str
-    vote_count: int
-
-
-class TieDivisionOut(BaseModel):
-    """有平票的分區"""
-
-    division_id: int
-    division_name: str
-    candidates: list[TieCandidateOut] = []
-    vote_count: int = 0
 
 
 class RoundOut(BaseModel):
