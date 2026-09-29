@@ -65,7 +65,7 @@ def confirm_identity(
     if not member.paid_2026_dues:
         raise HTTPException(
             status_code=403,
-            detail="您尚未繳納2026年會費，無法投票，請聯繫渥太華佛光會秘書處",
+            detail="您尚未繳納2026年會費，無法投票，請聯繫各分會會長處理",
         )
 
     # 3.5 代投人驗證（勾選代投時，兩組姓名＋卡號都要通過）

@@ -210,7 +210,7 @@ const zhHant: Dict = {
   'err.proxyNameMismatch': '代投人姓名與卡號不匹配，請核實',
   'err.proxySameAsMember': '代投人不可與會員本人相同',
   'err.proxyFieldsRequired': '請填寫代投人姓名與佛光會員卡號',
-  'err.duesNotPaid': '您尚未繳納2026年會費，無法投票，請聯繫渥太華佛光會秘書處',
+  'err.duesNotPaid': '您尚未繳納2026年會費，無法投票，請聯繫各分會會長處理',
   'err.proxyCandidateBlocked': '該會員是本輪候選人，不可被委託投票',
 }
 
@@ -376,7 +376,7 @@ const zhHans: Dict = {
   'err.proxyNameMismatch': '代投人姓名与卡号不匹配，请核实',
   'err.proxySameAsMember': '代投人不可与会员本人相同',
   'err.proxyFieldsRequired': '请填写代投人姓名与佛光会员卡号',
-  'err.duesNotPaid': '您尚未缴纳2026年会费，无法投票，请联系渥太华佛光会秘书处',
+  'err.duesNotPaid': '您尚未缴纳2026年会费，无法投票，请联系各分会会长处理',
   'err.proxyCandidateBlocked': '该会员是本轮候选人，不可被委托投票',
 }
 
@@ -546,7 +546,7 @@ const en: Dict = {
   'err.proxySameAsMember': 'The proxy voter cannot be the member themselves',
   'err.proxyFieldsRequired': "Please enter the proxy voter's name and membership no.",
   'err.duesNotPaid':
-    'You have not paid the 2026 annual dues and are not eligible to vote. Please contact the BLIA Ottawa Chapter office.',
+    'You have not paid the 2026 annual dues and are not eligible to vote. Please contact your division president.',
   'err.proxyCandidateBlocked': 'This member is a candidate in this round and cannot be proxied',
 }
 
@@ -569,7 +569,7 @@ const BACKEND_DETAIL_TO_KEY: Record<string, string> = {
   '代投人不可與會員本人相同': 'err.proxySameAsMember',
   '請填寫代投人姓名與佛光會員卡號': 'err.proxyFieldsRequired',
   '該會員是本輪候選人，不可被委託投票': 'err.proxyCandidateBlocked',
-  '您尚未繳納2026年會費，無法投票，請聯繫渥太華佛光會秘書處': 'err.duesNotPaid',
+  '您尚未繳納2026年會費，無法投票，請聯繫各分會會長處理': 'err.duesNotPaid',
 }
 
 function interpolate(template: string, vars?: Record<string, string | number>): string {
