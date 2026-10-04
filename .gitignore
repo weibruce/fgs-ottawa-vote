@@ -35,4 +35,5 @@ Thumbs.db
 # 資料庫 dump 含真實會員個資與投票紀錄，絕對不要進版控
 deploy/db/init/*.sql
 deploy/data/
+deploy/*.zip
 .env

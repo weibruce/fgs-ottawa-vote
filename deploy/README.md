@@ -39,13 +39,55 @@ git status --short     # .env 與 deploy/db/init/*.sql 都不該出現
 
 ## 二、把專案傳到 NAS
 
-用 File Station 或 `scp`，把**整個專案資料夾**（含 `deploy/`）上傳到例如：
+### 先搞清楚「上傳到哪裡」
+
+QNAP 的檔案系統有兩層，**不要上傳到磁碟區根目錄**：
+
+| 路徑 | 是什麼 | 可以放專案嗎 |
+|---|---|---|
+| `/` （File Station 的「資料卷」根目錄） | 磁碟區根目錄，只有 `@Recently-Snapshot`、`@Recycle` | ❌ 不行 |
+| `/share/<共用資料夾>/` | 共用資料夾（`Public`、`Web`、`Container`…） | ✅ 放這裡 |
+
+**建議用 `Container` 共用資料夾**：Container Station 安裝後會自動建立它，
+裡面的東西不會被 QNAP 的媒體索引／快照功能干擾。
+
+> 若左側清單裡**沒有 `Container`**，代表 Container Station 還沒安裝。
+> 先到 **App Center → 搜尋 Container Station → 安裝**，裝完這個資料夾就會出現。
+
+完整目標路徑：
 
 ```
 /share/Container/fgs-ottawa-vote/
 ```
 
-建議排除開發產物（可大幅縮小上傳量）：
+### 方法 1：File Station（不用指令，適合現在的情況）
+
+先打包成一個 zip，避免上傳數萬個小檔案（`node_modules` 有 3 萬多個檔案，
+用網頁上傳幾乎一定中斷）：
+
+```bash
+# 在開發機執行
+bash deploy/make_upload_zip.sh
+# → 產生 deploy/fgs-upload.zip（約 3 MB，259 個檔案）
+```
+
+然後在 File Station：
+
+1. 左側點 **Container** 共用資料夾 → 進入後按上方 **＋ 資料夾**，命名 `fgs-ottawa-vote`
+   （或直接把 zip 上傳到 Container 根目錄，之後解壓縮時會自動產生這一層）
+2. 進入該資料夾 → 上方 **上傳** 圖示 → 選 `deploy/fgs-upload.zip` → 上傳
+3. 上傳完成後，在檔案上 **按右鍵 → 解壓縮 / Extract**，解到當前資料夾
+   （若沒有右鍵選單，改用方法 2 的 `unzip`）
+4. 確認結構是 `/share/Container/fgs-ottawa-vote/docker-compose.yml`
+   （**不是** `.../fgs-ottawa-vote/fgs-ottawa-vote/docker-compose.yml`）
+
+> zip 內已含 `deploy/db/init/01-fgs_vote.sql` 資料庫匯出檔。
+> 但那是舊的，**部署前請先重新匯出**（見第一節），跑完 `export_current_db.sh`
+> 再執行 `make_upload_zip.sh`。
+
+### 方法 2：SSH / rsync（較快，之後更新程式碼也方便）
+
+若 NAS 已開 SSH（**控制台 → 終端機 & SNMP → 啟用 SSH**），直接同步整個資料夾：
 
 ```bash
 # 在開發機執行
@@ -54,6 +96,8 @@ rsync -av --delete \
   --exclude .git --exclude .ui-check --exclude 'deploy/data' \
   ./ admin@<NAS-IP>:/share/Container/fgs-ottawa-vote/
 ```
+
+之後只要再跑同一行就能增量更新（只傳有改動的檔案）。
 
 ---
 
@@ -211,21 +255,26 @@ docker compose exec db psql -U fgs_app -d fgs_vote -c "ALTER USER fgs_app PASSWO
 
 ## 九、部署時最容易踩到的三件事
 
-### 1. `myqnapcloud` 網址不一定通
+### 1. `myqnapcloud` 網址**只通 QNAP 自己的服務**，不通你的容器埠
 
 `https://<你的>.myqnapcloud.com/...` 走的是 QNAP CloudLink 中繼。
-若未啟用（實測回應 `302 → device_not_found?code=cloudlink_service_not_found`），
-**該網址不會連到你的 NAS**。
+實測結果：
 
-部署與測試請改用：
-- **區網 IP**（例如 `http://192.168.1.50:8080`）——從同一個 Wi-Fi 的電腦操作最簡單
-- 或 NAS 的 **DDNS / 真實對外 IP**（需在路由器開埠）
+- ✅ **File Station、NAS 管理介面**：可正常透過它開啟（中繼的就是 QNAP 自家服務）
+- ❌ **自訂容器埠（8080 / 8081）**：CloudLink **不會**轉發，該網址永遠連不到投票系統
+
+所以部署與投票請改用：
+
+- **區網 IP**（例如 `http://192.168.1.50:8080`）——同一個 Wi-Fi 下的電腦/手機最簡單
+- 或 NAS 的 **DDNS + 路由器開埠**（正式對外投票需要，見第五節 HTTPS）
 
 先確認連得上再往下做：
 ```bash
 curl -I http://<NAS-IP>:8080/          # 部署後應回 200
 ```
 （部署前該埠應該是連不上的）
+
+> 小技巧：在 NAS 上 `ip addr` 可看到區網 IP；或在路由器後台找 QNAP 的 DHCP 紀錄。
 
 ### 2. dump 檔權限
 
@@ -246,7 +295,9 @@ chmod 644 deploy/db/init/01-fgs_vote.sql
 
 ## 十、部署前檢查清單
 
-- [ ] 已從**正式資料庫**匯出 dump（不是範例資料）
+- [ ] **Container Station 已安裝**（App Center），`Container` 共用資料夾存在
+- [ ] 專案放在 `/share/Container/fgs-ottawa-vote/`（**不是**磁碟區根目錄）
+- [ ] 已從**正式資料庫**匯出 dump（不是範例資料），並重新打包上傳
 - [ ] `.env` 三個密碼都改過（`POSTGRES_PASSWORD` / `REDIS_PASSWORD` / `JWT_SECRET`）
 - [ ] `DB_PASSWORD` == `POSTGRES_PASSWORD`
 - [ ] `docker-compose.yml` 放在專案根目錄、與 `deploy/` 同層
