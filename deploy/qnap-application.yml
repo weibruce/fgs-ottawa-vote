@@ -1,0 +1,125 @@
+# ═══════════════════════════════════════════════════════════════════
+#  佛光山幹部改選投票系統 — Container Station「Application」用 YAML
+# ═══════════════════════════════════════════════════════════════════
+#
+#  用途：在 Container Station 圖形介面建立 Application 時，整份貼進去。
+#
+#  為什麼是這個檔案（而不是 docker-compose.yml）：
+#    1. 沒有 build: —— 直接用已匯入的映像，NAS 不需要編譯，幾秒就能啟動
+#    2. 用絕對路徑 —— Container Station 的 Application 有自己的資料夾，
+#       相對路徑容易對不上；絕對路徑不會出錯
+#    3. 環境變數直接寫在這裡 —— 不依賴 .env，避免 Container Station
+#       讀不到 .env 的問題
+#
+#  ⚠️ 貼進 Container Station 之前，請先把下面三個 CHANGE_ME 換成真的密碼：
+#       POSTGRES_PASSWORD / DB_PASSWORD  → 兩者必須相同
+#       REDIS_PASSWORD
+#       JWT_SECRET                       → 至少 32 字元隨機字串
+#     產生 JWT_SECRET 的方法（任一）：
+#       - 在 Linux/Mac 執行：openssl rand -hex 32
+#       - 或隨便打 40 個以上的英數字，不要用可猜的字串
+#
+#  ⚠️ 這份檔案含密碼，填好之後不要上傳到任何公開的地方（例如 GitHub）。
+# ═══════════════════════════════════════════════════════════════════
+version: "3.8"
+
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: fgs-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fgs_vote
+      POSTGRES_USER: fgs_app
+      POSTGRES_PASSWORD: CHANGE_ME_POSTGRES_PASSWORD
+      TZ: America/Toronto
+    volumes:
+      # ⚠️ PostgreSQL 18 的資料目錄掛載點是 /var/lib/postgresql
+      #    （不是舊版的 /var/lib/postgresql/data，掛錯容器會拒絕啟動）
+      - fgs_pgdata:/var/lib/postgresql
+      # 第一次啟動時自動匯入這裡的 .sql（就是你的會員名單與投票資料）
+      - /share/Container/fgs-ottawa-vote/deploy/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fgs_app -d fgs_vote"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [fgs]
+
+  redis:
+    image: redis:7-alpine
+    container_name: fgs-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --requirepass
+      - CHANGE_ME_REDIS_PASSWORD
+      - --appendonly
+      - "yes"
+    volumes:
+      - fgs_redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a 'CHANGE_ME_REDIS_PASSWORD' ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [fgs]
+
+  api:
+    image: fgs-api:latest
+    container_name: fgs-api
+    restart: unless-stopped
+    environment:
+      # ⚠️ 後端 app/config.py 讀的是個別欄位，不是 DATABASE_URL
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: fgs_vote
+      DB_USER: fgs_app
+      DB_PASSWORD: CHANGE_ME_POSTGRES_PASSWORD
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: CHANGE_ME_REDIS_PASSWORD
+      JWT_SECRET: CHANGE_ME_JWT_SECRET
+      JWT_EXPIRE_MINUTES: "1440"
+      VOTER_TOKEN_EXPIRE_HOURS: "12"
+      API_PREFIX: /api
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+      TZ: America/Toronto
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # 等到 PostgreSQL 真的能連線才跑 migration
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        until python -c "import os,psycopg2;psycopg2.connect(dbname=os.environ['DB_NAME'],user=os.environ['DB_USER'],password=os.environ['DB_PASSWORD'],host=os.environ['DB_HOST'],port=os.environ.get('DB_PORT','5432')).close()" 2>/dev/null;
+        do echo 'waiting for postgresql...'; sleep 2; done;
+        alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+    networks: [fgs]
+
+  web:
+    image: fgs-web:latest
+    container_name: fgs-web
+    restart: unless-stopped
+    ports:
+      - "8080:80"   # 投票端
+      - "8081:81"   # 管理後台
+    depends_on:
+      - api
+    environment:
+      TZ: America/Toronto
+    networks: [fgs]
+
+volumes:
+  fgs_pgdata:
+  fgs_redisdata:
+
+networks:
+  fgs:
+    driver: bridge

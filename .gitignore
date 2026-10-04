@@ -37,3 +37,4 @@ deploy/db/init/*.sql
 deploy/data/
 deploy/*.zip
 .env
+deploy/*.tar
