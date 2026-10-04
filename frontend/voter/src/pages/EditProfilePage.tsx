@@ -19,6 +19,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import type { AxiosError } from 'axios'
 import { VoteShell } from '../components/VoteShell'
 import { Field, TextInput } from '../components/Field'
+import { Select } from '../components/Select'
 import { ErrorBanner } from '../components/ErrorBanner'
 import {
   getActiveRound,
@@ -196,20 +197,17 @@ export function EditProfilePage() {
         {/* ── 可編輯四欄：性別／手機號／Email／地址（載入中 disabled） ── */}
         <div className="mt-[24px] space-y-[15px]">
           <Field label={t('edit.genderLabel')} htmlFor="edit-gender">
-            <select
+            <Select
               id="edit-gender"
               value={gender}
-              onChange={(e) => setGender(e.target.value)}
+              onChange={setGender}
               disabled={busy}
-              className="vote-input"
-            >
-              <option value="">{t('edit.genderPlaceholder')}</option>
-              {GENDER_OPTIONS.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
-              ))}
-            </select>
+              aria-label={t('edit.genderLabel')}
+              options={[
+                { value: '', label: t('edit.genderPlaceholder') },
+                ...GENDER_OPTIONS.map((g) => ({ value: g, label: g })),
+              ]}
+            />
           </Field>
 
           <Field label={t('edit.phoneLabel')} htmlFor="edit-phone">
