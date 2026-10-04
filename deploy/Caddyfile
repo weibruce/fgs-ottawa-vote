@@ -1,0 +1,49 @@
+# 佛光山幹部改選投票系統 — Caddy 反向代理（自動 HTTPS）
+#
+# 網域從 .env 帶進來（docker compose 會把變數傳給 caddy 容器）。
+# 憑證由 Let's Encrypt 自動申請、自動續期，不需手動設定。
+#
+# 前提：VOTER_DOMAIN / ADMIN_DOMAIN 的 DNS A 記錄都已指向這台主機的對外 IP。
+{
+	email {$ACME_EMAIL}
+}
+
+# ── 共用安全性標頭 ────────────────────────────────────────────────
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+# ── 投票端 ───────────────────────────────────────────────────────
+# 會員手機掃 QR 進來的地方，必須公開可存取
+{$VOTER_DOMAIN} {
+	encode zstd gzip
+	import security_headers
+	reverse_proxy web:80
+}
+
+# ── 管理後台 ─────────────────────────────────────────────────────
+# 這是對外網址，雖然本身有帳號密碼，仍建議再加一層 Basic Auth，
+# 讓掃埠的機器人連登入頁都看不到。
+#
+# 啟用方式：
+#   1. 產生密碼雜湊（在本機執行，不要在 NAS 上）
+#        docker run --rm caddy:2-alpine caddy hash-password --plaintext '你的管理密碼'
+#   2. 把下面 basic_auth 區塊的註解拿掉，貼上雜湊值
+#      ⚠️ 雜湊值含 $ 符號，在 docker-compose 的 .env 裡要寫成 $$ 才不會被當成變數；
+#         直接寫在 Caddyfile 則不用轉義。
+{$ADMIN_DOMAIN} {
+	encode zstd gzip
+	import security_headers
+
+	# basic_auth {
+	#	admin $2a$14$在此貼上上面產生的雜湊值
+	# }
+
+	reverse_proxy web:81
+}

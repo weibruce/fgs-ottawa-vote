@@ -1,20 +1,26 @@
-# 佛光山幹部改選投票系統 — QNAP Container Station 部署
+# 佛光山幹部改選投票系統 — 正式對外（HTTPS）部署
 #
-# 使用方式（在 NAS 上、本檔所在目錄）：
-#   cp deploy/.env.example .env    # 先改好密碼
-#   docker compose up -d --build
+# 用途：需要讓「不在同一個 Wi-Fi」的會員也能投票時使用。
+#       對外只開 80 / 443，由 Caddy 自動申請並續期 Let's Encrypt 憑證；
+#       web / api / db / redis 全部只在內部網路，不會直接暴露。
 #
-# 對外入口：
-#   http://<NAS-IP>:8080  投票端（手機掃 QR 進來的那個）
-#   http://<NAS-IP>:8081  管理後台
+# 使用方式（在專案根目錄）：
+#   cp deploy/.env.example .env      # 填好密碼 + 三個網域變數
+#   vi deploy/Caddyfile              # 確認網域（也可只用 .env 變數）
+#   docker compose -f docker-compose.prod.yml up -d --build
 #
-# 映像都是 multi-arch，x86_64 與 ARM 機型皆可。
+# 前置條件：
+#   1. 已有一個網域，DNS A 記錄指向這台主機的對外 IP
+#   2. 主機的 80 / 443 沒有被其他服務佔用、且防火牆有開
+#
+# 與 LAN 版（docker-compose.yml）的差異：
+#   - web 不再對外開 8080 / 8081，改由 caddy 反向代理
+#   - 多一個 caddy 服務（自動 HTTPS）
 version: "3.8"
 
 services:
   db:
     image: postgres:18-alpine
-    # 若 NAS 上抓不到 18，可改用 postgres:16-alpine（資料庫結構相容）
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-fgs_vote}
@@ -22,14 +28,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?請在 .env 設定 POSTGRES_PASSWORD}
       TZ: ${TZ:-America/Toronto}
     volumes:
-      # ⚠️ PostgreSQL 18 起，「資料目錄」掛載點必須是 /var/lib/postgresql
-      #    （不是舊版的 /var/lib/postgresql/data）。
-      #    掛錯路徑時容器會直接拒絕啟動並印出 "unused mount/volume"，
-      #    因為 18 的實際資料目錄是 /var/lib/postgresql/18/docker。
-      #    若日後把 image 換成 postgres:16-alpine，這裡要改回 /var/lib/postgresql/data。
+      # ⚠️ PostgreSQL 18 起，資料目錄掛載點是 /var/lib/postgresql（不是 .../data）
       - pgdata:/var/lib/postgresql
-      # 首次啟動（資料卷還是空的）時會依序執行這裡的 .sql
-      # 可把匯出的 dump 放進來，第一次啟動就自動匯入
       - ./deploy/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fgs_app} -d ${POSTGRES_DB:-fgs_vote}"]
@@ -66,8 +66,7 @@ services:
       dockerfile: deploy/api.Dockerfile
     restart: unless-stopped
     environment:
-      # ⚠️ 後端 app/config.py 是讀個別欄位（db_host/db_user/…），
-      #    不是 DATABASE_URL —— 這裡務必用 DB_* / REDIS_* 才會生效
+      # ⚠️ 後端 app/config.py 讀的是個別欄位（db_host/db_user/…），不是 DATABASE_URL
       DB_HOST: ${DB_HOST:-db}
       DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME:-fgs_vote}
@@ -88,7 +87,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    # 啟動前先等 DB 真的可連（避免 depends_on 條件在某些 compose 版本失效）
     entrypoint:
       [
         "sh",
@@ -102,18 +100,40 @@ services:
       context: .
       dockerfile: deploy/web.Dockerfile
     restart: unless-stopped
-    ports:
-      - "${VOTER_PORT:-8080}:80"
-      - "${ADMIN_PORT:-8081}:81"
+    expose:
+      - "80"
+      - "81"
     depends_on:
       - api
     environment:
       TZ: ${TZ:-America/Toronto}
     networks: [fgs]
 
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      VOTER_DOMAIN: ${VOTER_DOMAIN:?請在 .env 設定 VOTER_DOMAIN}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?請在 .env 設定 ADMIN_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?請在 .env 設定 ACME_EMAIL}
+      TZ: ${TZ:-America/Toronto}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data # 憑證存放處，務必保留
+      - caddyconfig:/config
+    depends_on:
+      - web
+    networks: [fgs]
+
 volumes:
   pgdata:
   redisdata:
+  caddydata:
+  caddyconfig:
 
 networks:
   fgs:

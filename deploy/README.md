@@ -169,7 +169,82 @@ docker compose exec db psql -U fgs_app -d fgs_vote -c \
 
 ---
 
-## 五、上 HTTPS（正式投票前建議完成）
+## 五、讓遠端會員也能投票（HTTPS）
+
+若只有現場（同一個 Wi-Fi）投票，第二節做完就可以直接用了，
+`http://<NAS-IP>:8080` 不需要 HTTPS。
+
+**但只要有人在家裡／外縣市投票，就一定要走 HTTPS**，
+否則會員的姓名、會員卡號、投票內容都會以明文經過網際網路。
+本專案提供 `docker-compose.prod.yml` + `deploy/Caddyfile`，
+對外只開 80／443，憑證由 Caddy 自動申請與續期。
+
+### 該放在哪裡跑？
+
+| 方案 | 成本 | 適合 | 注意 |
+|------|------|------|------|
+| **雲端主機（VPS）** | 約 US$5–7／月 | 建議 | 有固定對外 IP、不用動路由器、不依賴 NAS 權限 |
+| **NAS + 路由器開埠** | 免費（需網域） | 已能取得 NAS admin 時 | 需固定 IP 或 DDNS；部分 ISP 是 CGNAT 會失敗 |
+| **家中電腦 + Cloudflare Tunnel** | 網域費用 | 不想花月租 | 那台電腦必須全程開機；設定較多 |
+
+### 方法 A：雲端主機（VPS）
+
+**1. 租一台主機**：Ubuntu 24.04、1 vCPU / 1–2 GB RAM 就很夠
+（DigitalOcean、Vultr、Hetzner、Linode 皆可；Oracle Cloud 有免費方案但註冊較麻煩）。
+
+**2. 網域 DNS**：加兩筆 A 記錄指向主機 IP
+
+```
+vote.你的網域    A   <主機IP>
+admin.你的網域   A   <主機IP>
+```
+
+**3. 裝 Docker**（主機上）
+
+```bash
+curl -fsSL https://get.docker.com | sh
+```
+
+**4. 上傳專案**：同第二節，用 `bash deploy/make_upload_zip.sh` 打包後
+`scp deploy/fgs-upload.zip root@<主機IP>:~/`，再解壓。
+
+**5. 設定並啟動**
+
+```bash
+cd ~/fgs-ottawa-vote
+cp deploy/.env.example .env
+vi .env
+```
+
+`.env` 除了三個密碼，**還要填**：
+
+```env
+VOTER_DOMAIN=vote.你的網域
+ADMIN_DOMAIN=admin.你的網域
+ACME_EMAIL=你的Email
+```
+
+```bash
+chmod 644 deploy/db/init/01-fgs_vote.sql
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+**6. 驗證**
+
+```bash
+curl -I https://vote.你的網域/            # 應回 200
+docker compose -f docker-compose.prod.yml logs -f caddy   # 看憑證申請過程
+```
+
+第一次啟動 Caddy 會花 10–60 秒申請憑證；若卡住通常是
+DNS 還沒生效或 80 埠沒開（**Let's Encrypt 驗證一定需要 80 埠**）。
+
+**7. 重要**：把後台「投票入口網址」改成 `https://vote.你的網域`，
+QR Code 才會指向正確的 HTTPS 網址。
+
+### 方法 B：NAS + QNAP 反向代理
+
+若你有 NAS admin 權限，也可以不開 80／443 給容器，改用 QNAP 內建功能：
 
 先在 NAS 的「控制台 → 系統 → 憑證」取得憑證，再到
 **控制台 → 網路和檔案服務 → 應用程式 → 反向代理** 新增規則：
@@ -181,8 +256,20 @@ docker compose exec db psql -U fgs_app -d fgs_vote -c \
 
 後台同理指到 `8081`（建議限制來源 IP）。
 
-設定好後，把後台的「投票入口網址」改成 `https://vote.你的網域`，
-QR Code 就會指向正確的 HTTPS 網址。
+> 走這條路就不需要 `docker-compose.prod.yml`，用原本的 `docker-compose.yml` 即可。
+> 但**必須在路由器設定連接埠轉發 443 → NAS**，且確認 ISP 沒有用 CGNAT。
+
+### 管理後台的額外保護（建議）
+
+`deploy/Caddyfile` 裡預留了一段 Basic Auth，建議正式對外時打開
+（掃埠機器人連登入頁都看不到，等於多一道門）：
+
+```bash
+# 產生密碼雜湊
+docker run --rm caddy:2-alpine caddy hash-password --plaintext '你要的管理密碼'
+# 把輸出的雜湊值貼進 deploy/Caddyfile 的 basic_auth 區塊，拿掉註解
+docker compose -f docker-compose.prod.yml restart caddy
+```
 
 ---
 
@@ -208,6 +295,14 @@ docker compose exec -T db psql -U fgs_app -d fgs_vote < backup-2026-09-21.sql
 資料存放在 Docker named volume（`pgdata`、`redisdata`），`docker compose down` 不會刪除；
 只有 `docker compose down -v` 才會清空，**請勿誤用**。
 
+> 用 HTTPS 模式（`docker-compose.prod.yml`）時，上面每道指令都要加
+> `-f docker-compose.prod.yml`，例如：
+> `docker compose -f docker-compose.prod.yml logs -f api`。
+> 建議在專案目錄設一個別名省事：
+> ```bash
+> alias dc='docker compose -f docker-compose.prod.yml'
+> ```
+
 ---
 
 ## 七、常見問題
@@ -215,6 +310,8 @@ docker compose exec -T db psql -U fgs_app -d fgs_vote < backup-2026-09-21.sql
 **建置時 `postgres:18-alpine` 抓不到**
 把 `docker-compose.yml` 的 `image: postgres:18-alpine` 改成 `postgres:16-alpine`。
 資料庫結構與 dump 相容（dump 是純 SQL，不含版本專屬語法）。
+⚠️ **但 volume 掛載點要一起改**：18 版是 `/var/lib/postgresql`，
+16 版是 `/var/lib/postgresql/data`（見第九節第 0 點），改錯容器會起不來。
 
 **ARM 機型建置很慢或失敗**
 `pandas`、`numpy`、`psycopg2-binary` 在 arm64 有預編譯 wheel，通常沒問題；
@@ -253,7 +350,47 @@ docker compose exec db psql -U fgs_app -d fgs_vote -c "ALTER USER fgs_app PASSWO
 | 靜態資源 / SPA fallback | ✅ 候選人照片可取得、前端路由正常 |
 | 瀏覽器 console | ✅ 零錯誤 |
 
-## 九、部署時最容易踩到的三件事
+### HTTPS 模式（`docker-compose.prod.yml`）另外實測過
+
+用 `tls internal`（自簽）取代 Let's Encrypt 跑同一套設定，
+因為真實 ACME 需要公開 DNS 才能驗證；其餘路徑完全照正式設定：
+
+| 檢查 | 結果 |
+|------|------|
+| Caddy 反向代理投票端 / 管理後台 | ✅ 皆回 200 |
+| 經 Caddy 的 `GET /api/health` | ✅ postgres / redis 皆 ok |
+| HTTP → HTTPS 自動轉址 | ✅ 308 |
+| HSTS、X-Content-Type-Options、X-Frame-Options | ✅ 皆有送出 |
+| `db` / `redis` / `api` / `web` 對外開埠 | ✅ 全部沒有（只開 Caddy 的 80/443） |
+| nginx 保留上游 `X-Forwarded-Proto` | ✅ 後端在 HTTPS 下看到的是 `https` |
+| **完整投票流程**：身分確認 → 取分區候選人 → 投票 | ✅ 成功（`votes_cast: 1`，票數 210 → 211） |
+| 同一人重複投票 | ✅ 被拒（409） |
+| 後台登入 + 帶 token 呼叫 `/api/admin/me` | ✅ 皆 200 |
+| PostgreSQL 18 volume 掛載點 | ✅ 容器重建後資料仍在（已修正 `/var/lib/postgresql/data` → `/var/lib/postgresql`） |
+
+重跑方式：`bash .ui-check/prod_e2e.sh`（此目錄不進版控）。
+
+## 九、部署時最容易踩到的四件事
+
+### 0. PostgreSQL 18 的資料目錄掛載點
+
+`postgres:18-alpine` 的資料目錄是 `/var/lib/postgresql/18/docker`，
+**不是**舊版的 `/var/lib/postgresql/data`。
+
+若把 volume 掛在舊路徑，容器會**直接拒絕啟動**並印出：
+
+```
+there appears to be PostgreSQL data in: /var/lib/postgresql/data (unused mount/volume)
+```
+
+正確寫法（本專案的 `docker-compose*.yml` 已修正）：
+
+```yaml
+volumes:
+  - pgdata:/var/lib/postgresql      # ← 18 版是這個
+```
+
+> 若之後把 image 換成 `postgres:16-alpine`，這裡要改回 `/var/lib/postgresql/data`。
 
 ### 1. `myqnapcloud` 網址**只通 QNAP 自己的服務**，不通你的容器埠
 
