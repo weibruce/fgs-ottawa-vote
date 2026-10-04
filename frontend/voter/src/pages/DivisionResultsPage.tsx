@@ -246,10 +246,13 @@ export function DivisionResultsPage() {
     }
   }, [ready, roundId, divisionId])
 
-  // 前兩名：依票數高→低取前兩位（平票仍並列）；其餘（第 3–N 位）維持原順序與原樣式
-  const topTwo = [...results].sort((a, b) => b.votes - a.votes).slice(0, 2)
+  // 全部候選人依票數高→低排序（平票時維持後端給的順序，stable sort）
+  //   ⚠️ 第 3–N 位在畫面上「樣式」不變，但**順序必須依票數**；
+  //   先前誤用後端原始順序（依 sort_order），會出現 12→9→7→5→9→9 這種非遞減的名次。
+  const ranked = [...results].sort((a, b) => b.votes - a.votes)
+  const topTwo = ranked.slice(0, 2)
   const topIds = new Set(topTwo.map((r) => r.candidate_id))
-  const rest = results.filter((r) => !topIds.has(r.candidate_id))
+  const rest = ranked.filter((r) => !topIds.has(r.candidate_id))
 
   const divisionName =
     data?.division.name ||

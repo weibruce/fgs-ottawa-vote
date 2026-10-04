@@ -82,27 +82,28 @@
 }
 
 @layer components {
-  /* 卡片（設計稿：白底、極淡邊框、圓角 14px、幾乎無陰影） */
+  /* 卡片（設計稿：白底、極淡邊框、圓角 14px、幾乎無陰影）
+     ⚠️ 這是「卡中卡」（候選人卡片等），任何尺寸都要有框，不要改成滿版。 */
   .vote-card {
     background: var(--color-card);
     border: 1px solid var(--color-border);
     border-radius: 14px;
   }
 
-  /* 卡片頂部工具列（語言選擇鈕）：與下方卡片連成一體，不佔用內容空間 */
+  /* ── 頁面主卡片（工具列 + 本體）────────────────────────────────
+     手機（< 640px）：**滿版**。不畫邊框、不做圓角，卡片底色直接鋪滿螢幕，
+       看起來像原生 App，而不是一張浮在米色底上的展示用卡片。
+     ≥640px：恢復卡片外觀（邊框 + 圓角）。
+     用 @apply 搭配 sm: 變體產生真正的 responsive utilities，
+     避免自訂 CSS 的 @layer 優先序問題。 */
   .vote-card-head {
     background: var(--color-card);
-    border: 1px solid var(--color-border);
-    border-bottom: 0;
-    border-radius: 14px 14px 0 0;
+    @apply border-0 rounded-none sm:border sm:border-b-0 sm:border-border sm:rounded-t-[14px];
   }
 
-  /* 卡片本體：接在工具列下方（上緣無邊框、無圓角） */
   .vote-card-body {
     background: var(--color-card);
-    border: 1px solid var(--color-border);
-    border-top: 0;
-    border-radius: 0 0 14px 14px;
+    @apply border-0 rounded-none sm:border sm:border-t-0 sm:border-border sm:rounded-b-[14px];
   }
 
   /* 輸入框（設計稿：白底、圓角 10px、1px 米色邊框、高 46px） */
