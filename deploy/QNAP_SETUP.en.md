@@ -249,9 +249,9 @@ re-upload it and compare the SHA-256 checksum printed by
 
    | Placeholder | Replace with |
    |---|---|
-   | `CHANGE_ME_POSTGRES_PASSWORD` | a strong password you choose (**appears twice — use the same value both times**) |
-   | `CHANGE_ME_REDIS_PASSWORD` | a strong password you choose (**appears twice — same value both times**) |
-   | `CHANGE_ME_JWT_SECRET` | a long random string, at least 32 characters |
+   | `CHANGE_ME_POSTGRES_PASSWORD` | a strong password you choose (**appears 2 times — must be the same value in both places**) |
+   | `CHANGE_ME_REDIS_PASSWORD` | a strong password you choose (**appears 3 times — must be the same value in all three**) |
+   | `CHANGE_ME_JWT_SECRET` | a long random string, at least 32 characters (appears once) |
 
    To generate the JWT secret on your development machine:
    ```bash
