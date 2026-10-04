@@ -191,3 +191,65 @@ nginx 已設 `client_max_body_size 32m`；若還是不夠，改 `deploy/nginx.co
 docker compose exec db psql -U fgs_app -d fgs_vote -c "ALTER USER fgs_app PASSWORD '新密碼';"
 ```
 或清掉資料重建（`docker compose down -v`，**會刪除所有資料**）。
+
+---
+
+## 八、實際驗證過的結果（2026-10，部署前已用 Docker 跑過整套）
+
+在開發機上以 Docker 完整建置映像、起 4 個容器、匯入 dump 後實測：
+
+| 檢查 | 結果 |
+|------|------|
+| `api` / `web` 映像建置 | ✅ 成功（Python 3.12 + Node 22，multi-arch） |
+| dump 於資料庫首次初始化自動匯入 | ✅ 300 會員 / 210 票 / 35 候選人，alembic 版本正確 |
+| `GET /api/health`（經 nginx） | ✅ postgres / redis 皆 ok |
+| 後台登入 API | ✅ 200 |
+| 後台 10 個頁面 | ✅ 全部載入（`/` `/divisions` `/candidates` `/members` `/vote-config` `/tally` `/rounds` `/appointments` `/exports` `/settings`） |
+| 投票端 4 個頁面 | ✅ 全部載入（`/vote/verify` `/vote/window` `/screen` `/vote/results`） |
+| 靜態資源 / SPA fallback | ✅ 候選人照片可取得、前端路由正常 |
+| 瀏覽器 console | ✅ 零錯誤 |
+
+## 九、部署時最容易踩到的三件事
+
+### 1. `myqnapcloud` 網址不一定通
+
+`https://<你的>.myqnapcloud.com/...` 走的是 QNAP CloudLink 中繼。
+若未啟用（實測回應 `302 → device_not_found?code=cloudlink_service_not_found`），
+**該網址不會連到你的 NAS**。
+
+部署與測試請改用：
+- **區網 IP**（例如 `http://192.168.1.50:8080`）——從同一個 Wi-Fi 的電腦操作最簡單
+- 或 NAS 的 **DDNS / 真實對外 IP**（需在路由器開埠）
+
+先確認連得上再往下做：
+```bash
+curl -I http://<NAS-IP>:8080/          # 部署後應回 200
+```
+（部署前該埠應該是連不上的）
+
+### 2. dump 檔權限
+
+PostgreSQL 容器以 uid 999 執行，**讀不到 `chmod 600` 的檔案**。
+使用 `docker-entrypoint-initdb.d` 自動匯入時，dump 必須是可讀的：
+
+```bash
+chmod 644 deploy/db/init/01-fgs_vote.sql
+```
+
+若不想放寬權限，改用「啟動後手動匯入」（見第五節），那條路徑不受權限影響。
+
+### 3. 容器名稱與 `.env` 必須一致
+
+`docker-compose.yml` 的服務名稱就是 nginx 裡的上游名稱（`api`），
+不要改成別的；`.env` 的 `DB_PASSWORD` 必須與 `POSTGRES_PASSWORD` 相同
+（資料庫密碼只在**第一次初始化**時寫入 volume，之後改 `.env` 不會生效）。
+
+## 十、部署前檢查清單
+
+- [ ] 已從**正式資料庫**匯出 dump（不是範例資料）
+- [ ] `.env` 三個密碼都改過（`POSTGRES_PASSWORD` / `REDIS_PASSWORD` / `JWT_SECRET`）
+- [ ] `DB_PASSWORD` == `POSTGRES_PASSWORD`
+- [ ] `docker-compose.yml` 放在專案根目錄、與 `deploy/` 同層
+- [ ] NAS 上 8080 / 8081 **沒有被其他服務佔用**
+- [ ] dump 已 `chmod 644`（若用自動匯入）
+- [ ] 知道 NAS 的區網 IP（不是 myqnapcloud 網址）
