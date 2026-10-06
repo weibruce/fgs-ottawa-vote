@@ -131,21 +131,92 @@ in the `administrators` group. This guide deliberately does **not** require SSH
 2. Log back in **as your own account**
 3. **Container Station** should now appear on the desktop / main menu
 
-## A4. If App Center only offers "Administrator's main menu"
+## A4. Container Station is admin-only — CONFIRMED on this NAS
 
-If, at step 5 of Grant 1, **Display on** offers *only*
-**Administrator's main menu** — no *Every user's main menu* option — then QNAP
-has classified Container Station as admin-only on your firmware. The QTS manual
-notes that for such apps *"non-administrators cannot be granted access"*.
+**Status: confirmed.** On this NAS, **Display on** offers only
+*Administrator's main menu*; the *Every user's main menu* option is greyed out
+and cannot be selected. QNAP has therefore classified Container Station as an
+admin-only app on this firmware, and **no permission setting anywhere will
+change that.** The QTS manual says of such apps: *"non-administrators cannot be
+granted access to"* them.
 
-In that case you have two options:
+**This is a QNAP limitation, not a problem with your setup.** Proceed with
+option A4a below.
 
-| Option | Trade-off |
-|---|---|
-| **A4a — `admin` does Part D and Part E** (import images + create the application) | One-time, about 5 minutes. After that the stack runs by itself and you never need `admin` again for the NAS — you only use the voting system's own admin console on port 8081. **This is the recommended option.** |
-| **A4b — `admin` adds your account to the `administrators` group** | Control Panel → Privilege → Users → your account → Edit → Group → tick `administrators`. ⚠️ This gives your account **full administrator rights over the entire NAS** — it can change every setting, read every file, and delete data. Only do this if you accept that. |
+### A4a — `admin` performs the one-time container setup (RECOMMENDED)
 
-Tell me which happens and I will adjust the remaining steps accordingly.
+This is the path this guide now assumes.
+
+| Phase | Who does it | How often |
+|---|---|---|
+| Upload the project files (Part C) | **your account** — File Station works fine | once |
+| Import images + create the Application (Parts D and E) | **`admin`** | **once, ~5 minutes** |
+| Day-to-day: run the election, tally, export | **your account** — the voting system's own admin console on port 8081 | always |
+
+**After the one-time setup you never need `admin` again for the NAS.** The
+containers are configured with `restart: unless-stopped`, which means they start
+automatically whenever the NAS boots — including after a power failure. Nobody
+has to log in to Container Station to bring the system back up.
+
+The only things that would need `admin` again are: changing ports or passwords,
+or upgrading to a new version of the software. Both are rare and neither is
+time-critical.
+
+**What `admin` needs from you** (see Part B and Part C):
+
+1. `deploy/fgs-images.tar` — already uploaded to the NAS
+2. `deploy/qnap-application.yml` — with the three `CHANGE_ME` passwords already
+   replaced by you
+
+Then give `admin` Parts D and E of this guide.
+
+⚠️ The filled-in YAML contains your database and Redis passwords. Hand it over
+in person or via a private channel, and change those passwords after the
+election. Do not paste it into email or chat.
+
+### A4b — Add your account to the `administrators` group (NOT recommended)
+
+`admin` can do this at **Control Panel → Privilege → User Groups →
+`administrators` → Edit members → add your account**. It would let you use
+Container Station directly.
+
+**But it grants your account full administrator rights over the entire NAS** —
+every setting, every shared folder, every other user's data, SSH access, and the
+ability to delete or factory-reset the device. For a one-time 5-minute task,
+that is a bad trade. Only choose this if you genuinely want that account to be a
+NAS administrator for other reasons.
+
+If you do need a container-managing account long-term, create a **dedicated
+named admin account** used only for that purpose, rather than promoting your
+everyday account. That is also what QNAP's own hardening guidance recommends.
+
+### A4c — Run Portainer for delegated management (UNOFFICIAL)
+
+If you really want your own account to manage the containers day-to-day, the
+QNAP community's usual workaround is to run **Portainer** as one more container
+and create a Portainer account for yourself. You would then manage the stack
+through Portainer's web UI instead of Container Station.
+
+⚠️ Understand the risk before choosing this: Portainer must mount the Docker
+socket, which is **equivalent to root on the NAS**. Anyone with a Portainer
+account can effectively control the whole device. It is not a QNAP-supported
+delegation mechanism.
+
+For an election system that runs unattended once deployed, A4a is simpler and
+safer. I would not choose A4c here.
+
+### Two things that do NOT work — don't spend time on them
+
+- **Control Panel → Privilege → Users → (your account) → Edit Application
+  Privileges.** This is the per-user *grant* dialog, and it is the right place
+  conceptually — but Container Station will never be listed in it, because the
+  App Center master switch (Grant 1) forbids it. This dialog can only grant apps
+  that already offer *Every user's main menu*.
+- **Control Panel → Privilege → Delegated Administration.** None of the
+  delegated roles grant Container Station. The *System Management* role's app
+  list excludes it, and the *Application Management* role is explicitly
+  documented as being *"unable to open apps that are only accessible to
+  administrators"*.
 
 ---
 
@@ -229,7 +300,11 @@ contents up one level — the application YAML in Part E expects the exact path
 
 # Part D — Import the two Docker images
 
-In **Container Station**, using your own account:
+> ⚠️ **This part must be done by `admin`.** Container Station is an admin-only
+> app on this NAS (see Part A4). Your own account can do everything in Part C
+> and Part F, but not this.
+
+In **Container Station**:
 
 1. Left menu → **Images**
 2. Click **Import Image** — the *Import Image* window opens
@@ -258,6 +333,8 @@ re-upload it and compare the SHA-256 checksum printed by
 ---
 
 # Part E — Create the Application
+
+> ⚠️ **This part must be done by `admin`** — same reason as Part D.
 
 1. In **Container Station**, left menu → **Applications**
 2. Click **Create** — the *Create Application* window opens
