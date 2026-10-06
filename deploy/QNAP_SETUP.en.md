@@ -36,6 +36,12 @@ The QNAP-specific parts — the permission dialog labels, the Container Station
 GUI steps, and your NAS architecture — cannot be tested from here. Those are
 the parts to watch, and Part A3, Part D and Part G tell you what to check.
 
+> **Correction (verified against the QTS 5.1 user guide):** app access is
+> granted from **App Center → ⚙ → Display on**, *not* from
+> Control Panel → Privilege → Applications. An earlier version of this guide
+> said otherwise and that was wrong — Container Station does not appear in the
+> Privilege → Applications list at all. Part A2 Grant 1 has been rewritten.
+
 ---
 
 # Part A — One-time setup the `admin` must do
@@ -60,15 +66,25 @@ is inside the two Docker images.
 
 There are **three** grants. All three are needed.
 
-### Grant 1 — Allow your account to open Container Station
+### Grant 1 — Make Container Station visible to your account
 
-1. Open **Control Panel**
-2. Go to **Privilege** → **Applications**
-3. Switch to the **by User** tab
-4. Select **your account**
-5. Click **Edit**
-6. Tick **Container Station**
-7. Click **Apply**
+> ⚠️ **This is NOT done in Control Panel → Privilege → Applications.**
+> Container Station never appears in that dialog. That dialog only covers a
+> subset of apps; most apps (including Container Station) are controlled from
+> **App Center** instead.
+>
+> This is the step that trips people up. QNAP's own words: *"QTS administrators
+> can grant or deny user access to apps. The main menu of non-administrator
+> users only displays the apps that they have access to."* The action lives in
+> App Center, not in Control Panel.
+
+1. Log in as **`admin`**
+2. Open **App Center**
+3. Find **Container Station** in the list of installed apps
+4. Click the **⚙** (settings) icon on the Container Station tile
+5. Hover over **Display on**
+6. Select **Every user's main menu**
+7. Log out, then log back in **as your own account**
 
 ### Grant 2 — Give your account read/write on the `Container` shared folder
 
@@ -115,14 +131,21 @@ in the `administrators` group. This guide deliberately does **not** require SSH
 2. Log back in **as your own account**
 3. **Container Station** should now appear on the desktop / main menu
 
-If it is still missing or says *Access denied*, re-check Grant 1 and Grant 2,
-then log out and back in again.
+## A4. If App Center only offers "Administrator's main menu"
 
-> **If Container Station still refuses to open for a non-admin account**, QNAP
-> has locked container management to `admin` on your firmware. In that case
-> either (a) `admin` performs Part D and Part E for you — it is a one-time
-> action, or (b) ask `admin` to add your account to the **administrators**
-> group. Tell me which happens and I will adjust.
+If, at step 5 of Grant 1, **Display on** offers *only*
+**Administrator's main menu** — no *Every user's main menu* option — then QNAP
+has classified Container Station as admin-only on your firmware. The QTS manual
+notes that for such apps *"non-administrators cannot be granted access"*.
+
+In that case you have two options:
+
+| Option | Trade-off |
+|---|---|
+| **A4a — `admin` does Part D and Part E** (import images + create the application) | One-time, about 5 minutes. After that the stack runs by itself and you never need `admin` again for the NAS — you only use the voting system's own admin console on port 8081. **This is the recommended option.** |
+| **A4b — `admin` adds your account to the `administrators` group** | Control Panel → Privilege → Users → your account → Edit → Group → tick `administrators`. ⚠️ This gives your account **full administrator rights over the entire NAS** — it can change every setting, read every file, and delete data. Only do this if you accept that. |
+
+Tell me which happens and I will adjust the remaining steps accordingly.
 
 ---
 
@@ -345,10 +368,16 @@ Another QNAP service is on that port. Change the two numbers in the `web`
 service of the YAML (`"8080:80"` / `"8081:81"`) to free ports, e.g.
 `"9080:80"` and `"9081:81"`, then redeploy.
 
-### Container Station says access denied
+### Container Station says access denied, or the icon is missing
 
 Grant 1 in Part A was not applied, or you did not log out and back in
-afterwards. Re-apply it and re-login.
+afterwards. Two things to check:
+
+- Make sure you did it in **App Center → ⚙ → Display on → Every user's main
+  menu**. Doing it in Control Panel → Privilege → Applications will **not**
+  work — Container Station is not listed in that dialog.
+- If App Center does not offer *Every user's main menu* for Container Station,
+  see **Part A4** — QNAP has made it admin-only on your firmware.
 
 ### Everything looks fine but a page is blank
 
