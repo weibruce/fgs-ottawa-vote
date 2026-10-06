@@ -1,5 +1,7 @@
 """应用设置 — 从 .env / 环境变量读取（pydantic-settings）"""
 from functools import lru_cache
+from urllib.parse import quote
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,15 +39,23 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
+        # 密碼必須做 URL 編碼。包含 # @ / : ? 等字元時，
+        # 不編碼會讓連線字串被解析錯誤（# 後面全部被當成 fragment）。
+        user = quote(self.db_user, safe="")
+        pwd = quote(self.db_password, safe="")
         return (
-            f"postgresql+psycopg2://{self.db_user}:{self.db_password}"
+            f"postgresql+psycopg2://{user}:{pwd}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
         )
 
     @property
     def redis_url(self) -> str:
-        auth = f":{self.redis_password}@" if self.redis_password else ""
-        return f"redis://{auth}{self.redis_host}:{self.redis_port}/0"
+        # 同上：redis://:密碼@host:port/0 的密碼若含 # 會直接被截斷，
+        # 導致 "Port could not be cast to integer value" 這種誤導性錯誤。
+        if not self.redis_password:
+            return f"redis://{self.redis_host}:{self.redis_port}/0"
+        pwd = quote(self.redis_password, safe="")
+        return f"redis://:{pwd}@{self.redis_host}:{self.redis_port}/0"
 
 
 @lru_cache

@@ -50,6 +50,35 @@ Steps 2, 3, 6 and 7 are yours. They are in Part 2.
 
 ---
 
+# ⚠️ BEFORE ANYTHING ELSE — match the CPU architecture
+
+**This NAS is a TS-932PX: an Annapurna Labs AL324, 64-bit ARM (Cortex-A57).**
+Its architecture is **`linux/arm64`**, not `amd64`.
+
+If you build the images on a normal Intel/AMD computer, they will be `amd64`
+and **will fail on this NAS**. The containers start, then die immediately with
+a single line in the log:
+
+```
+exec /usr/bin/sh: exec format error
+```
+
+Only `fgs-api` and `fgs-web` fail — `postgres`, `redis` and the backup
+container keep running, because they are pulled from Docker Hub and Docker
+picks the correct architecture automatically. **That asymmetry is the
+signature of this problem.**
+
+Build with the target platform set:
+
+```bash
+FGS_PLATFORM=linux/arm64 bash deploy/make_image_bundle.sh
+```
+
+The script prints the resulting architecture — it must say **`arm64`** for both
+images before you upload anything.
+
+---
+
 # What actually runs
 
 Four containers on a private Docker network:
@@ -167,8 +196,19 @@ When done, the image list must show both:
    | `CHANGE_ME_REDIS_PASSWORD` | 3 times | must be the **same value** in all three |
    | `CHANGE_ME_JWT_SECRET` | 1 time | any random string, **at least 32 characters** |
 
-   Use only letters, digits, `-` and `_`. Avoid `$`, backticks and quotes —
-   YAML would need escaping and it is easy to get wrong.
+   **About the characters in these passwords:**
+
+   | Character | OK? | Why |
+   |---|---|---|
+   | letters, digits | ✅ | simplest choice |
+   | `#` `!` `*` `%` `+` `-` `_` `.` | ✅ | fine — the app URL-encodes passwords |
+   | `$` | ❌ **avoid** | Docker Compose treats `$` as a variable and **silently deletes it**. `abc$def` becomes `abcdef`. If you must use it, write `$$` |
+   | backtick `` ` ``, `"`, `'` | ❌ avoid | YAML escaping; easy to get wrong |
+
+   > ⚠️ **Do not save these passwords into the `qnap-application.yml` file.**
+   > Replace the placeholders **directly in Container Station's editor** after
+   > pasting the YAML in. The `.yml` file in the project is tracked by git — a
+   > filled-in copy would put your real passwords into version history.
 
    Keep these passwords somewhere safe (a password manager). **The user does
    not need them** — they only need the voting system's own login.
@@ -577,6 +617,45 @@ not changed back to `/var/lib/postgresql/data` — on PostgreSQL 18 that path
 makes the container refuse to start with a message about an *unused
 mount/volume*.
 
+### `fgs-api` keeps restarting, log mentions `Port could not be cast to integer value`
+
+A password contains a character that breaks the connection URL — typically `#`,
+`@`, `/` or `:`. In a URL, `#` starts a fragment, so everything after it is
+discarded and the parser sees nonsense where the port should be.
+
+**This is fixed in the current version** (passwords are URL-encoded). If you see
+it, you are running an older image — rebuild with `make_image_bundle.sh`.
+
+### Passwords behave as if characters are missing
+
+Docker Compose treats `$` in the YAML as a variable reference and **silently
+removes it**: `abc$def` becomes `abcdef`. Both the database and the app get the
+same shortened value, so authentication still works and nothing looks broken —
+but the effective password is not the one you chose.
+
+Avoid `$` in these passwords, or write it as `$$`.
+
+### `exec /usr/bin/sh: exec format error`
+
+The image architecture does not match the NAS. This NAS is **arm64**; an
+`amd64` image cannot run on it.
+
+Symptom to look for: **only `fgs-api` and `fgs-web` fail**, while `fgs-db`,
+`fgs-redis` and `fgs-backup` stay running. Those three are pulled from Docker
+Hub and Docker picks the right architecture for them automatically — our own
+two images are the ones built for the wrong CPU.
+
+Fix: rebuild with the target platform set.
+
+```bash
+FGS_PLATFORM=linux/arm64 bash deploy/make_image_bundle.sh
+```
+
+Confirm the output says `arm64` for both images, then re-upload and re-import.
+`fgs-web` will show an **empty** log while this is happening — it is only
+waiting for `fgs-api` to come up, so it never starts. Fixing `fgs-api` fixes
+both.
+
 ### "Invalid File Format" when importing the images
 
 Three causes, in order of likelihood:
@@ -611,10 +690,6 @@ Another QNAP service is on that port. Change the two numbers under the `web`
 service in the YAML (`"8080:80"` / `"8081:81"`) to free ports — e.g.
 `"9080:80"` and `"9081:81"` — then redeploy.
 
-### An image imports but containers fail with "exec format error"
-
-The image architecture does not match the NAS. Docker cannot run an `amd64`
-image on an `arm64` NAS or vice versa.
 
 ### A page is blank
 

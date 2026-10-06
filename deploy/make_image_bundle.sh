@@ -52,29 +52,58 @@ rm -f "$DC/.wtest" 2>/dev/null || true
 
 VERSION="${FGS_VERSION:-$(date +%Y%m%d)-$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo nogit)}"
 
+# 目標平台。預設跟隨主機；NAS 架構不同時要指定，例如：
+#   FGS_PLATFORM=linux/arm64 bash deploy/make_image_bundle.sh
+# ⚠️ 架構選錯的症狀是容器啟動後立刻失敗，log 只有一行：
+#      exec /usr/bin/sh: exec format error
+#    從 Docker Hub 拉來的映像（postgres / redis）會自動選對架構，
+#    所以只有自建的 fgs-api / fgs-web 會壞 —— 這正是架構不符的特徵。
+PLATFORM="${FGS_PLATFORM:-}"
+PLATFORM_ARG=()
+if [ -n "$PLATFORM" ]; then
+  PLATFORM_ARG=(--platform "$PLATFORM")
+  echo "ℹ️  目標平台：$PLATFORM（跨架構建置，會使用 QEMU 模擬，較慢）"
+fi
+
 # ── 1. 建置映像 ──────────────────────────────────────────────────
 echo "════ 1. 建置映像（版本標籤 $VERSION）════"
-docker build --provenance=false --sbom=false \
+docker build --provenance=false --sbom=false "${PLATFORM_ARG[@]}" \
   -f deploy/api.Dockerfile -t fgs-api:latest -t "fgs-api:$VERSION" .
-docker build --provenance=false --sbom=false \
+docker build --provenance=false --sbom=false "${PLATFORM_ARG[@]}" \
   -f deploy/web.Dockerfile -t fgs-web:latest -t "fgs-web:$VERSION" .
 
-ARCH=$(docker image inspect fgs-api:latest --format '{{.Architecture}}')
+ARCH_API=$(docker image inspect fgs-api:latest --format '{{.Architecture}}')
+ARCH_WEB=$(docker image inspect fgs-web:latest --format '{{.Architecture}}')
 echo
 echo "════ 2. 檢查架構 ════"
-echo "  fgs-api / fgs-web → $ARCH"
-echo "  本機              → $(uname -m)"
+echo "  fgs-api  → $ARCH_API"
+echo "  fgs-web  → $ARCH_WEB"
+echo "  主機     → $(uname -m)"
 echo
-echo "  ⚠️ 請確認 NAS 的 CPU 架構與上面相同。"
-echo "     大部分 QNAP x86 機型 = amd64；ARM 機型（TS-133 / TS-233…）= arm64。"
-echo "     查詢：Control Panel → System → System Status → Hardware"
+if [ -n "$PLATFORM" ]; then
+  case "$PLATFORM" in
+    *arm64*) want=aarch64 ;;
+    *amd64*) want=x86_64 ;;
+    *) want="" ;;
+  esac
+  if [ -n "$want" ] && [ "$ARCH_API" = "$ARCH_WEB" ]; then
+    echo "  ✅ 已按要求建置為 $PLATFORM"
+    echo "     NAS 上可以用 uname -m 或控制台 → 系統狀態核對（應為 $want）"
+  else
+    echo "  ⚠️ 兩個映像架構不一致，請檢查"
+  fi
+else
+  echo "  ⚠️ 這是主機的原生架構。如果 NAS 不是這個架構，容器會出現"
+  echo "     「exec /usr/bin/sh: exec format error」。"
+  echo "     這時請改用：FGS_PLATFORM=linux/arm64 bash deploy/make_image_bundle.sh"
+fi
 
 TAGS=(fgs-api:latest "fgs-api:$VERSION" fgs-web:latest "fgs-web:$VERSION")
 
 # ── 3. 主機匯出 ──────────────────────────────────────────────────
 echo
 echo "════ 3. 從主機匯出映像 ════"
-docker save "${TAGS[@]}" -o "$WORK/host.tar"
+docker save "${PLATFORM_ARG[@]}" "${TAGS[@]}" -o "$WORK/host.tar"
 
 FORMAT=unknown
 if tar -tf "$WORK/host.tar" 2>/dev/null | grep -qE '(^|/)index\.json$'; then
@@ -163,7 +192,7 @@ esac
 cat > "$REPO/deploy/fgs-images.version.txt" <<EOF
 版本標籤：$VERSION
 產生時間：$(date '+%F %T')
-架構：$ARCH
+架構：$ARCH_API / $ARCH_WEB
 格式：傳統 docker save 格式 + gzip（Container Station 可匯入）
 來源格式：$FORMAT$([ "$FORMAT" = oci ] && echo "（已用 $DIND_IMAGE 轉換）")
 sha256：$(sha256sum "$OUT" | cut -d' ' -f1)
