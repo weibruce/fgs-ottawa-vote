@@ -164,6 +164,22 @@ automatically imports `01-fgs_vote.sql`.
 
 ## Step 2 — Upload the two files
 
+> ### ⚠️ Upload TWO FILES — never the folder
+>
+> The project folder is **840 MB across 20,293 files**, almost all of it
+> `node_modules`, `.venv` and `.git`. Uploading those is pointless (they are
+> already inside the Docker images), would take hours through a browser, and
+> some paths are long enough to break File Station.
+>
+> `fgs-upload.zip` **already contains the entire project** — all 264 real
+> source files, the candidate photos, the config, and the database dump.
+>
+> | Upload this | Size | Files |
+> |---|---|---|
+> | ✅ `fgs-upload.zip` | 3.3 MB | 264 (packed inside) |
+> | ✅ `fgs-images.tar` | 142 MB | the 2 Docker images |
+> | ❌ the `fgs-ottawa-vote` folder | 840 MB | 20,293 — **do not** |
+
 ### Where the files are
 
 Both files **already exist** — nobody has to run any commands. They were built
@@ -188,12 +204,17 @@ on this computer, in the project folder:
 4. Open the new `fgs-ottawa-vote` folder
 5. Click **Upload** → **Upload – File**
 6. A file-picker window opens. Navigate to the folder
-   `/home/bruce/Documents/workspace/fgs-ottawa-vote/deploy/` and select
-   **`fgs-upload.zip`**. Confirm the upload and wait for it to finish.
-7. Repeat **Upload** → **Upload – File** for **`fgs-images.tar`**.
-   This one is 142 MB — expect several minutes. You can leave it running.
-8. When `fgs-upload.zip` has finished, **right-click it → Extract** (or
-   *Extract to…*) and extract it **into the current folder**
+   `/home/bruce/Documents/workspace/fgs-ottawa-vote/deploy/` — go **into**
+   `deploy`, do not select the folder above it
+7. Select **`fgs-upload.zip`**, then Ctrl+click (Cmd+click on Mac)
+   **`fgs-images.tar`** so both are selected, and confirm the upload.
+   Start with the zip if your picker only allows one at a time — it is small
+   and you can extract it while the big file is still going.
+8. Wait for `fgs-upload.zip` to finish, then **right-click it → Extract** (or
+   *Extract to…*) and extract it **into the current folder**.
+   This recreates the whole project inside `fgs-ottawa-vote/`.
+9. Leave `fgs-images.tar` alone — it stays as a file for your admin to import
+   in Part 1, Task 2.
 
 ### Check the resulting layout
 
