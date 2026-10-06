@@ -34,7 +34,7 @@ Do these in order. Each row depends on the one above it.
 |---|---|---|---|---|
 | 1 | Grant your account read/write on the `Container` shared folder | **admin** | Control Panel | 2 min |
 | 2 | Upload the 2 files and extract the zip | **you** | File Station | 10–20 min (the 142 MB upload is the slow part) |
-| 3 | Check the SQL file's permissions | **you** | File Station | 1 min |
+| 3 | ~~Check the SQL file's permissions~~ — **no longer needed** (see PART 2, Step 3) | — | — | 0 |
 | 4 | Import the 2 Docker images | **admin** | Container Station | 3 min |
 | 5 | Create the Application | **admin** | Container Station | 3 min |
 | 6 | Verify everything works | **you** | Browser | 5 min |
@@ -242,26 +242,27 @@ Open `fgs-ottawa-vote/` and confirm you can see `docker-compose.yml` and a
 Either way, the target is: `deploy/qnap-application.yml` must exist at exactly
 `/share/Container/fgs-ottawa-vote/deploy/qnap-application.yml`.
 
-## Step 3 — Check the SQL file's permissions
+## Step 3 — Nothing to do (file permissions are handled automatically)
 
-The database container runs as a different user (`uid 999`) than your own
-account, so it must be able to **read** the dump. If it cannot, the database
-starts up empty and you get a working but blank system.
+Earlier versions of this guide asked you to set the `01-fgs_vote.sql`
+permissions manually through File Station. **That is no longer necessary, and
+you may not even have the option.** Skip this step.
 
-In File Station:
+Two reasons it changed:
 
-1. Navigate to `/share/Container/fgs-ottawa-vote/deploy/db/init/`
-2. Right-click **`01-fgs_vote.sql`** → **Properties**
-3. Go to the **Permissions** tab
-4. Make sure **Read** is granted for **everyone** (the equivalent of `644`)
-5. Apply
+1. The database container now fixes the permission itself on every start
+   (its entrypoint runs `chmod 644` on the SQL file before handing over to
+   PostgreSQL). Verified: the import succeeds even when the file is `600`.
+2. Even if you wanted to set it manually, File Station only shows a
+   **Permissions** tab when QNAP's *Advanced Folder Permissions* is enabled —
+   which it is not by default. So the old instruction could not be followed on
+   a standard setup.
 
-> If you can't find a Permissions tab, you can skip this check — extracting a
-> zip usually leaves files world-readable. Just watch for the symptom in
-> Step 6: if the Members page is empty, come back here.
+If the Members page is empty in Step 6, the cause is something else — see
+Troubleshooting.
 
-**Now tell your admin that steps 2 and 3 are done**, so they can do Part 1's
-Tasks 2 and 3.
+**Now tell your admin that step 2 is done**, so they can do Part 1's Tasks 2
+and 3.
 
 ## Steps 4 and 5 — your admin does these
 
@@ -416,8 +417,7 @@ A disaster recovery step — you should never need it, but know it exists.
 2. Rename it to `01-fgs_vote.sql`
 3. In File Station, replace
    `/share/Container/fgs-ottawa-vote/deploy/db/init/01-fgs_vote.sql` with it
-4. Make sure the file is world-readable (Step 3 of Part 2)
-5. Have your admin: **stop** the `fgs` application, delete the volumes
+4. Have your admin: **stop** the `fgs` application, delete the volumes
    `fgs_pgdata` and `fgs_redisdata` (Container Station → Volumes), then
    **start** the application again
 
@@ -455,8 +455,7 @@ Do this **before** your admin creates the Application in Part 1 Task 3.
    bash deploy/make_upload_zip.sh
    ```
 3. Upload the new `fgs-upload.zip` and extract it over the existing folder
-4. Check the SQL file is world-readable (Part 2, Step 3)
-5. Have your admin create the Application
+4. Have your admin create the Application
 
 The very first start imports your real data.
 
@@ -519,16 +518,29 @@ a *dedicated* one for that purpose.
 
 ### The Members page is empty
 
-The dump is imported only the **first** time the database volume is created. If
-the database started before `01-fgs_vote.sql` was in place, the import was
-skipped.
+Two possible causes. **Check the `fgs-db` container log first** — it names the
+cause directly.
+
+**Cause 1 — the import was skipped.** The dump is imported only the **first**
+time the database volume is created. If the database started before
+`01-fgs_vote.sql` was in place, nothing is imported later.
+
+**Cause 2 — the SQL file could not be read.** The log will say
+`Permission denied`. The container fixes this itself on every start, so if you
+see it, the file is probably not where the YAML expects:
+
+```
+/share/Container/fgs-ottawa-vote/deploy/db/init/01-fgs_vote.sql
+```
+
+Check that path exists exactly (watch for a nested `fgs-ottawa-vote` folder).
+
+Either way, the fix is the same:
 
 1. In Container Station, stop the `fgs` application
 2. Delete the volumes `fgs_pgdata` and `fgs_redisdata`
    (Container Station → Volumes → select → Delete)
-3. Confirm the file exists at
-   `/share/Container/fgs-ottawa-vote/deploy/db/init/01-fgs_vote.sql`
-   **and is readable by everyone** (Step 3)
+3. Confirm the SQL file is at the path above
 4. Start the application again
 
 ### The database container keeps restarting

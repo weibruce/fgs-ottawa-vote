@@ -30,7 +30,17 @@ services:
     volumes:
       # ⚠️ PostgreSQL 18 起，資料目錄掛載點是 /var/lib/postgresql（不是 .../data）
       - pgdata:/var/lib/postgresql
-      - ./deploy/db/init:/docker-entrypoint-initdb.d:ro
+      # 注意：刻意不加 :ro，下面的 entrypoint 需要補權限
+      - ./deploy/db/init:/docker-entrypoint-initdb.d
+    # PostgreSQL 伺服器以 uid 999 執行，讀不到權限 600 的 init 腳本時
+    # 會「靜默跳過匯入」——服務一切正常，但資料庫是空的。
+    # 容器啟動時還是 root，所以在這裡先把 .sql 補成 644。
+    entrypoint:
+      - sh
+      - -c
+      - |
+        chmod 644 /docker-entrypoint-initdb.d/*.sql 2>/dev/null || true
+        exec docker-entrypoint.sh postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fgs_app} -d ${POSTGRES_DB:-fgs_vote}"]
       interval: 10s

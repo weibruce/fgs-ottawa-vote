@@ -38,7 +38,21 @@ services:
       #    （不是舊版的 /var/lib/postgresql/data，掛錯容器會拒絕啟動）
       - fgs_pgdata:/var/lib/postgresql
       # 第一次啟動時自動匯入這裡的 .sql（就是你的會員名單與投票資料）
-      - /share/Container/fgs-ottawa-vote/deploy/db/init:/docker-entrypoint-initdb.d:ro
+      # 注意：這裡刻意不加 :ro，因為下面的 entrypoint 需要把權限補成 644
+      - /share/Container/fgs-ottawa-vote/deploy/db/init:/docker-entrypoint-initdb.d
+    # 這個 entrypoint 解決一個很陰險的問題：
+    #   PostgreSQL 伺服器以 uid 999（postgres）執行，讀不到權限 600 的
+    #   init 腳本。讀不到時它只印一行錯誤就跳過匯入，容器照常啟動 ——
+    #   結果是服務全部正常，但資料庫一筆資料都沒有。
+    #   容器剛啟動時還是 root，所以在這裡先把 .sql 的權限補起來，
+    #   這樣就不必依賴 QNAP File Station 的權限設定（那個分頁還需要
+    #   額外開啟 Advanced Folder Permissions 才會出現）。
+    entrypoint:
+      - sh
+      - -c
+      - |
+        chmod 644 /docker-entrypoint-initdb.d/*.sql 2>/dev/null || true
+        exec docker-entrypoint.sh postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fgs_app -d fgs_vote"]
       interval: 10s
