@@ -28,8 +28,14 @@ git archive --format=zip --prefix='' -o "$OUT" HEAD
 if [ -f "$DUMP" ]; then
   mkdir -p "$TMP/deploy/db/init"
   cp "$DUMP" "$TMP/deploy/db/init/01-fgs_vote.sql"
+  # ⚠️ 權限必須是 644，不能沿用本機的 600：
+  #    PostgreSQL 容器以 uid 999 執行，讀不到 600 的檔案，
+  #    initdb 會直接跳過這個 .sql（錯誤訊息只出現在 db 容器日誌裡，
+  #    表面上服務看起來一切正常，但資料庫是空的）。
+  #    本機的原始檔仍保持 600，只有要打包的這份暫存複本放寬。
+  chmod 644 "$TMP/deploy/db/init/01-fgs_vote.sql"
   (cd "$TMP" && zip -q -r "$OUT" deploy/db/init)
-  echo "已加入資料庫 dump（$(du -h "$DUMP" | cut -f1)）"
+  echo "已加入資料庫 dump（$(du -h "$DUMP" | cut -f1)，zip 內權限 644）"
 else
   echo "⚠️ 找不到 $DUMP"
   echo "   請先執行：bash deploy/export_current_db.sh"

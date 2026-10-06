@@ -38,3 +38,5 @@ deploy/data/
 deploy/*.zip
 .env
 deploy/*.tar
+backups/
+deploy/fgs-images.version.txt

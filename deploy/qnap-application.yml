@@ -116,6 +116,51 @@ services:
       TZ: America/Toronto
     networks: [fgs]
 
+  # ── 每日自動備份 ────────────────────────────────────────────────
+  # 投票期間最怕資料庫出意外。這個容器每天把整個資料庫 dump 成
+  # /share/Container/fgs-ottawa-vote/backups/ 底下的一個 .sql.gz，
+  # 你可以直接用 File Station 進去看、下載。
+  # 只保留最近 30 天，舊的自動刪除。
+  backup:
+    image: postgres:18-alpine
+    container_name: fgs-backup
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: CHANGE_ME_POSTGRES_PASSWORD
+      DB_USER: fgs_app
+      DB_NAME: fgs_vote
+      TZ: America/Toronto
+      # 每天備份一次；要更頻繁可把 86400 改成 3600（每小時）
+      BACKUP_INTERVAL_SECONDS: "86400"
+      BACKUP_KEEP_DAYS: "30"
+    volumes:
+      - /share/Container/fgs-ottawa-vote/backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - |
+        # ⚠️ 這裡的 $$ 是刻意的：Docker Compose 會把單一個 $ 當成變數插值，
+        #    寫 $$ 才會在容器裡變成真正的 $。少了這個，shell 變數全會變空字串。
+        set -o pipefail
+        echo "[backup] started, interval=$${BACKUP_INTERVAL_SECONDS}s, keeping $${BACKUP_KEEP_DAYS} days"
+        while true; do
+          D=$$(date +%F-%H%M)
+          OUT="/backups/fgs-$$D.sql.gz"
+          echo "[backup] $$(date '+%F %T') dumping to $$OUT"
+          if pg_dump -h db -U "$$DB_USER" -d "$$DB_NAME" --no-owner --no-privileges | gzip > "$$OUT"; then
+            echo "[backup] ok ($$(du -h "$$OUT" | cut -f1))"
+          else
+            echo "[backup] FAILED - removing partial file"
+            rm -f "$$OUT"
+          fi
+          find /backups -name 'fgs-*.sql.gz' -mtime +$${BACKUP_KEEP_DAYS} -delete
+          sleep "$${BACKUP_INTERVAL_SECONDS}"
+        done
+    networks: [fgs]
+
 volumes:
   fgs_pgdata:
   fgs_redisdata:

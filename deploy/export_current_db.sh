@@ -97,13 +97,21 @@ else
     pg_dump -U "$DB_USER" -d "$DB_NAME" "${DUMP_OPTS[@]}" > "$OUT"
 fi
 
-chmod 600 "$OUT"
+# ⚠️ 必須是 644，不能是 600。
+#    PostgreSQL 容器以 uid 999 執行，讀不到 600 的檔案，initdb 會直接跳過
+#    這個 .sql。症狀是：服務看起來一切正常，但資料庫是空的（0 筆會員）。
+#    錯誤只會出現在 db 容器的日誌裡，很容易漏掉。
+#    這裡選擇 644 而不是上層目錄設限，因為這是容器能否匯入的必要條件。
+chmod 644 "$OUT"
 echo
 echo "已匯出：$OUT"
 echo "大小：$(du -h "$OUT" | cut -f1)"
+echo "權限：$(stat -c '%a' "$OUT")（必須是 644，否則容器讀不到）"
 echo
 echo "內容摘要："
 grep -c '^COPY ' "$OUT" | sed 's/^/  COPY 區塊 /'
 grep -c '^CREATE TABLE' "$OUT" | sed 's/^/  資料表 /'
+echo
+echo "⚠️ 這個檔案含真實會員個資，已被 .gitignore 排除，請勿提交或外傳。"
 echo
 echo "下一步：bash deploy/make_upload_zip.sh   （把這份 dump 包進上傳用 zip）"

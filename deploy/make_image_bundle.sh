@@ -30,8 +30,13 @@ fi
 rm -f "$DC/.wtest" 2>/dev/null || true
 
 echo "════ 1. 建置映像 ════"
-docker build -f deploy/api.Dockerfile -t fgs-api:latest .
-docker build -f deploy/web.Dockerfile -t fgs-web:latest .
+# 除了 latest 之外，再打一個版本標籤。
+# 用途：更新時可以請 admin 在 Container Station 的 Images 清單確認
+#       「新的版本標籤有出現」，避免匯入沒成功卻以為已經更新。
+VERSION="${FGS_VERSION:-$(date +%Y%m%d)-$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo nogit)}"
+echo "  版本標籤：$VERSION"
+docker build -f deploy/api.Dockerfile -t fgs-api:latest -t "fgs-api:$VERSION" .
+docker build -f deploy/web.Dockerfile -t fgs-web:latest -t "fgs-web:$VERSION" .
 
 echo
 echo "════ 2. 檢查架構 ════"
@@ -49,9 +54,20 @@ echo "     或看 NAS 型號（TS-4xx / TS-6xx / TVS- 多為 x86）。"
 
 echo
 echo "════ 3. 打包 ════"
-docker save fgs-api:latest fgs-web:latest -o "$OUT"
+docker save fgs-api:latest "fgs-api:$VERSION" \
+            fgs-web:latest "fgs-web:$VERSION" -o "$OUT"
 echo "  完成：$OUT"
 echo "  大小：$(du -h "$OUT" | cut -f1)"
+echo "  內含標籤："
+echo "    fgs-api:latest  /  fgs-api:$VERSION"
+echo "    fgs-web:latest  /  fgs-web:$VERSION"
+
+cat > "$(dirname "$OUT")/fgs-images.version.txt" <<EOF
+版本標籤：$VERSION
+產生時間：$(date '+%F %T')
+架構：$ARCH_API / $ARCH_WEB
+sha256：$(sha256sum "$OUT" | cut -d' ' -f1)
+EOF
 
 echo
 echo "════ 4. 校驗碼（上傳後可比對，確認檔案沒壞）════"
@@ -59,6 +75,7 @@ sha256sum "$OUT" | awk '{print "  sha256: "$1}'
 
 echo
 echo "下一步："
-echo "  1. 用 File Station 把 $OUT 上傳到 NAS 的某個共用資料夾"
-echo "  2. Container Station → Images → Import → 選這個 tar"
-echo "  3. 匯入後應該看到 fgs-api:latest 與 fgs-web:latest 兩個映像"
+echo "  1. 用 File Station 把 $OUT 上傳到 /share/Container/fgs-ottawa-vote/"
+echo "  2. Container Station → Images → Import Image → Local QNAP Device → 選這個 tar"
+echo "  3. 匯入後 Images 清單應該同時看到 latest 與 $VERSION 兩種標籤"
+echo "  4. 若是更新既有系統：Applications → fgs → Edit 旁的箭頭 → Recreate Application → Update"

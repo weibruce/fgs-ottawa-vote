@@ -304,6 +304,130 @@ Log in to the admin console at `http://<NAS-IP>:8081` with `admin` /
 
 ---
 
+# PART 3 — UPDATING THE SYSTEM LATER
+
+Sooner or later you will change the code and want the NAS to run the new
+version. This is safe **if** you follow the rule below. It is destructive if
+you don't.
+
+## The one rule that must never be broken
+
+> **After go-live, the NAS database is the only real copy of your member and
+> vote data.**
+>
+> The copy on your development computer is a snapshot taken *before* go-live.
+> The moment anyone votes or you edit a member on the NAS, that copy is stale.
+>
+> Therefore, from go-live onward:
+>
+> - ❌ **Never** re-import the database dump (`01-fgs_vote.sql`)
+> - ❌ **Never** delete the `fgs_pgdata` or `fgs_redisdata` volumes
+> - ❌ **Never** click **Remove** in Container Station — that deletes the
+>   application, and volumes can go with it
+>
+> An update replaces **software only**. The data is not touched.
+
+## What an update changes, and what it doesn't
+
+| | Where it lives | Replaced by an update? |
+|---|---|---|
+| Members, candidates, votes | `fgs_pgdata` volume on the NAS | ❌ **Never touched** |
+| Active voting state | `fgs_redisdata` volume | ❌ **Never touched** |
+| Backend + front-end code | the `fgs-api` / `fgs-web` images | ✅ This is what changes |
+
+## Step 1 — Build the new images (on your development computer)
+
+```bash
+cd /home/bruce/Documents/workspace/fgs-ottawa-vote
+git pull                      # or however you bring in the new code
+bash deploy/make_image_bundle.sh
+```
+
+This produces a new `deploy/fgs-images.tar` and prints:
+
+- a **version tag** (like `20261006-a1b2c3d`) — note it down, you will use it
+  to confirm the update landed
+- a **SHA-256 checksum** of the tar
+
+> ⚠️ **Do not run `export_current_db.sh`** as part of an update. That re-exports
+> your *development* database, which is stale and must never reach the NAS.
+
+## Step 2 — Upload the new image bundle (you)
+
+In File Station, go to `/share/Container/fgs-ottawa-vote/` and upload the new
+`fgs-images.tar`, **overwriting** the existing one.
+
+## Step 3 — Import and recreate (admin)
+
+1. **Container Station** → **Images** → **Import Image** → **Local QNAP
+   Device** → select `/share/Container/fgs-ottawa-vote/fgs-images.tar` →
+   **Apply** → **Next**
+2. Do **not** tick *Import and Create*
+3. Confirm the Images list now shows **both** `latest` **and** the new version
+   tag from Step 1. If the version tag is missing, the import did not take —
+   retry it. **Do not continue until you see it.**
+4. Go to **Applications**, click the application **`fgs`**
+5. Next to the **Edit** button, click the small **arrow** → the menu opens
+6. Choose **Recreate Application** — ⚠️ **not** *Remove*
+7. The *Recreate Application* window opens with the YAML. Leave it as-is and
+   click **Update**
+
+Container Station stops the old containers and starts new ones from the new
+images. The volumes, and therefore all your data, are left alone.
+
+## Step 4 — Verify (you)
+
+1. The voting site and admin console load
+2. `http://<NAS-IP>:8080/api/health` returns `"status":"ok"`
+3. **Open the Members page — the count should be unchanged.** This is the
+   important check. If it dropped to zero, something deleted the volume; stop
+   and restore from a backup (below) before doing anything else.
+4. **Check the vote count is unchanged** on the Tally page
+
+## Automatic backups
+
+The stack includes a `fgs-backup` container that dumps the whole database
+**once a day** into a folder you can reach from File Station:
+
+```
+/share/Container/fgs-ottawa-vote/backups/fgs-YYYY-MM-DD-HHMM.sql.gz
+```
+
+The most recent 30 days are kept; older files are deleted automatically.
+
+**Before any update**, download the newest backup from File Station and keep it
+somewhere safe. That way, even if an update goes badly wrong, you lose minutes
+rather than the election.
+
+To change the frequency or retention, edit these two values in the YAML
+(`Applications` → `fgs` → Edit arrow → Recreate Application):
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `BACKUP_INTERVAL_SECONDS` | `86400` | `3600` = hourly, `86400` = daily |
+| `BACKUP_KEEP_DAYS` | `30` | how many days to keep |
+
+## Restoring from a backup
+
+A disaster recovery step — you should never need it, but know it exists.
+
+1. On your computer, unzip the `.sql.gz` backup so you have a plain `.sql` file
+   (`gunzip fgs-2026-10-06-1035.sql.gz`)
+2. Rename it to `01-fgs_vote.sql`
+3. In File Station, replace
+   `/share/Container/fgs-ottawa-vote/deploy/db/init/01-fgs_vote.sql` with it
+4. Make sure the file is world-readable (Step 3 of Part 2)
+5. Have your admin: **stop** the `fgs` application, delete the volumes
+   `fgs_pgdata` and `fgs_redisdata` (Container Station → Volumes), then
+   **start** the application again
+
+The database is recreated and the backup is imported on first start.
+
+> ⚠️ Steps 4 and 5 wipe the current database before restoring. Only do this
+> when the current data is already lost or wrong.
+
+---
+
 # REFERENCE
 
 ## Why Container Station can't be granted to your account
