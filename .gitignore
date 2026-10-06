@@ -40,3 +40,5 @@ deploy/*.zip
 deploy/*.tar
 backups/
 deploy/fgs-images.version.txt
+deploy/*.tar.gz
+deploy/.image-build/

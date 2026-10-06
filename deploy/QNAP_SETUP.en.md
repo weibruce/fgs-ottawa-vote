@@ -33,7 +33,7 @@ Do these in order. Each row depends on the one above it.
 | # | Step | Who | Where | Time |
 |---|---|---|---|---|
 | 1 | Grant your account read/write on the `Container` shared folder | **admin** | Control Panel | 2 min |
-| 2 | Upload the 2 files and extract the zip | **you** | File Station | 10–20 min (the 142 MB upload is the slow part) |
+| 2 | Upload the 2 files and extract the zip | **you** | File Station | 10–20 min (the 141 MB upload is the slow part) |
 | 3 | ~~Check the SQL file's permissions~~ — **no longer needed** (see PART 2, Step 3) | — | — | 0 |
 | 4 | Import the 2 Docker images | **admin** | Container Station | 3 min |
 | 5 | Create the Application | **admin** | Container Station | 3 min |
@@ -46,7 +46,7 @@ Steps 2, 3, 6 and 7 are yours. They are in Part 2.
 
 > **Practical tip:** do step 1 first, then step 2, then hand Part 1's steps 4
 > and 5 to your admin. If you ask your admin to do everything at the end, they
-> have to wait through your 142 MB upload.
+> have to wait through your 141 MB upload.
 
 ---
 
@@ -106,17 +106,24 @@ steps 2–3). Then continue with Tasks 2 and 3.
 The two images were built in advance. Importing them takes seconds; building
 them on the NAS would take 20–40 minutes.
 
+> **The file must be the `.tar.gz` produced by `make_image_bundle.sh`.**
+> A plain `docker save` tar from a modern Docker will be rejected with
+> *"Invalid File Format — The selected file cannot be imported because the file
+> format is not supported."* Newer Docker versions write an OCI-format archive
+> that Container Station cannot read. `make_image_bundle.sh` converts it to the
+> classic format Container Station expects and packs it as `.tar.gz`.
+
 1. Open **Container Station**
 2. Left menu → **Images**
 3. Click **Import Image** — the *Import Image* window opens
 4. Choose **Local QNAP Device**
    (the file is already on the NAS — do **not** pick *Local Computer*)
 5. Click the browse icon → in the *Select a source image file* window pick
-   `/share/Container/fgs-ottawa-vote/fgs-images.tar` → **Apply**
+   `/share/Container/fgs-ottawa-vote/fgs-images.tar.gz` → **Apply**
 6. Click **Next**
 7. **Do not** tick *Import and Create* — we only want the images; Task 3
    creates the containers
-8. Finish the import and wait — 142 MB takes a few minutes
+8. Finish the import and wait — 141 MB takes a few minutes
 
 When done, the image list must show both:
 
@@ -177,7 +184,7 @@ automatically imports `01-fgs_vote.sql`.
 > | Upload this | Size | Files |
 > |---|---|---|
 > | ✅ `fgs-upload.zip` | 3.3 MB | 264 (packed inside) |
-> | ✅ `fgs-images.tar` | 142 MB | the 2 Docker images |
+> | ✅ `fgs-images.tar.gz` | 141 MB | the 2 Docker images |
 > | ❌ the `fgs-ottawa-vote` folder | 840 MB | 20,293 — **do not** |
 
 ### Where the files are
@@ -188,7 +195,7 @@ on this computer, in the project folder:
 | File | Full path on this computer | Size |
 |---|---|---|
 | Source + database | `/home/bruce/Documents/workspace/fgs-ottawa-vote/deploy/fgs-upload.zip` | 3.3 MB |
-| Docker images | `/home/bruce/Documents/workspace/fgs-ottawa-vote/deploy/fgs-images.tar` | 142 MB |
+| Docker images | `/home/bruce/Documents/workspace/fgs-ottawa-vote/deploy/fgs-images.tar.gz` | 141 MB |
 
 > "This computer" means the machine running this session — the same one whose
 > browser is showing you this at `127.0.0.1:3080`. You do **not** need to open
@@ -207,13 +214,13 @@ on this computer, in the project folder:
    `/home/bruce/Documents/workspace/fgs-ottawa-vote/deploy/` — go **into**
    `deploy`, do not select the folder above it
 7. Select **`fgs-upload.zip`**, then Ctrl+click (Cmd+click on Mac)
-   **`fgs-images.tar`** so both are selected, and confirm the upload.
+   **`fgs-images.tar.gz`** so both are selected, and confirm the upload.
    Start with the zip if your picker only allows one at a time — it is small
    and you can extract it while the big file is still going.
 8. Wait for `fgs-upload.zip` to finish, then **right-click it → Extract** (or
    *Extract to…*) and extract it **into the current folder**.
    This recreates the whole project inside `fgs-ottawa-vote/`.
-9. Leave `fgs-images.tar` alone — it stays as a file for your admin to import
+9. Leave `fgs-images.tar.gz` alone — it stays as a file for your admin to import
    in Part 1, Task 2.
 
 ### Check the resulting layout
@@ -344,7 +351,7 @@ git pull                      # or however you bring in the new code
 bash deploy/make_image_bundle.sh
 ```
 
-This produces a new `deploy/fgs-images.tar` and prints:
+This produces a new `deploy/fgs-images.tar.gz` and prints:
 
 - a **version tag** (like `20261006-a1b2c3d`) — note it down, you will use it
   to confirm the update landed
@@ -356,12 +363,12 @@ This produces a new `deploy/fgs-images.tar` and prints:
 ## Step 2 — Upload the new image bundle (you)
 
 In File Station, go to `/share/Container/fgs-ottawa-vote/` and upload the new
-`fgs-images.tar`, **overwriting** the existing one.
+`fgs-images.tar.gz`, **overwriting** the existing one.
 
 ## Step 3 — Import and recreate (admin)
 
 1. **Container Station** → **Images** → **Import Image** → **Local QNAP
-   Device** → select `/share/Container/fgs-ottawa-vote/fgs-images.tar` →
+   Device** → select `/share/Container/fgs-ottawa-vote/fgs-images.tar.gz` →
    **Apply** → **Next**
 2. Do **not** tick *Import and Create*
 3. Confirm the Images list now shows **both** `latest` **and** the new version
@@ -594,6 +601,6 @@ must match your NAS.
 |---|---|
 | `deploy/qnap-application.yml` | The stack definition pasted into Container Station. Self-contained — every setting is inside it. |
 | `deploy/make_upload_zip.sh` | Builds `deploy/fgs-upload.zip` (source + database dump) |
-| `deploy/make_image_bundle.sh` | Builds `deploy/fgs-images.tar` (the two Docker images) |
+| `deploy/make_image_bundle.sh` | Builds `deploy/fgs-images.tar.gz` (the two Docker images) |
 | `deploy/export_current_db.sh` | Re-exports the live database to `deploy/db/init/01-fgs_vote.sql` |
 | `deploy/README.md` | Full deployment manual, including the HTTPS / remote-voting setup |
