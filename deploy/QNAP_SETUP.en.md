@@ -426,6 +426,65 @@ The database is recreated and the backup is imported on first start.
 > ⚠️ Steps 4 and 5 wipe the current database before restoring. Only do this
 > when the current data is already lost or wrong.
 
+## Replacing the data with your real database
+
+If the system is currently running on test data and you want to switch it to
+your real member list, read this carefully — there is a trap.
+
+### Why you cannot just "drop the file in"
+
+PostgreSQL executes `01-fgs_vote.sql` **only when it creates the data directory
+for the very first time** (i.e. when the volume is empty). Once the database
+exists, replacing the file in `deploy/db/init/` does **nothing at all**. The
+system keeps running the old data and looks perfectly healthy.
+
+So there are exactly two ways.
+
+### Option A — deploy with the real data from the start (RECOMMENDED)
+
+Do this **before** your admin creates the Application in Part 1 Task 3.
+
+1. On your development computer, point the export at the real database. It
+   reads the connection string from `backend/.env`:
+   ```
+   DATABASE_URL=postgresql+psycopg2://user:password@host:port/fgs_vote
+   ```
+2. Run:
+   ```bash
+   bash deploy/export_current_db.sh
+   bash deploy/make_upload_zip.sh
+   ```
+3. Upload the new `fgs-upload.zip` and extract it over the existing folder
+4. Check the SQL file is world-readable (Part 2, Step 3)
+5. Have your admin create the Application
+
+The very first start imports your real data.
+
+### Option B — replace the data on a system that is already running
+
+Use this only if the Application already exists.
+
+1. Update `deploy/db/init/01-fgs_vote.sql` on the NAS with the real dump
+   (export it, upload it, extract, check permissions)
+2. Have your admin:
+   - **stop** the `fgs` application
+   - delete the volumes **`fgs_pgdata`** and **`fgs_redisdata`**
+     (Container Station → Volumes)
+   - **start** the application again
+3. The database is recreated empty and the new file is imported
+
+> ⚠️ **Option B destroys every vote currently in the database.** Only ever do
+> this before voting opens. After voting starts, the data in the volume IS the
+> election result — there is no way to re-import without losing it.
+
+### The general rule, once and for all
+
+| | |
+|---|---|
+| Software (code) | Replace any time — safe, data untouched |
+| Data (`01-fgs_vote.sql`) | Only at first creation, or by wiping volumes |
+| After voting opens | **Never** wipe volumes. Back up instead. |
+
 ---
 
 # REFERENCE
