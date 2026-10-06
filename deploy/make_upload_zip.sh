@@ -19,13 +19,16 @@ trap 'rm -rf "$TMP"' EXIT
 cd "$REPO"
 
 # 1) 版控內的檔案（自動排除 node_modules / .venv / dist / .ui-check 等被忽略的）
-git archive --format=zip --prefix=fgs-ottawa-vote/ -o "$OUT" HEAD
+#    --prefix='' → zip 的根目錄就是專案根目錄，不多一層包裝資料夾。
+#    這樣在 NAS 上「進入 fgs-ottawa-vote/ 再解壓縮」就會得到正確結構，
+#    不會變成 fgs-ottawa-vote/fgs-ottawa-vote/…
+git archive --format=zip --prefix='' -o "$OUT" HEAD
 
 # 2) 補上資料庫 dump（放在正確位置，讓容器第一次啟動就自動匯入）
 if [ -f "$DUMP" ]; then
-  mkdir -p "$TMP/fgs-ottawa-vote/deploy/db/init"
-  cp "$DUMP" "$TMP/fgs-ottawa-vote/deploy/db/init/01-fgs_vote.sql"
-  (cd "$TMP" && zip -q -r "$OUT" fgs-ottawa-vote/deploy/db/init)
+  mkdir -p "$TMP/deploy/db/init"
+  cp "$DUMP" "$TMP/deploy/db/init/01-fgs_vote.sql"
+  (cd "$TMP" && zip -q -r "$OUT" deploy/db/init)
   echo "已加入資料庫 dump（$(du -h "$DUMP" | cut -f1)）"
 else
   echo "⚠️ 找不到 $DUMP"

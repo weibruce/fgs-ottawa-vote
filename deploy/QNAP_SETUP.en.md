@@ -1,474 +1,383 @@
 # Deploying the Voting System on QNAP — English Step-by-Step
 
-This guide deploys the whole system (database + backend + both web front-ends)
-onto a QNAP NAS using **Container Station**, operated from **your own account**
-(not `admin`).
+This deploys the full system (database + backend + both web front-ends) onto
+your QNAP NAS using **Container Station**.
 
-The goal: after the one-time admin setup in Part A, you never need the `admin`
-account again.
+## The one thing that shapes everything else
+
+**Container Station can only be used by the `admin` account on this NAS.** We
+confirmed this: in App Center → Container Station → ⚙ → **Display on**, the
+*Every user's main menu* option is greyed out. That is a QNAP restriction, not
+something we can configure around. (Details in the Reference section at the
+end.)
+
+So the work splits into exactly two jobs:
+
+| | Your **admin** | **You** |
+|---|---|---|
+| Runs Container Station | ✅ | ❌ |
+| Grants folder permissions | ✅ | ❌ |
+| Uploads the project files | ❌ | ✅ (File Station works normally) |
+| Runs the election | ❌ | ✅ (voting system's own admin console) |
+
+**Your admin's entire involvement is 3 tasks, done once, about 10 minutes
+total.** After that you never need them again — the containers restart
+themselves automatically after a reboot or power cut.
 
 ---
 
-## What actually runs
+# WHO DOES WHAT — read this table first
 
-Four containers, wired together on a private Docker network:
+Do these in order. Each row depends on the one above it.
+
+| # | Step | Who | Where | Time |
+|---|---|---|---|---|
+| 1 | Grant your account read/write on the `Container` shared folder | **admin** | Control Panel | 2 min |
+| 2 | Upload the 2 files and extract the zip | **you** | File Station | 10–20 min (the 142 MB upload is the slow part) |
+| 3 | Check the SQL file's permissions | **you** | File Station | 1 min |
+| 4 | Import the 2 Docker images | **admin** | Container Station | 3 min |
+| 5 | Create the Application | **admin** | Container Station | 3 min |
+| 6 | Verify everything works | **you** | Browser | 5 min |
+| 7 | Change the default admin password | **you** | Voting system | 1 min |
+
+**Steps 1, 4 and 5 are the admin's only involvement.** Give them Part 1 below.
+
+Steps 2, 3, 6 and 7 are yours. They are in Part 2.
+
+> **Practical tip:** do step 1 first, then step 2, then hand Part 1's steps 4
+> and 5 to your admin. If you ask your admin to do everything at the end, they
+> have to wait through your 142 MB upload.
+
+---
+
+# What actually runs
+
+Four containers on a private Docker network:
 
 | Container | Image | Purpose |
 |---|---|---|
 | `fgs-db` | `postgres:18-alpine` | The database (members, candidates, votes) |
 | `fgs-redis` | `redis:7-alpine` | Vote de-duplication / hot state |
 | `fgs-api` | `fgs-api:latest` | FastAPI backend |
-| `fgs-web` | `fgs-web:latest` | nginx — serves the voting site (:80) and admin console (:81) |
+| `fgs-web` | `fgs-web:latest` | nginx — voting site (`:80`) and admin console (`:81`) |
 
-Only `fgs-web` is exposed to your network, on ports **8080** (voters) and
-**8081** (admin). The database and Redis are never reachable from outside.
+Only `fgs-web` is exposed, on ports **8080** (voters) and **8081** (admin). The
+database and Redis are never reachable from outside.
 
-## What has already been tested
+## What has been tested
 
-The exact stack definition in Part E was run end-to-end on a development
-machine before writing this guide. Verified: all four containers start **in
-under 7 seconds** with no build step on the NAS, both web front-ends return
-200, `/api/health` reports postgres and redis OK, the member/candidate/vote
-data imports automatically from the SQL dump, the admin login works, and the
-data survives a full restart of the stack.
+The exact stack definition used below was run end-to-end on the development
+machine: all four containers start **in under 7 seconds** with no build step,
+both web front-ends return 200, `/api/health` reports postgres and redis OK,
+the member/candidate/vote data imports automatically from the SQL dump, the
+admin login works, and the data survives a full restart of the stack.
 
-The QNAP-specific parts — the permission dialog labels, the Container Station
-GUI steps, and your NAS architecture — cannot be tested from here. Those are
-the parts to watch, and Part A3, Part D and Part G tell you what to check.
-
-> **Correction (verified against the QTS 5.1 user guide):** app access is
-> granted from **App Center → ⚙ → Display on**, *not* from
-> Control Panel → Privilege → Applications. An earlier version of this guide
-> said otherwise and that was wrong — Container Station does not appear in the
-> Privilege → Applications list at all. Part A2 Grant 1 has been rewritten.
+The QNAP-specific parts — permission dialogs, Container Station menus, your NAS
+architecture — cannot be tested from here. Those are the parts to watch, and
+the checks below tell you what to look for.
 
 ---
 
-# Part A — One-time setup the `admin` must do
+# PART 1 — YOUR ADMIN'S JOB (one-time, ~10 minutes)
 
-Log in as `admin` to do this part. It takes about 5 minutes, once.
+> Hand this whole part to your admin. It has three tasks. **Task 1 must be done
+> first** — the other two happen after the files have been uploaded.
 
-## A1. Apps that must be installed
+## Task 1 — Grant your account read/write on the `Container` shared folder
 
-| App | Status | Why |
-|---|---|---|
-| **Container Station** | ✅ already installed | Runs all four containers |
-| **Text Editor** | optional | Lets you edit `.env` in File Station. You can skip it — the deployment YAML in Part E carries its own settings. |
-
-**That is the complete list.** No other QNAP app is required — no Web Station,
-no Apache/PHP, no MariaDB, no Python/Node add-ons. Everything the system needs
-is inside the two Docker images.
-
-> If Container Station offers to install **Container Station 3** vs an older
-> version, take the newest one.
-
-## A2. Permissions to grant to YOUR account
-
-There are **three** grants. All three are needed.
-
-### Grant 1 — Make Container Station visible to your account
-
-> ⚠️ **This is NOT done in Control Panel → Privilege → Applications.**
-> Container Station never appears in that dialog. That dialog only covers a
-> subset of apps; most apps (including Container Station) are controlled from
-> **App Center** instead.
->
-> This is the step that trips people up. QNAP's own words: *"QTS administrators
-> can grant or deny user access to apps. The main menu of non-administrator
-> users only displays the apps that they have access to."* The action lives in
-> App Center, not in Control Panel.
-
-1. Log in as **`admin`**
-2. Open **App Center**
-3. Find **Container Station** in the list of installed apps
-4. Click the **⚙** (settings) icon on the Container Station tile
-5. Hover over **Display on**
-6. Select **Every user's main menu**
-7. Log out, then log back in **as your own account**
-
-### Grant 2 — Give your account read/write on the `Container` shared folder
-
-Container Station stores applications under the `Container` shared folder, so
-your account must be able to write there.
+Container Station stores applications under the `Container` shared folder, and
+you need to upload the project there.
 
 1. **Control Panel** → **Privilege** → **Shared Folders**
-2. Select the **Container** shared folder
+2. Select the **`Container`** shared folder
 3. Click **Edit** (may be labelled *Edit Shared Folder Permissions* or
    *Access Permissions*)
-4. Find **your account** in the list and set it to **Read/Write**
-5. Click **Apply** / **OK**
+4. Find the user's account and set it to **Read/Write**
+5. **Apply**
 
-> If you cannot see a `Container` shared folder at all, Container Station may
-> still be finishing its first-time setup. Reopen Container Station, then
-> reopen this dialog.
+> If there is no `Container` shared folder yet, open Container Station once —
+> it creates the folder on first run.
 
-### Grant 3 — Read/write on the shared folder that will hold the project
+**Done with Task 1?** Tell the user, so they can upload the files (Part 2,
+steps 2–3). Then continue with Tasks 2 and 3.
 
-You will upload the project files to a shared folder of your choice
-(this guide uses the `Container` folder, so if you follow it exactly, Grant 2
-already covers this).
+## Task 2 — Import the two Docker images
 
-If you prefer a different shared folder (e.g. `Public` or a new `fgs` share),
-grant your account **Read/Write** on that one the same way as Grant 2.
+The two images were built in advance. Importing them takes seconds; building
+them on the NAS would take 20–40 minutes.
 
-### Optional Grant — SSH access
-
-Skip this unless you want to use the command line.
-
-QNAP restricts SSH to administrator accounts. If you want SSH, `admin` must:
-
-1. **Control Panel** → **Network & File Services** → **Telnet / SSH**
-2. Tick **Enable SSH**
-3. **Apply**
-
-⚠️ Even with SSH enabled, QNAP generally only accepts SSH logins for accounts
-in the `administrators` group. This guide deliberately does **not** require SSH
-— everything below is done through the GUI.
-
-## A3. Confirm it worked
-
-1. Log out of the NAS
-2. Log back in **as your own account**
-3. **Container Station** should now appear on the desktop / main menu
-
-## A4. Container Station is admin-only — CONFIRMED on this NAS
-
-**Status: confirmed.** On this NAS, **Display on** offers only
-*Administrator's main menu*; the *Every user's main menu* option is greyed out
-and cannot be selected. QNAP has therefore classified Container Station as an
-admin-only app on this firmware, and **no permission setting anywhere will
-change that.** The QTS manual says of such apps: *"non-administrators cannot be
-granted access to"* them.
-
-**This is a QNAP limitation, not a problem with your setup.** Proceed with
-option A4a below.
-
-### A4a — `admin` performs the one-time container setup (RECOMMENDED)
-
-This is the path this guide now assumes.
-
-| Phase | Who does it | How often |
-|---|---|---|
-| Upload the project files (Part C) | **your account** — File Station works fine | once |
-| Import images + create the Application (Parts D and E) | **`admin`** | **once, ~5 minutes** |
-| Day-to-day: run the election, tally, export | **your account** — the voting system's own admin console on port 8081 | always |
-
-**After the one-time setup you never need `admin` again for the NAS.** The
-containers are configured with `restart: unless-stopped`, which means they start
-automatically whenever the NAS boots — including after a power failure. Nobody
-has to log in to Container Station to bring the system back up.
-
-The only things that would need `admin` again are: changing ports or passwords,
-or upgrading to a new version of the software. Both are rare and neither is
-time-critical.
-
-**What `admin` needs from you** (see Part B and Part C):
-
-1. `deploy/fgs-images.tar` — already uploaded to the NAS
-2. `deploy/qnap-application.yml` — with the three `CHANGE_ME` passwords already
-   replaced by you
-
-Then give `admin` Parts D and E of this guide.
-
-⚠️ The filled-in YAML contains your database and Redis passwords. Hand it over
-in person or via a private channel, and change those passwords after the
-election. Do not paste it into email or chat.
-
-### A4b — Add your account to the `administrators` group (NOT recommended)
-
-`admin` can do this at **Control Panel → Privilege → User Groups →
-`administrators` → Edit members → add your account**. It would let you use
-Container Station directly.
-
-**But it grants your account full administrator rights over the entire NAS** —
-every setting, every shared folder, every other user's data, SSH access, and the
-ability to delete or factory-reset the device. For a one-time 5-minute task,
-that is a bad trade. Only choose this if you genuinely want that account to be a
-NAS administrator for other reasons.
-
-If you do need a container-managing account long-term, create a **dedicated
-named admin account** used only for that purpose, rather than promoting your
-everyday account. That is also what QNAP's own hardening guidance recommends.
-
-### A4c — Run Portainer for delegated management (UNOFFICIAL)
-
-If you really want your own account to manage the containers day-to-day, the
-QNAP community's usual workaround is to run **Portainer** as one more container
-and create a Portainer account for yourself. You would then manage the stack
-through Portainer's web UI instead of Container Station.
-
-⚠️ Understand the risk before choosing this: Portainer must mount the Docker
-socket, which is **equivalent to root on the NAS**. Anyone with a Portainer
-account can effectively control the whole device. It is not a QNAP-supported
-delegation mechanism.
-
-For an election system that runs unattended once deployed, A4a is simpler and
-safer. I would not choose A4c here.
-
-### Two things that do NOT work — don't spend time on them
-
-- **Control Panel → Privilege → Users → (your account) → Edit Application
-  Privileges.** This is the per-user *grant* dialog, and it is the right place
-  conceptually — but Container Station will never be listed in it, because the
-  App Center master switch (Grant 1) forbids it. This dialog can only grant apps
-  that already offer *Every user's main menu*.
-- **Control Panel → Privilege → Delegated Administration.** None of the
-  delegated roles grant Container Station. The *System Management* role's app
-  list excludes it, and the *Application Management* role is explicitly
-  documented as being *"unable to open apps that are only accessible to
-  administrators"*.
-
----
-
-# Part B — Prepare two files on your development machine
-
-You are uploading **two** things. Keep both small — never upload
-`node_modules` or `.venv`.
-
-## B1. The source bundle (about 3 MB)
-
-Open a terminal on the development machine where this project lives:
-
-```bash
-cd /path/to/fgs-ottawa-vote
-
-# 1. Refresh the database export — the existing dump is out of date
-bash deploy/export_current_db.sh
-
-# 2. Package the source + the fresh dump
-bash deploy/make_upload_zip.sh
-```
-
-Result: **`deploy/fgs-upload.zip`** (~3 MB). It contains the project source,
-the candidate photos, and `deploy/db/init/01-fgs_vote.sql`.
-
-> ⚠️ Never commit or email this zip — the SQL dump contains real member names,
-> card numbers, and votes.
-
-## B2. The Docker image bundle (about 142 MB)
-
-We build the images here, on the development machine, instead of on the NAS.
-A NAS CPU is slow; building on it takes 20–40 minutes and can fail on missing
-tooling. Building here takes a few minutes and the NAS starts in seconds.
-
-```bash
-bash deploy/make_image_bundle.sh
-```
-
-Result: **`deploy/fgs-images.tar`** (~142 MB) containing `fgs-api:latest` and
-`fgs-web:latest`. The script also prints a SHA-256 checksum so you can confirm
-the file survived the upload.
-
-> ⚠️ **Architecture must match.** The script prints `amd64` or `arm64`.
-> Most QNAP x86 models (TS-4xx, TS-6xx, TVS-…) are `amd64`.
-> ARM models (TS-133, TS-233, …) are `arm64`.
-> If they differ, do not use this tar — tell me and I will give you the
-> build-on-NAS route instead.
-
----
-
-# Part C — Upload both files
-
-Using **File Station** (this works from any account with write access).
-
-1. In the left panel, click the **Container** shared folder
-2. Create a folder named **`fgs-ottawa-vote`**
-   (use the **+** / *Create folder* button in the toolbar)
-3. Open that folder
-4. Click **Upload** → **Upload – File**, and select **both**
-   `fgs-upload.zip` and `fgs-images.tar`
-   (upload the image tar first if you must do them one at a time — it is the
-   big one, and you can carry on with Part D while you wait)
-5. When `fgs-upload.zip` has finished, right-click it → **Extract** /
-   **Extract to…** and extract it **into the current folder**
-
-After extracting, verify the layout is exactly this — one level, no nesting:
-
-```
-/share/Container/fgs-ottawa-vote/docker-compose.yml
-/share/Container/fgs-ottawa-vote/deploy/
-/share/Container/fgs-ottawa-vote/backend/
-/share/Container/fgs-ottawa-vote/frontend/
-```
-
-If you instead end up with
-`/share/Container/fgs-ottawa-vote/fgs-ottawa-vote/...`, move the inner folder's
-contents up one level — the application YAML in Part E expects the exact path
-`/share/Container/fgs-ottawa-vote/deploy/db/init`.
-
----
-
-# Part D — Import the two Docker images
-
-> ⚠️ **This part must be done by `admin`.** Container Station is an admin-only
-> app on this NAS (see Part A4). Your own account can do everything in Part C
-> and Part F, but not this.
-
-In **Container Station**:
-
-1. Left menu → **Images**
-2. Click **Import Image** — the *Import Image* window opens
-3. Choose **Local QNAP Device** (the tar is already on the NAS; do **not**
-   pick *Local Computer*)
-4. Click the browse icon → in the *Select a source image file* window, pick
+1. Open **Container Station**
+2. Left menu → **Images**
+3. Click **Import Image** — the *Import Image* window opens
+4. Choose **Local QNAP Device**
+   (the file is already on the NAS — do **not** pick *Local Computer*)
+5. Click the browse icon → in the *Select a source image file* window pick
    `/share/Container/fgs-ottawa-vote/fgs-images.tar` → **Apply**
-5. Click **Next**
-6. **Do not** tick *Import and Create* — we want the images only; the
-   Application in Part E creates the containers
-7. Finish the import and wait — 142 MB takes a few minutes
+6. Click **Next**
+7. **Do not** tick *Import and Create* — we only want the images; Task 3
+   creates the containers
+8. Finish the import and wait — 142 MB takes a few minutes
 
 When done, the image list must show both:
 
 - **`fgs-api:latest`**
 - **`fgs-web:latest`**
 
-If only one appears, or a tag looks like `<none>`, the tar was truncated —
-re-upload it and compare the SHA-256 checksum printed by
-`make_image_bundle.sh`.
+## Task 3 — Create the Application
 
-> ⚠️ The image architecture must match the NAS. Docker cannot run an `amd64`
-> image on an `arm64` NAS or vice versa. If the import succeeds but containers
-> fail to start with an *exec format error*, this is the cause — come back to me.
-
----
-
-# Part E — Create the Application
-
-> ⚠️ **This part must be done by `admin`** — same reason as Part D.
-
-1. In **Container Station**, left menu → **Applications**
+1. Left menu → **Applications**
 2. Click **Create** — the *Create Application* window opens
-3. **Application name**: enter `fgs`
-   (valid characters are `a–z`, `0–9`, hyphen, underscore — `fgs` is fine)
-4. Find the **Enter the Docker Compose YAML** field and delete any placeholder
-   text in it
-5. Open `deploy/qnap-application.yml` from the project (in File Station you can
-   open it with **Text Editor** if you installed it) and **copy the entire
-   contents** into that field
-6. **Before continuing**, replace the three placeholders in the pasted YAML:
+3. **Application name**: `fgs`
+4. Find the **Enter the Docker Compose YAML** field and clear any placeholder
+   text
+5. Open `/share/Container/fgs-ottawa-vote/deploy/qnap-application.yml`
+   (File Station → right-click → **Text Editor**, or any text editor) and copy
+   its **entire contents** into that field
+6. Replace the three placeholders with strong passwords of your own choosing:
 
-   | Placeholder | Replace with |
-   |---|---|
-   | `CHANGE_ME_POSTGRES_PASSWORD` | a strong password you choose (**appears 2 times — must be the same value in both places**) |
-   | `CHANGE_ME_REDIS_PASSWORD` | a strong password you choose (**appears 3 times — must be the same value in all three**) |
-   | `CHANGE_ME_JWT_SECRET` | a long random string, at least 32 characters (appears once) |
+   | Placeholder | Appears | Note |
+   |---|---|---|
+   | `CHANGE_ME_POSTGRES_PASSWORD` | 2 times | must be the **same value** in both places |
+   | `CHANGE_ME_REDIS_PASSWORD` | 3 times | must be the **same value** in all three |
+   | `CHANGE_ME_JWT_SECRET` | 1 time | any random string, **at least 32 characters** |
 
-   To generate the JWT secret on your development machine:
-   ```bash
-   openssl rand -hex 32
-   ```
+   Use only letters, digits, `-` and `_`. Avoid `$`, backticks and quotes —
+   YAML would need escaping and it is easy to get wrong.
 
-   Use letters, digits, hyphen and underscore only. Avoid `$`, backticks, and
-   quotes — YAML would need escaping and it is easy to get wrong.
+   Keep these passwords somewhere safe (a password manager). **The user does
+   not need them** — they only need the voting system's own login.
 
-7. Click **Validate**. Wait for it to confirm the YAML is correct. If it
-   highlights an error, the usual cause is a password containing a character
-   that needs quoting — change the password rather than trying to escape it.
-8. Optional — click **Advanced Settings** → **Default Web URL Port**, set the
-   service to `web` and the port to `80`. Container Station will then add a
-   clickable shortcut for the voting site.
+7. Click **Validate**. Wait for it to confirm the YAML is correct. If it flags
+   an error, the usual cause is a password containing a character that needs
+   quoting — change the password rather than trying to escape it.
+8. Optional — **Advanced Settings** → **Default Web URL Port** → service `web`,
+   port `80`. This adds a clickable shortcut to the voting site.
 9. Click **Create**
 
-Container Station will pull `postgres:18-alpine` and `redis:7-alpine` from the
-internet (a few minutes), then start everything. On first start the database
+Container Station pulls `postgres:18-alpine` and `redis:7-alpine` from the
+internet (a few minutes), then starts everything. On first start the database
 automatically imports `01-fgs_vote.sql`.
 
 ---
 
-# Part F — Verify
+# PART 2 — YOUR JOB
 
-First find the NAS IP address: **Control Panel → System → System Status**, or
-look in your router's client list. It looks like `192.168.x.x`.
+## Step 2 — Upload the two files
+
+### Where the files are
+
+Both files **already exist** — nobody has to run any commands. They were built
+on this computer, in the project folder:
+
+| File | Full path on this computer | Size |
+|---|---|---|
+| Source + database | `/home/bruce/Documents/workspace/fgs-ottawa-vote/deploy/fgs-upload.zip` | 3.3 MB |
+| Docker images | `/home/bruce/Documents/workspace/fgs-ottawa-vote/deploy/fgs-images.tar` | 142 MB |
+
+> "This computer" means the machine running this session — the same one whose
+> browser is showing you this at `127.0.0.1:3080`. You do **not** need to open
+> a terminal. Those commands existed only to create the two files, and that is
+> already done.
+
+### Uploading, click by click
+
+1. Log in to the QNAP web interface and open **File Station**
+2. In the left panel click the **`Container`** shared folder
+3. Click **+** / *Create folder* in the toolbar, name it **`fgs-ottawa-vote`**,
+   and confirm
+4. Open the new `fgs-ottawa-vote` folder
+5. Click **Upload** → **Upload – File**
+6. A file-picker window opens. Navigate to the folder
+   `/home/bruce/Documents/workspace/fgs-ottawa-vote/deploy/` and select
+   **`fgs-upload.zip`**. Confirm the upload and wait for it to finish.
+7. Repeat **Upload** → **Upload – File** for **`fgs-images.tar`**.
+   This one is 142 MB — expect several minutes. You can leave it running.
+8. When `fgs-upload.zip` has finished, **right-click it → Extract** (or
+   *Extract to…*) and extract it **into the current folder**
+
+### Check the resulting layout
+
+The zip has **no wrapper folder**, so extracting it *inside*
+`fgs-ottawa-vote/` gives exactly the right structure:
+
+```
+/share/Container/fgs-ottawa-vote/docker-compose.yml
+/share/Container/fgs-ottawa-vote/deploy/qnap-application.yml
+/share/Container/fgs-ottawa-vote/deploy/db/init/01-fgs_vote.sql
+/share/Container/fgs-ottawa-vote/deploy/
+/share/Container/fgs-ottawa-vote/backend/
+/share/Container/fgs-ottawa-vote/frontend/
+```
+
+Open `fgs-ottawa-vote/` and confirm you can see `docker-compose.yml` and a
+`deploy` folder directly inside it.
+
+- If you instead see a single folder named `fgs-ottawa-vote` inside, you
+  extracted one level too high — move the inner folder's contents up one level,
+  or just move the inner folder to `/share/Container/` and rename it.
+- If File Station offered to extract into a folder named after the zip
+  (`fgs-upload/`), move that folder's contents into `fgs-ottawa-vote/`.
+
+Either way, the target is: `deploy/qnap-application.yml` must exist at exactly
+`/share/Container/fgs-ottawa-vote/deploy/qnap-application.yml`.
+
+## Step 3 — Check the SQL file's permissions
+
+The database container runs as a different user (`uid 999`) than your own
+account, so it must be able to **read** the dump. If it cannot, the database
+starts up empty and you get a working but blank system.
+
+In File Station:
+
+1. Navigate to `/share/Container/fgs-ottawa-vote/deploy/db/init/`
+2. Right-click **`01-fgs_vote.sql`** → **Properties**
+3. Go to the **Permissions** tab
+4. Make sure **Read** is granted for **everyone** (the equivalent of `644`)
+5. Apply
+
+> If you can't find a Permissions tab, you can skip this check — extracting a
+> zip usually leaves files world-readable. Just watch for the symptom in
+> Step 6: if the Members page is empty, come back here.
+
+**Now tell your admin that steps 2 and 3 are done**, so they can do Part 1's
+Tasks 2 and 3.
+
+## Steps 4 and 5 — your admin does these
+
+These are **Part 1, Tasks 2 and 3** (import the images, create the
+Application). Wait until your admin confirms the application is running, then
+continue with step 6 below.
+
+## Step 6 — Verify
+
+Find the NAS IP address: **Control Panel → System → System Status**, or your
+router's client list. It looks like `192.168.x.x`.
 
 From a computer on the same Wi-Fi:
 
 | What | URL |
 |---|---|
 | Voting site | `http://<NAS-IP>:8080` |
-| Admin console | `http://<NAS-IP>:8081` — user `admin`, password `admin123` (change it on first login) |
+| Admin console | `http://<NAS-IP>:8081` — user `admin`, password `admin123` |
 
-Then check each of these:
+Check each of these:
 
 1. Both pages load
 2. `http://<NAS-IP>:8080/api/health` returns
    `{"status":"ok","checks":{"api":"ok","postgres":"ok","redis":"ok"}}`
 3. In the admin console, open **Members** — you should see your real members
-   (around 300). If the list is empty, the dump did not import (see below).
-4. Log in to the admin console and **change the default password**
-5. In Container Station, all four containers show as running
+   (around 300). **If the list is empty, the dump did not import** — see
+   Troubleshooting.
+4. In Container Station, all four containers show as running
+   (ask your admin to confirm, or just rely on the URL working)
 
-> ⚠️ **If you need members to vote from outside this Wi-Fi**, do not stop here.
-> Plain `http://` would send names, card numbers and votes across the internet
-> unencrypted. Tell me and we will set up HTTPS.
+## Step 7 — Change the default admin password
+
+Log in to the admin console at `http://<NAS-IP>:8081` with `admin` /
+`admin123`, then change the password immediately.
+
+> ⚠️ **If members will vote from outside this Wi-Fi**, do not stop here. Plain
+> `http://` would send names, card numbers and votes across the internet
+> unencrypted. See `deploy/README.md` section 五 for the HTTPS setup — your
+> admin can do that in the same sitting, so you only need them once.
 
 ---
 
-# Part G — Troubleshooting
+# REFERENCE
 
-### The database container keeps restarting
+## Why Container Station can't be granted to your account
 
-The most common cause is a wrong volume path. The YAML in Part E already uses
-the correct PostgreSQL 18 path (`/var/lib/postgresql`). If you edited it, make
-sure you did not change it back to `/var/lib/postgresql/data` — on
-PostgreSQL 18 that path makes the container refuse to start with a message
-about an *unused mount/volume*.
+We confirmed on this NAS that App Center → Container Station → ⚙ → **Display
+on** offers only *Administrator's main menu*; *Every user's main menu* is greyed
+out. QNAP's QTS 5.x manual says of such apps:
+
+> *"This is the only available option for many built-in system utilities, which
+> non-administrators cannot be granted access to."*
+
+Two related things that **do not work** — don't spend time on them:
+
+- **Control Panel → Privilege → Users → (your account) → Edit Application
+  Privileges.** This is the right per-user dialog, but it can only grant apps
+  that already allow *Every user's main menu*. Container Station will never
+  appear in it.
+- **Control Panel → Privilege → Delegated Administration.** No delegated role
+  covers Container Station. The *System Management* role's app list excludes
+  it, and the *Application Management* role is documented as being *"unable to
+  open apps that are only accessible to administrators"*.
+
+**Do not add your personal account to the `administrators` group.** It would
+work, but it grants full control of the entire NAS — every setting, every
+shared folder, every user's data, SSH, and factory reset — to solve a 10-minute
+one-time task. If you ever need a permanent container-managing account, create
+a *dedicated* one for that purpose.
+
+## Troubleshooting
 
 ### The Members page is empty
 
-The dump is only imported the **first** time the database volume is created.
-If the database started before `01-fgs_vote.sql` was in place, the import was
-skipped. To fix:
+The dump is imported only the **first** time the database volume is created. If
+the database started before `01-fgs_vote.sql` was in place, the import was
+skipped.
 
 1. In Container Station, stop the `fgs` application
 2. Delete the volumes `fgs_pgdata` and `fgs_redisdata`
    (Container Station → Volumes → select → Delete)
-3. Confirm the file exists on the NAS at
+3. Confirm the file exists at
    `/share/Container/fgs-ottawa-vote/deploy/db/init/01-fgs_vote.sql`
+   **and is readable by everyone** (Step 3)
 4. Start the application again
 
-### The file permission is wrong
+### The database container keeps restarting
 
-The file must be readable by the database container, which runs as uid 999.
-In File Station: right-click the `.sql` file → **Properties** → **Permissions**
-→ make sure **Read** is granted for everyone (`644`). If you have SSH, the
-command is `chmod 644`.
+The most common cause is a wrong volume path. The YAML already uses the correct
+PostgreSQL 18 path (`/var/lib/postgresql`). If it was edited, make sure it was
+not changed back to `/var/lib/postgresql/data` — on PostgreSQL 18 that path
+makes the container refuse to start with a message about an *unused
+mount/volume*.
 
 ### `fgs-api` / `fgs-web` cannot be found when the application starts
 
 The images were not imported under the exact tags `fgs-api:latest` and
-`fgs-web:latest`. Go back to Part D and confirm both tags appear in the
-**Images** list.
+`fgs-web:latest`. Re-check Task 2.
 
 ### Port 8080 or 8081 is already in use
 
-Another QNAP service is on that port. Change the two numbers in the `web`
-service of the YAML (`"8080:80"` / `"8081:81"`) to free ports, e.g.
-`"9080:80"` and `"9081:81"`, then redeploy.
+Another QNAP service is on that port. Change the two numbers under the `web`
+service in the YAML (`"8080:80"` / `"8081:81"`) to free ports — e.g.
+`"9080:80"` and `"9081:81"` — then redeploy.
 
-### Container Station says access denied, or the icon is missing
+### An image imports but containers fail with "exec format error"
 
-Grant 1 in Part A was not applied, or you did not log out and back in
-afterwards. Two things to check:
+The image architecture does not match the NAS. Docker cannot run an `amd64`
+image on an `arm64` NAS or vice versa.
 
-- Make sure you did it in **App Center → ⚙ → Display on → Every user's main
-  menu**. Doing it in Control Panel → Privilege → Applications will **not**
-  work — Container Station is not listed in that dialog.
-- If App Center does not offer *Every user's main menu* for Container Station,
-  see **Part A4** — QNAP has made it admin-only on your firmware.
+### A page is blank
 
-### Everything looks fine but a page is blank
+Hard refresh with `Ctrl`+`Shift`+`R`. If it persists, ask your admin to check
+the `fgs-web` container log in Container Station.
 
-Reload with a hard refresh (`Ctrl`+`Shift`+`R`). If it persists, check the
-`fgs-web` container log in Container Station.
+## Rebuilding the two files (only needed if the data changed)
 
----
+If members have been added or edited since the files were built, regenerate
+them. On the computer where the project lives:
 
-# Reference: the files used in this guide
+```bash
+cd /home/bruce/Documents/workspace/fgs-ottawa-vote
+
+bash deploy/export_current_db.sh    # re-export the live database
+bash deploy/make_upload_zip.sh      # rebuild deploy/fgs-upload.zip
+```
+
+`deploy/make_image_bundle.sh` rebuilds the image tar — only needed if the
+**software** changed, not the data. It prints the image architecture, which
+must match your NAS.
+
+## Files used in this guide
 
 | File | Role |
 |---|---|
-| `deploy/qnap-application.yml` | The stack definition you paste into Container Station. Self-contained — all settings are inside it. |
+| `deploy/qnap-application.yml` | The stack definition pasted into Container Station. Self-contained — every setting is inside it. |
 | `deploy/make_upload_zip.sh` | Builds `deploy/fgs-upload.zip` (source + database dump) |
 | `deploy/make_image_bundle.sh` | Builds `deploy/fgs-images.tar` (the two Docker images) |
 | `deploy/export_current_db.sh` | Re-exports the live database to `deploy/db/init/01-fgs_vote.sql` |
-| `deploy/README.md` | The full deployment manual, including the HTTPS / remote-voting setup |
+| `deploy/README.md` | Full deployment manual, including the HTTPS / remote-voting setup |
