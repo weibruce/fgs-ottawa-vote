@@ -107,11 +107,30 @@ The two images were built in advance. Importing them takes seconds; building
 them on the NAS would take 20–40 minutes.
 
 > **The file must be the `.tar.gz` produced by `make_image_bundle.sh`.**
+>
 > A plain `docker save` tar from a modern Docker will be rejected with
 > *"Invalid File Format — The selected file cannot be imported because the file
-> format is not supported."* Newer Docker versions write an OCI-format archive
-> that Container Station cannot read. `make_image_bundle.sh` converts it to the
-> classic format Container Station expects and packs it as `.tar.gz`.
+> format is not supported."*
+>
+> The reason is precise. Docker 25 and later write an **OCI-format** archive:
+> the tar contains `blobs/`, `index.json` and `oci-layout`. Container Station
+> only understands the **classic `docker save` format**:
+>
+> ```
+> manifest.json
+> repositories
+> <config-sha>.json
+> <layer-sha>/layer.tar      ← layers as directories, not flat <sha>.tar
+> ```
+>
+> `make_image_bundle.sh` builds the images, then pipes them through an older
+> Docker (24) that still writes the classic format, verifies the result
+> contains zero OCI artifacts, gzips it, and finally loads it back as a
+> self-check.
+>
+> **Also make sure you are in the Images section, not Containers.** Container
+> Station has import buttons in both places, and the Containers one rejects
+> image archives with this same message.
 
 1. Open **Container Station**
 2. Left menu → **Images**
@@ -557,6 +576,29 @@ PostgreSQL 18 path (`/var/lib/postgresql`). If it was edited, make sure it was
 not changed back to `/var/lib/postgresql/data` — on PostgreSQL 18 that path
 makes the container refuse to start with a message about an *unused
 mount/volume*.
+
+### "Invalid File Format" when importing the images
+
+Three causes, in order of likelihood:
+
+1. **The file is a plain `docker save` output.** Modern Docker writes OCI
+   format, which Container Station rejects. Use the `.tar.gz` from
+   `make_image_bundle.sh` — it is converted to the classic format.
+2. **You are in the wrong section.** Container Station has an import button
+   under **Containers** and another under **Images**. Only the **Images** one
+   accepts an image archive. Yours must be: left menu → **Images** →
+   **Import Image**.
+3. **The upload was incomplete.** Compare the file size on the NAS against the
+   original (141 MB) and the SHA-256 checksum printed by the build script.
+
+To confirm which format a file is, look inside it:
+
+```bash
+tar -tf fgs-images.tar.gz | grep -E 'index.json|layer.tar' | head -3
+```
+
+`index.json` or `blobs/` present → OCI format → will be rejected.
+`<sha>/layer.tar` present → classic format → correct.
 
 ### `fgs-api` / `fgs-web` cannot be found when the application starts
 
