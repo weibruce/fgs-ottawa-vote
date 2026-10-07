@@ -348,16 +348,56 @@ From a computer on the same Wi-Fi:
 | Voting site | `http://<NAS-IP>:8080` |
 | Admin console | `http://<NAS-IP>:8081` — user `admin`, password `admin123` |
 
-Check each of these:
+Check each of these, in order. Each one proves something different.
 
-1. Both pages load
-2. `http://<NAS-IP>:8080/api/health` returns
-   `{"status":"ok","checks":{"api":"ok","postgres":"ok","redis":"ok"}}`
-3. In the admin console, open **Members** — you should see your real members
-   (around 300). **If the list is empty, the dump did not import** — see
-   Troubleshooting.
-4. In Container Station, all four containers show as running
-   (ask your admin to confirm, or just rely on the URL working)
+**1. The service is up**
+
+| What | URL | Expected |
+|---|---|---|
+| Health check | `http://<NAS-IP>:8080/api/health` | `{"status":"ok","checks":{"api":"ok","postgres":"ok","redis":"ok"}}` |
+| Voting site | `http://<NAS-IP>:8080` | the voting entry page |
+| Admin console | `http://<NAS-IP>:8081` | a login page (`admin` / `admin123`) |
+
+Start with the health check — it is the fastest way to tell whether the backend,
+the database and Redis are all talking to each other.
+
+**2. The data arrived**
+
+In the admin console:
+
+- **Members** — the count should match your real list (the bundled dump has
+  300). **Empty means the dump did not import** — see Troubleshooting.
+- **Divisions** — five divisions
+- **Candidates** — the full candidate list
+
+**3. The actual voting flow works**
+
+This is the one that matters — loading pages does not prove it.
+
+1. Open the voting site on a **phone** connected to the same Wi-Fi
+2. Enter a **test member's** name and card number
+3. Pick candidates and submit
+4. Confirm the result page appears
+5. Try the same member again — the second attempt must be **refused**
+
+Then clear the test vote: admin console → **Rounds** → **Reset round**, which
+returns the round to draft and removes the test votes. Do this before the real
+election opens.
+
+**4. The containers are healthy**
+
+In Container Station all five should be **Running**: `fgs-api`, `fgs-web`,
+`fgs-db`, `fgs-redis`, `fgs-backup`.
+
+**5. Backups are running**
+
+Check that this folder exists and contains a recent `.sql.gz`:
+
+```
+/share/Container/fgs-ottawa-vote/backups/
+```
+
+If it is empty after an hour, the backup container is not working — tell me.
 
 ## Step 7 — Change the default admin password
 
