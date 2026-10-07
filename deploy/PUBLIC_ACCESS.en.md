@@ -53,7 +53,112 @@ That is why the recommended route below avoids routers entirely.
 
 ---
 
-## RECOMMENDED: Cloudflare Tunnel (no port forwarding)
+## Which route? (cost vs. effort)
+
+| Route | Cost | HTTPS | Router access needed | Reliability |
+|---|---|---|---|---|
+| **A. Tailscale Funnel** | **$0** | ✅ free, valid cert | ❌ none | ⚠️ beta; Container Station support for `cap_add`/`devices` unverified |
+| **B. Cloudflare Tunnel** | domain ~US$10/yr | ✅ free, valid cert | ❌ none | ✅ mature, well-trodden |
+| C. Cloudflare Quick Tunnel | $0 | ✅ | ❌ none | ❌ URL changes on every restart — unusable for an election |
+| D. Fix port forwarding + Let's Encrypt | $0 | ✅ | ✅ **two routers, on site** | ⚠️ currently broken; needs a trip to the temple |
+
+**QNAP's own myQNAPcloud SSL is a paid add-on** (~US$10–15/yr), so it is not a
+free option — that is why it shows as *Inactive* and cannot simply be switched on.
+
+**Recommendation:** try **A** first since it costs nothing. If the container
+refuses to start (see the warning below), fall back to **B** — a domain at
+~US$10/year is the reliable path and is a one-off cost for a professional URL.
+
+---
+
+## ROUTE A — Tailscale Funnel (free, no domain, no router)
+
+Tailscale Funnel gives the NAS a public URL:
+
+```
+https://fgs-vote.<your-tailnet>.ts.net
+```
+
+with a **valid certificate issued automatically**, and relay servers that
+**cannot decrypt** your traffic. It is available on **all plans including
+free**, and needs no port forwarding — the NAS connects outward.
+
+### Step A1 — Enable Funnel for your tailnet
+
+Tailscale admin console → **Access Controls** → add:
+
+```json
+"nodeAttrs": [
+  { "target": ["*"], "attr": ["funnel"] }
+]
+```
+
+Save. (Funnel is refused without this attribute.)
+
+### Step A2 — Create an auth key
+
+Admin console → **Settings → Keys → Generate auth key** → copy it.
+Reusable + pre-approved is fine for this.
+
+### Step A3 — Prepare the serve config
+
+`deploy/tailscale-serve.json` already exists in the project and proxies `/` to
+`http://web:80`, with `AllowFunnel: true`. Upload it to the NAS at:
+
+```
+/share/Container/fgs-ottawa-vote/deploy/tailscale-serve.json
+```
+
+(It is inside `fgs-upload.zip`, so extracting the zip puts it there.)
+
+### Step A4 — Use the Funnel compose file
+
+Use **`deploy/qnap-application-tailscale.yml`** instead of
+`qnap-application.yml`. The extra service is:
+
+```yaml
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: fgs-tailscale
+    hostname: fgs-vote
+    restart: unless-stopped
+    environment:
+      TS_AUTHKEY: PASTE_YOUR_TAILSCALE_AUTH_KEY
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_USERSPACE: "false"
+      TS_AUTH_ONCE: "true"
+    volumes:
+      - fgs_tsstate:/var/lib/tailscale
+      - /share/Container/fgs-ottawa-vote/deploy/tailscale-serve.json:/config/serve.json:ro
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+    depends_on: [web]
+    networks: [fgs]
+```
+
+Replace `PASTE_YOUR_TAILSCALE_AUTH_KEY` **inside Container Station's editor**,
+not in the project file.
+
+### Step A5 — Deploy and find your URL
+
+Applications → `fgs` → **Edit arrow → Recreate Application** → paste → **Update**.
+
+Then look at the tailnet's machine list: the device `fgs-vote` will show its
+Funnel URL. Check the `fgs-tailscale` container log for errors.
+
+### ⚠️ Known risk with Route A
+
+Container Station must honour `cap_add: net_admin` and
+`devices: /dev/net/tun`. This has **not been tested** — QNAP's UI is built
+mainly around privileged mode. If `fgs-tailscale` fails to start or its log
+shows permission errors, Route A is not viable on this NAS; use Route B.
+
+---
+
+## ROUTE B — Cloudflare Tunnel (needs a domain)
 
 ```
 cloudflared container on the NAS
@@ -79,7 +184,7 @@ Cloudflare edge  -->  members reach https://vote.yourdomain.org
 - QNAP admin access to reach Container Station — you already have this remotely
   through myQNAPcloud.
 
-### Step 1 — Create the tunnel in Cloudflare
+### Step B1 — Create the tunnel in Cloudflare
 
 1. Log in at <https://one.dash.cloudflare.com>
 2. **Networks → Tunnels → Create a tunnel**
@@ -100,7 +205,7 @@ Cloudflare edge  -->  members reach https://vote.yourdomain.org
    IP address and no published port is involved. Cloudflare terminates HTTPS for
    `https://vote.yourdomain.org` with its own certificate.
 
-### Step 2 — Add the tunnel container to the Application
+### Step B2 — Add the tunnel container to the Application
 
 Use **`deploy/qnap-application-tunnel.yml`** instead of
 `deploy/qnap-application.yml`. It is identical apart from one extra service:
@@ -122,7 +227,7 @@ Replace `PASTE_YOUR_TUNNEL_TOKEN_HERE` with the token from Step 1.
 tracked by git. Replace it inside Container Station's editor, exactly like the
 passwords.
 
-### Step 3 — Deploy
+### Step B3 — Deploy
 
 In Container Station: **Applications → fgs → Edit arrow → Recreate
 Application** → paste the updated YAML with your token → **Update**.
@@ -130,7 +235,7 @@ Application** → paste the updated YAML with your token → **Update**.
 A new container `fgs-tunnel` starts. Check its log — a healthy tunnel prints
 lines mentioning `Registered tunnel connection`.
 
-### Step 4 — Test from outside
+### Step B4 — Test from outside
 
 On your phone with **Wi-Fi turned off** (mobile data):
 
@@ -142,7 +247,7 @@ On your phone with **Wi-Fi turned off** (mobile data):
 Then set that URL inside the voting system: admin console → **Settings** →
 voting entry URL. The QR code uses this value.
 
-### Step 5 — Keep the admin console off the internet
+### Step B5 — Keep the admin console off the internet
 
 Do **not** create a public hostname for port 8081. It exposes every member's
 name, card number, phone, email and address, plus bulk export.
@@ -230,8 +335,7 @@ interface, and two things cannot share it.
 | Destination port | **8080** |
 | Certificate | the one from Step 2 |
 
-Do **not** add a second rule for port 8081 — see Step 5 of the Cloudflare
-section for why.
+Do **not** add a second rule for port 8081 — see Step B5 for why.
 
 ### Step 4 — Forward the ports
 
