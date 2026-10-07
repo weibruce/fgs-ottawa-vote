@@ -9,6 +9,54 @@ on the NAS.
 
 ---
 
+## FGS Ottawa — actual network (measured)
+
+```
+Internet
+  Bell modem/router            192.168.0.1    static public IP 142.112.62.31
+    |
+    +-- Asus RT-AC3500         WAN 192.168.0.250  ->  LAN 192.168.2.1
+    |
+    +-- TP-Link (Office)       WAN 192.168.0.163  ->  LAN 192.168.1.1
+          |
+          +-- QNAP NAS         192.168.1.245   <- the voting system
+```
+
+**Two layers of NAT.** Every port must be forwarded **twice** — once on the
+Bell modem, once on the TP-Link. The Asus and TP-Link networks are siblings:
+they cannot see each other (a computer on `192.168.2.x` cannot reach
+`192.168.1.245`).
+
+### What already exists
+
+| Thing | Status |
+|---|---|
+| myQNAPcloud DDNS | ✅ configured — `fgsottawa.myqnapcloud.com` → `142.112.62.31`, **Synced** |
+| Public IP | ✅ **static** (`ipagstaticip-…` in the Bell reverse DNS) — it will not drift |
+| Port forward, Bell |  external `9003` → TP-Link `443` |
+| Port forward, TP-Link | external `443` → NAS `443` |
+| OpenVPN | external `9000` → TP-Link `1194` → NAS `1194` |
+| **SSL certificate** | ❌ **Inactive** — no certificate for the DDNS name |
+| **External reachability** | ❌ `142.112.62.31:9003` times out from outside |
+
+### What that means
+
+The **pattern is right and the plumbing is half-built**, but two things are
+missing before anything can be published:
+
+1. **SSL is Inactive** on the myQNAPcloud DDNS page. Without it, any
+   `https://` URL shows a certificate warning, which is unacceptable for a
+   page members type their ID number into.
+2. **Nothing is reachable from outside.** An external check of
+   `142.112.62.31:9003` times out, so the forward chain is not passing traffic
+   even though it is configured on both routers.
+
+Use the **Test** button next to *Port Forwarding* on the myQNAPcloud DDNS page
+— QNAP will check the chain for you. Do not build anything on top until that
+test passes.
+
+---
+
 ## What you need
 
 | # | Thing | Notes |
