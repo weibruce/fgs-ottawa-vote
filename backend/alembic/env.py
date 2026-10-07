@@ -26,7 +26,16 @@ from app.config import get_settings
 target_metadata = Base.metadata
 
 # 從 app.config 讀取資料庫 URL（覆蓋 alembic.ini 佔位）
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+#
+# ⚠️ 這裡的 .replace("%", "%%") 是必要的，不是多餘的：
+#    Alembic 的 Config 底層是 configparser，預設會做 %-插值。
+#    密碼經過 URL 編碼後可能含有 %（例如 # 會變成 %23），
+#    直接傳進去會炸在：
+#      ValueError: invalid interpolation syntax in 'postgresql+psycopg2://...'
+#    把 % 換成 %% 後，configparser 會在讀取時還原成單一個 %。
+config.set_main_option(
+    "sqlalchemy.url", get_settings().database_url.replace("%", "%%")
+)
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
