@@ -3,9 +3,8 @@
 Goal: members vote from anywhere via a real URL like
 `https://vote.yourdomain.org`, served from the NAS.
 
-Everything below is done in the **QNAP web interface** (Control Panel) plus your
-**router**. No code changes are needed — the containers already run and listen
-on the NAS.
+Two routes are described below. **Read the first one** — it needs no router
+access and can be done entirely from home.
 
 ---
 
@@ -22,282 +21,257 @@ Internet
           +-- QNAP NAS         192.168.1.245   <- the voting system
 ```
 
-**Two layers of NAT.** Every port must be forwarded **twice** — once on the
-Bell modem, once on the TP-Link. The Asus and TP-Link networks are siblings:
-they cannot see each other (a computer on `192.168.2.x` cannot reach
-`192.168.1.245`).
+**Two layers of NAT.** Any port must be forwarded **twice** — once on the Bell
+modem, once on the TP-Link. The Asus and TP-Link networks are siblings: a
+computer on `192.168.2.x` **cannot** reach `192.168.1.245`.
 
 ### What already exists
 
 | Thing | Status |
 |---|---|
 | myQNAPcloud DDNS | ✅ configured — `fgsottawa.myqnapcloud.com` → `142.112.62.31`, **Synced** |
-| Public IP | ✅ **static** (`ipagstaticip-…` in the Bell reverse DNS) — it will not drift |
-| Port forward, Bell |  external `9003` → TP-Link `443` |
+| Public IP | ✅ **static** (`ipagstaticip-…` in the Bell reverse DNS, so it will not drift) |
+| Port forward, Bell | external `9003` → TP-Link `443` |
 | Port forward, TP-Link | external `443` → NAS `443` |
 | OpenVPN | external `9000` → TP-Link `1194` → NAS `1194` |
-| **SSL certificate** | ❌ **Inactive** — no certificate for the DDNS name |
-| **External reachability** | ❌ `142.112.62.31:9003` times out from outside |
+| SSL certificate | ❌ **Inactive** |
+| External reachability | ❌ **broken** — see below |
 
 ### What that means
 
-The **pattern is right and the plumbing is half-built**, but two things are
-missing before anything can be published:
+QNAP's own *Test whether your NAS can be accessed from the Internet* reports:
 
-1. **SSL is Inactive** on the myQNAPcloud DDNS page. Without it, any
-   `https://` URL shows a certificate warning, which is unacceptable for a
-   page members type their ID number into.
-2. **Nothing is reachable from outside.** An external check of
-   `142.112.62.31:9003` times out, so the forward chain is not passing traffic
-   even though it is configured on both routers.
+```
+all IPv4 Status and IPv6 Status response failed
+```
 
-Use the **Test** button next to *Port Forwarding* on the myQNAPcloud DDNS page
-— QNAP will check the chain for you. Do not build anything on top until that
-test passes.
+and an independent check from three overseas nodes to `142.112.62.31:9003` also
+times out. The port-forward chain is configured but **not passing traffic** —
+and the routers are at the temple while you are at home.
+
+That is why the recommended route below avoids routers entirely.
 
 ---
 
-## What you need
+## RECOMMENDED: Cloudflare Tunnel (no port forwarding)
 
-| # | Thing | Notes |
+```
+cloudflared container on the NAS
+      |  connects OUT to Cloudflare (no inbound port needed)
+      v
+Cloudflare edge  -->  members reach https://vote.yourdomain.org
+```
+
+| | Port forwarding | Cloudflare Tunnel |
 |---|---|---|
-| 1 | A **public IP** that is not CGNAT | ✅ **Already confirmed:** `65.95.109.9` is a public IPv4 address |
-| 2 | A way to reach the **router** that owns that public IP | You need its admin password |
-| 3 | A **domain name** | ~US$10–15/year, or use QNAP's free `xxxx.myqnapcloud.com` |
-| 4 | **Ports 80 and 443** forwarded to the NAS | 80 is needed only for the certificate |
-| 5 | The QNAP **admin** account | Reverse proxy and certificates are admin-only |
+| Router changes | two routers | **none** |
+| Two layers of NAT | must handle | **irrelevant** |
+| Someone must be on site | yes | **no — all remote** |
+| HTTPS certificate | separate work | **automatic** |
+| Public IP changes | needs DDNS | **irrelevant** |
+| Cost | 0 | 0 (a domain is ~US$10/year) |
 
----
+### What you need
 
-## Step 0 — Confirm the NAS is on the network that owns the public IP
+- A **domain** managed by Cloudflare (free plan is enough). Buy one through
+  Cloudflare, or buy elsewhere and change its nameservers to the two Cloudflare
+  gives you.
+- QNAP admin access to reach Container Station — you already have this remotely
+  through myQNAPcloud.
 
-⚠️ **Do this first.** Your Ubuntu computer is on `192.168.2.x` and the NAS is on
-`192.168.1.x` — two different networks. We must know which one the public IP
-`65.95.109.9` belongs to. If the NAS sits behind a *different* internet
-connection, forwarding ports on the wrong router will never work.
+### Step 1 — Create the tunnel in Cloudflare
 
-On the NAS: **Control Panel → Network & Virtual Switch → Overview**
+1. Log in at <https://one.dash.cloudflare.com>
+2. **Networks → Tunnels → Create a tunnel**
+3. Connector type: **Cloudflared**
+4. Name it `fgs-vote`
+5. Cloudflare shows an install command containing a long token. **Copy the
+   token** — it is the string after `--token`.
+6. Add a **Public Hostname**:
 
-Write down:
+   | Field | Value |
+   |---|---|
+   | Subdomain | `vote` |
+   | Domain | your domain |
+   | Service type | **HTTP** |
+   | URL | **`web:80`** |
 
-- the NAS's **IP address** on each interface
-- the **gateway** for that interface (for `192.168.1.245` it is probably `192.168.1.1`)
-- the **WAN / public IP** if the page shows one
+   `web` is the container name inside the Application's private network, so no
+   IP address and no published port is involved. Cloudflare terminates HTTPS for
+   `https://vote.yourdomain.org` with its own certificate.
 
-Then log into the router at that gateway address. Its status page shows a
-**WAN IP** or **Internet IP**. That value must be **`65.95.109.9`**.
+### Step 2 — Add the tunnel container to the Application
 
-| Result | Meaning |
-|---|---|
-| WAN IP = `65.95.109.9` | ✅ Same connection. Continue. |
-| WAN IP is different | ⚠️ The NAS has its own internet line. Every step below must be done on **that** router instead, and you need **that** public IP. Tell me and I will adjust. |
-| No router admin access | You cannot port-forward. Jump to **Alternative: Cloudflare Tunnel**. |
-
----
-
-## Step 1 — Get a domain and point it at your public IP
-
-### Option A — Buy your own domain (recommended)
-
-Buy from any registrar (Cloudflare Registrar, Namecheap, Porkbun…). Then add a
-DNS record:
-
-| Type | Name | Value | TTL |
-|---|---|---|---|
-| `A` | `vote` | `65.95.109.9` | Auto / 300 |
-
-That gives `vote.yourdomain.org`.
-
-> **Home connections usually have a dynamic IP.** Your public IP *will* change
-> eventually (a router reboot can do it). When it does, the domain silently
-> stops working. Two ways to handle this:
->
-> - Most registrars/DNS providers offer **DDNS** — a small updater keeps the A
->   record current. QNAP has DDNS built in (Step 2b).
-> - Or set a long TTL and check the IP before election day.
-
-### Option B — Use QNAP's free subdomain (no purchase)
-
-**Control Panel → myQNAPcloud → My DDNS** → enable it. You get
-`xxxxx.myqnapcloud.com`, kept up to date automatically, and QNAP issues a
-matching certificate for free.
-
-The URL is QNAP-branded, but it is free, needs no DNS work, and never breaks
-from an IP change. Good enough to launch with; you can add your own domain
-later.
-
----
-
-## Step 2 — Get a certificate on the NAS
-
-### 2a. Request a Let's Encrypt certificate
-
-**Control Panel → System → Security → Certificate & Private Key**
-
-1. Click **Add** / **Create**
-2. Choose **Let's Encrypt**
-3. Domain name: `vote.yourdomain.org`
-4. Email: your address (for expiry warnings)
-5. Apply
-
-> Let's Encrypt validates by fetching `http://vote.yourdomain.org/.well-known/…`
-> so **port 80 must already be forwarded** (do Step 4 first if this fails), and
-> DNS must already resolve.
->
-> Certificates expire every 90 days. QNAP renews automatically, but **test it a
-> month before the election** — do not discover a renewal failure on voting day.
-
-### 2b. Only if you used Option B
-
-Use **myQNAPcloud → SSL Certificate** instead; QNAP issues and renews it for
-`xxxxx.myqnapcloud.com` with no port-80 requirement.
-
----
-
-## Step 3 — Create the reverse proxy rule on the NAS
-
-This is what makes `https://vote.yourdomain.org` reach the container on port
-8080. We use QNAP's own reverse proxy rather than running Caddy, because QNAP
-already owns port 443 for its web interface — two things cannot share it.
-
-**Control Panel → Network & File Services → Application → Reverse Proxy**
-
-Click **Add** and fill in:
-
-| Field | Value |
-|---|---|
-| Name | `fgs-vote` |
-| Protocol (source) | **HTTPS** |
-| Port (source) | **443** |
-| Hostname (source) | `vote.yourdomain.org` |
-| Destination protocol | **HTTP** |
-| Destination hostname | `localhost` |
-| Destination port | **8080** |
-| Certificate | the one from Step 2 |
-
-Apply.
-
-Then add a **second rule** for the admin console:
-
-| Field | Value |
-|---|---|
-| Name | `fgs-admin` |
-| Protocol (source) | **HTTPS** |
-| Port (source) | **443** |
-| Hostname (source) | `admin.yourdomain.org` |
-| Destination protocol | **HTTP** |
-| Destination hostname | `localhost` |
-| Destination port | **8081** |
-
-⚠️ **Read Step 6 before exposing the admin console.** It gives you the whole
-member database. Consider not publishing it at all — you can administer from
-inside the network instead.
-
----
-
-## Step 4 — Forward the ports on the router
-
-Log into the router (the gateway from Step 0) and find **Port Forwarding** /
-**Virtual Server** / **NAT**.
-
-| Service | External port | Internal IP | Internal port | Protocol |
-|---|---|---|---|---|
-| HTTP (certificate) | **80** | `192.168.1.245` | **80** | TCP |
-| HTTPS (voting) | **443** | `192.168.1.245` | **443** | TCP |
-
-> Port 80 is only needed for certificate issuance and renewal. You can close it
-> the rest of the time — but you must reopen it every ~60 days for auto-renewal,
-> which is easy to forget. Leaving it open is acceptable for this use.
->
-> If the QNAP's own web interface already occupies 80/443 on the router, that is
-> fine — the reverse proxy shares 443 by hostname.
-
----
-
-## Step 5 — Test from outside
-
-**Do not test from inside your own network** — that can succeed or fail for
-unrelated reasons and tells you nothing.
-
-1. Turn **Wi-Fi off** on your phone (use mobile data)
-2. Open `https://vote.yourdomain.org`
-3. It must load, with a **valid padlock** (no certificate warning)
-4. Open `https://vote.yourdomain.org/api/health` →
-   `{"status":"ok","checks":{"api":"ok","postgres":"ok","redis":"ok"}}`
-
-Then set the URL inside the voting system: admin console → **Settings** → set
-the **voting entry URL** to `https://vote.yourdomain.org`. The QR code uses this
-value, so members scanning it land on the right place.
-
----
-
-## Step 6 — Lock down the admin console
-
-Once the system is on the public internet, the admin console on `8081` is the
-single most valuable target: it lists every member's name, card number, phone,
-email and address, and can export everything.
-
-Do at least these:
-
-1. **Change the default password.** `admin` / `admin123` must not survive
-   contact with the internet. Do it before Step 5 if possible.
-2. **Do not create the `admin.yourdomain.org` reverse proxy rule at all** unless
-   you need it. Administer the election from a computer inside the network via
-   `http://192.168.1.245:8081`. This is the safest option and costs you nothing.
-3. If you do publish it, restrict the **source IP** in the reverse proxy rule
-   (QNAP lets you allow specific networks), or add a second password layer using
-   the Caddy `basic_auth` block from `deploy/Caddyfile`.
-4. **Do not publish port 8081 on the router** — only 80 and 443.
-
----
-
-## Alternative: Cloudflare Tunnel (no port forwarding)
-
-Use this if you cannot get router admin access, if the ISP blocks inbound 80/443,
-or if Step 0 shows a different public IP that you cannot forward.
-
-A `cloudflared` container makes an **outbound** connection to Cloudflare, so
-nothing needs to be exposed on the router and a changing IP does not matter.
-
-**Requirements:** a domain whose DNS is managed by Cloudflare (free plan is
-fine). The domain must be on Cloudflare before this works.
-
-Rough shape:
-
-1. In Cloudflare: create a tunnel, get the token
-2. Add a service to the tunnel: `vote.yourdomain.org` → `http://web:80`
-   (or `http://192.168.1.245:8080`)
-3. Add a `cloudflared` service to the Application YAML:
+Use **`deploy/qnap-application-tunnel.yml`** instead of
+`deploy/qnap-application.yml`. It is identical apart from one extra service:
 
 ```yaml
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: fgs-tunnel
     restart: unless-stopped
-    command: ["tunnel", "--no-autoupdate", "run", "--token", "PASTE_TOKEN_HERE"]
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "PASTE_YOUR_TUNNEL_TOKEN_HERE"]
+    depends_on:
+      - web
     networks: [fgs]
 ```
 
-4. Cloudflare terminates HTTPS with its own certificate — no Let's Encrypt
-   needed, and port 443 on your router stays closed
+Replace `PASTE_YOUR_TUNNEL_TOKEN_HERE` with the token from Step 1.
 
-Trade-off: traffic passes through Cloudflare (a third party) in plaintext at
-their edge. For member personal data that is a real consideration.
+⚠️ **Do not save the token into the `.yml` file in the project** — that file is
+tracked by git. Replace it inside Container Station's editor, exactly like the
+passwords.
+
+### Step 3 — Deploy
+
+In Container Station: **Applications → fgs → Edit arrow → Recreate
+Application** → paste the updated YAML with your token → **Update**.
+
+A new container `fgs-tunnel` starts. Check its log — a healthy tunnel prints
+lines mentioning `Registered tunnel connection`.
+
+### Step 4 — Test from outside
+
+On your phone with **Wi-Fi turned off** (mobile data):
+
+1. Open `https://vote.yourdomain.org`
+2. It must load with a **valid padlock** (Cloudflare's certificate)
+3. `https://vote.yourdomain.org/api/health` must return
+   `{"status":"ok","checks":{"api":"ok","postgres":"ok","redis":"ok"}}`
+
+Then set that URL inside the voting system: admin console → **Settings** →
+voting entry URL. The QR code uses this value.
+
+### Step 5 — Keep the admin console off the internet
+
+Do **not** create a public hostname for port 8081. It exposes every member's
+name, card number, phone, email and address, plus bulk export.
+
+Administer from inside the temple network instead:
+`http://192.168.1.245:8081`. The LAN ports stay published by the compose file,
+so on-site access is unaffected by the tunnel.
+
+If you truly need remote admin, put a Cloudflare **Access** policy in front of
+that hostname (email one-time PIN) rather than leaving it open.
+
+### Notes
+
+- On-site members on the temple Wi-Fi can keep using
+  `http://192.168.1.245:8080`; the tunnel and LAN access coexist.
+- Traffic passes through Cloudflare, which terminates TLS at its edge. That is
+  a third party in the path — acceptable for most organisations, but a
+  deliberate choice you should be aware of.
+- The free plan has no uptime SLA. For a one-off election that is normally fine.
+- **Rollback:** delete the `cloudflared` service from the YAML and recreate the
+  Application. The voting system itself is untouched.
+
+---
+
+## ALTERNATIVE (needs a site visit): fix the port forwarding
+
+Only attempt this if someone can physically reach the temple routers, or if you
+later confirm the forward chain works. Use QNAP's **Test** button (myQNAPcloud →
+DDNS → *Port Forwarding: Test*) as the gate: **do not build anything on top
+until that test passes.**
+
+### What that route needs
+
+| # | Thing | Notes |
+|---|---|---|
+| 1 | A public IP that is not CGNAT | ✅ confirmed — `142.112.62.31` is static and public |
+| 2 | Access to the **Bell modem** and the **TP-Link** | both must be changed |
+| 3 | A **domain**, or QNAP's free `xxxx.myqnapcloud.com` | |
+| 4 | Ports **80 and 443** forwarded through both routers | 80 only for the certificate |
+| 5 | The QNAP **admin** account | reverse proxy and certificates are admin-only |
+
+### Step 0 — Confirm the chain
+
+Log into the Bell modem (`192.168.0.1`) and check that its WAN/Internet IP is
+`142.112.62.31`. Then verify on **both** routers that the forward rules still
+exist — a modem reset silently drops them.
+
+### Step 1 — Get a domain and point it at the public IP
+
+**Option A — buy your own domain.** Add a DNS record:
+
+| Type | Name | Value |
+|---|---|---|
+| `A` | `vote` | `142.112.62.31` |
+
+Because the IP is static, no DDNS updater is needed.
+
+**Option B — use QNAP's free subdomain.** **Control Panel → myQNAPcloud → My
+DDNS** gives `xxxxx.myqnapcloud.com`, kept current automatically, with a
+QNAP-issued certificate. Branded, but free and needs no DNS work.
+
+### Step 2 — Get a certificate on the NAS
+
+**Control Panel → System → Security → Certificate & Private Key → Add →
+Let's Encrypt**, domain `vote.yourdomain.org`. Port 80 must already be
+forwarded, and DNS must already resolve.
+
+Certificates expire every 90 days. QNAP renews automatically — **verify the
+renewal a month before the election**, not on voting day.
+
+### Step 3 — Reverse proxy rule on the NAS
+
+Use QNAP's own reverse proxy, not Caddy: QNAP already owns port 443 for its web
+interface, and two things cannot share it.
+
+**Control Panel → Network & File Services → Application → Reverse Proxy → Add**
+
+| Field | Value |
+|---|---|
+| Name | `fgs-vote` |
+| Source protocol / port | **HTTPS** / **443** |
+| Source hostname | `vote.yourdomain.org` |
+| Destination protocol | **HTTP** |
+| Destination hostname | `localhost` |
+| Destination port | **8080** |
+| Certificate | the one from Step 2 |
+
+Do **not** add a second rule for port 8081 — see Step 5 of the Cloudflare
+section for why.
+
+### Step 4 — Forward the ports
+
+On **both** the Bell modem and the TP-Link:
+
+| Service | External port | Internal IP | Internal port |
+|---|---|---|---|
+| HTTP (certificate) | **80** | next hop | **80** |
+| HTTPS (voting) | **443** | next hop | **443** |
+
+Bell forwards to `192.168.0.163` (the TP-Link); the TP-Link forwards to
+`192.168.1.245` (the NAS).
+
+> ⚠️ Port 443 on the Bell side is not currently forwarded — only `9003` is. You
+> must either add `443`, or reuse the existing `9003` and make the reverse proxy
+> listen on 9003 instead.
+
+### Step 5 — Test from outside
+
+Turn **Wi-Fi off** on your phone and open
+`https://vote.yourdomain.org`. It must load with a valid padlock.
+
+### Step 6 — Lock down the admin console
+
+Change the default `admin123` password **before** exposing anything, and
+administer from inside the network rather than publishing port 8081.
 
 ---
 
 ## Security checklist before the election
 
 - [ ] `admin123` changed to a strong password
-- [ ] Certificate valid and **auto-renewal verified** (check 30 days out)
-- [ ] Admin console **not** published to the internet (or IP-restricted)
-- [ ] Port 8081 **not** forwarded on the router
+- [ ] Admin console **not** published to the internet (or behind Cloudflare
+      Access / IP restriction)
+- [ ] Certificate valid — padlock with no warning
 - [ ] Voting entry URL set in Settings so the QR code is correct
-- [ ] Backups running — confirm fresh `.sql.gz` files in
+- [ ] Backups running — fresh `.sql.gz` files in
       `/share/Container/fgs-ottawa-vote/backups/`
-- [ ] A **test vote from mobile data** (not Wi-Fi) succeeds and a repeat vote is
-      refused
-- [ ] Round reset to draft, test votes cleared
-- [ ] Public IP is stable, or DDNS is keeping the record current
-- [ ] You know what to do if the NAS reboots: nothing — containers restart
+- [ ] A **test vote from mobile data** (not Wi-Fi) succeeds, and a repeat vote
+      from the same member is refused
+- [ ] Round reset to draft and test votes cleared
+- [ ] You know what happens if the NAS reboots: nothing — containers restart
       automatically
