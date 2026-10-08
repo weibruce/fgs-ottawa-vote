@@ -761,7 +761,8 @@ must match your NAS.
 | `deploy/make_image_bundle.sh` | Builds `deploy/fgs-images.tar.gz` (the two Docker images) |
 | `deploy/export_current_db.sh` | Re-exports the live database to `deploy/db/init/01-fgs_vote.sql` |
 | `deploy/README.md` | Full deployment manual, including the HTTPS / remote-voting setup |
-| `deploy/PUBLIC_ACCESS.en.md` | Making the system publicly reachable (Tailscale Funnel / Cloudflare Tunnel) |
+| `deploy/PUBLIC_ACCESS.en.md` | Public-access options compared (port forwarding / Tailscale / Cloudflare) |
+| `deploy/FIX_PORT_FORWARDING.en.md` | **Runbook for the IT person: fix the routers so the system is public** |
 | `deploy/qnap-application-tunnel.yml` | Compose variant adding a Cloudflare Tunnel container |
 | `deploy/qnap-application-tailscale.yml` | Compose variant adding a Tailscale Funnel container |
 | `deploy/tailscale-serve.json` | Tailscale serve/funnel config (proxies `/` to `web:80`) |
