@@ -1,7 +1,16 @@
 # ═══════════════════════════════════════════════════════════════════
 #  Cloudflare Quick Tunnel 版本 —— 臨時公開網址（免費、不需網域）
-#  啟動後在 fgs-quicktunnel 容器的 Logs 裡找 https://xxxx.trycloudflare.com
+#
+#  會啟動「兩條」通道：
+#    fgs-quicktunnel        → 投票端（給會員）
+#    fgs-quicktunnel-admin  → 管理後台（給你）⚠️ 測試期間才開
+#
+#  網址查詢：Container Station → Containers → 對應容器 → Logs
+#            搜尋 trycloudflare.com
+#
 #  ⚠️ 網址每次重啟都會變。適合臨時測試，不適合正式選舉。
+#  ⚠️ 管理後台通道開啟前，務必先改掉 admin123。
+#
 #  詳細說明：deploy/QUICK_TUNNEL.en.md
 # ═══════════════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════════════
@@ -184,6 +193,7 @@ services:
         done
     networks: [fgs]
 
+  # ── 通道 1：投票端（給會員）──────────────────────────────────
   quicktunnel:
     image: cloudflare/cloudflared:latest
     container_name: fgs-quicktunnel
@@ -193,6 +203,29 @@ services:
       - --no-autoupdate
       - --url
       - http://web:80
+    depends_on:
+      - web
+    networks: [fgs]
+
+  # ── 通道 2：管理後台（給你）──────────────────────────────────
+  # ⚠️ 這條會把管理後台公開到網際網路上。那個後台能看到全部會員的
+  #    姓名、卡號、電話、Email、地址，還能整批匯出。
+  #
+  #    兩個必要條件：
+  #      1. 第一次登入後「立刻」改掉 admin123 預設密碼
+  #      2. 只在測試期間開啟；正式選舉請把這整段刪掉，改用區網
+  #         http://192.168.1.245:9081
+  #
+  #    網址同樣是隨機的，在 fgs-quicktunnel-admin 的 Logs 裡找。
+  quicktunnel-admin:
+    image: cloudflare/cloudflared:latest
+    container_name: fgs-quicktunnel-admin
+    restart: unless-stopped
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --url
+      - http://web:81
     depends_on:
       - web
     networks: [fgs]

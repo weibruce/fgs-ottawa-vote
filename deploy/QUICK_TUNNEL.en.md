@@ -90,13 +90,41 @@ URL — but remember it will need changing after any restart.
 
 ## The admin console
 
-The tunnel exposes **only** the voter site (port 80 of the web container). The
-admin console on 8081 is **not** published — keep administering it from the
-temple network at `http://192.168.1.245:9081`.
+The compose file starts **two** tunnels:
 
-If you want a second temporary tunnel for the admin console, add another
-`cloudflared` service with `--url http://web:81`. **Do not do this for anything
-beyond a quick test** — that console holds every member's personal data.
+| Container | Exposes | For |
+|---|---|---|
+| `fgs-quicktunnel` | `http://web:80` | the voter site (members) |
+| `fgs-quicktunnel-admin` | `http://web:81` | the admin console (you) |
+
+Each gets its **own random URL**, so read both logs.
+
+### Why `:9081` does not work
+
+The published host ports (`9080`, `9081`) are for the **LAN only**. A tunnel
+points at a single internal port, and Cloudflare's relay listens on **443 only**
+— it does not forward extra port numbers. So:
+
+```
+https://<random>.trycloudflare.com:9081     <- never works
+https://<other-random>.trycloudflare.com    <- the admin console
+```
+
+### ⚠️ Before using the admin tunnel
+
+That console can list every member's name, card number, phone, email and address,
+and export the lot.
+
+1. **Change `admin123` the first time you log in.** The URL is random and
+   unguessable, so the window is small — but do not leave the default password
+   on a public URL.
+2. **Delete the `quicktunnel-admin` service once testing is done.** For the real
+   election, administer from the temple network at
+   `http://192.168.1.245:9081`, reached over the port-forwarding setup in
+   `FIX_PORT_FORWARDING.en.md`.
+
+If you would rather not expose it at all right now, delete the
+`quicktunnel-admin` block from the YAML and recreate the Application.
 
 ---
 
