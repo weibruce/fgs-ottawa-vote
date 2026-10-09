@@ -1,0 +1,224 @@
+# ═══════════════════════════════════════════════════════════════════
+#  Cloudflare Quick Tunnel 版本 —— 臨時公開網址（免費、不需網域）
+#
+#  啟動後在 fgs-quicktunnel 容器的 Logs 裡找 https://xxxx.trycloudflare.com
+#
+#  ⚠️ 網址每次重啟都會變。適合臨時測試，不適合正式選舉。
+#
+#  詳細說明：deploy/PUBLIC_ACCESS.en.md
+# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════
+#  佛光山幹部改選投票系統 — Container Station「Application」用 YAML
+# ═══════════════════════════════════════════════════════════════════
+#
+#  用途：在 Container Station 圖形介面建立 Application 時，整份貼進去。
+#
+#  為什麼是這個檔案（而不是 docker-compose.yml）：
+#    1. 沒有 build: —— 直接用已匯入的映像，NAS 不需要編譯，幾秒就能啟動
+#    2. 用絕對路徑 —— Container Station 的 Application 有自己的資料夾，
+#       相對路徑容易對不上；絕對路徑不會出錯
+#    3. 環境變數直接寫在這裡 —— 不依賴 .env，避免 Container Station
+#       讀不到 .env 的問題
+#
+#  ⚠️ 貼進 Container Station 之前，請先把下面三個 CHANGE_ME 換成真的密碼：
+#       POSTGRES_PASSWORD / DB_PASSWORD  → 兩者必須相同
+#       REDIS_PASSWORD
+#       JWT_SECRET                       → 至少 32 字元隨機字串
+#     產生 JWT_SECRET 的方法（任一）：
+#       - 在 Linux/Mac 執行：openssl rand -hex 32
+#       - 或隨便打 40 個以上的英數字，不要用可猜的字串
+#
+#  ⚠️ 這份檔案含密碼，填好之後不要上傳到任何公開的地方（例如 GitHub）。
+# ═══════════════════════════════════════════════════════════════════
+version: "3.8"
+
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: fgs-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fgs_vote
+      POSTGRES_USER: fgs_app
+      POSTGRES_PASSWORD: CHANGE_ME_POSTGRES_PASSWORD
+      TZ: America/Toronto
+    volumes:
+      # ⚠️ PostgreSQL 18 的資料目錄掛載點是 /var/lib/postgresql
+      #    （不是舊版的 /var/lib/postgresql/data，掛錯容器會拒絕啟動）
+      - fgs_pgdata:/var/lib/postgresql
+      # 第一次啟動時自動匯入這裡的 .sql（就是你的會員名單與投票資料）
+      # 注意：這裡刻意不加 :ro，因為下面的 entrypoint 需要把權限補成 644
+      - /share/Container/fgs-ottawa-vote/deploy/db/init:/docker-entrypoint-initdb.d
+    # 這個 entrypoint 解決一個很陰險的問題：
+    #   PostgreSQL 伺服器以 uid 999（postgres）執行，讀不到權限 600 的
+    #   init 腳本。讀不到時它只印一行錯誤就跳過匯入，容器照常啟動 ——
+    #   結果是服務全部正常，但資料庫一筆資料都沒有。
+    #   容器剛啟動時還是 root，所以在這裡先把 .sql 的權限補起來，
+    #   這樣就不必依賴 QNAP File Station 的權限設定（那個分頁還需要
+    #   額外開啟 Advanced Folder Permissions 才會出現）。
+    entrypoint:
+      - sh
+      - -c
+      - |
+        chmod 644 /docker-entrypoint-initdb.d/*.sql 2>/dev/null || true
+        exec docker-entrypoint.sh postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fgs_app -d fgs_vote"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [fgs]
+
+  redis:
+    image: redis:7-alpine
+    container_name: fgs-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --requirepass
+      - CHANGE_ME_REDIS_PASSWORD
+      - --appendonly
+      - "yes"
+    volumes:
+      - fgs_redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a 'CHANGE_ME_REDIS_PASSWORD' ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [fgs]
+
+  api:
+    image: fgs-api:latest
+    container_name: fgs-api
+    restart: unless-stopped
+    environment:
+      # ⚠️ 後端 app/config.py 讀的是個別欄位，不是 DATABASE_URL
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: fgs_vote
+      DB_USER: fgs_app
+      DB_PASSWORD: CHANGE_ME_POSTGRES_PASSWORD
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: CHANGE_ME_REDIS_PASSWORD
+      JWT_SECRET: CHANGE_ME_JWT_SECRET
+      JWT_EXPIRE_MINUTES: "1440"
+      VOTER_TOKEN_EXPIRE_HOURS: "12"
+      API_PREFIX: /api
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+      TZ: America/Toronto
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # 等到 PostgreSQL 真的能連線才跑 migration
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        until python -c "import os,psycopg2;psycopg2.connect(dbname=os.environ['DB_NAME'],user=os.environ['DB_USER'],password=os.environ['DB_PASSWORD'],host=os.environ['DB_HOST'],port=os.environ.get('DB_PORT','5432')).close()" 2>/dev/null;
+        do echo 'waiting for postgresql...'; sleep 2; done;
+        alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+    networks: [fgs]
+
+  web:
+    image: fgs-web:latest
+    container_name: fgs-web
+    restart: unless-stopped
+    ports:
+      - "8080:80"   # 投票端
+      - "8081:81"   # 管理後台
+    depends_on:
+      - api
+    environment:
+      TZ: America/Toronto
+    networks: [fgs]
+
+  # ── 每日自動備份 ────────────────────────────────────────────────
+  # 投票期間最怕資料庫出意外。這個容器每天把整個資料庫 dump 成
+  # /share/Container/fgs-ottawa-vote/backups/ 底下的一個 .sql.gz，
+  # 你可以直接用 File Station 進去看、下載。
+  # 只保留最近 30 天，舊的自動刪除。
+  backup:
+    image: postgres:18-alpine
+    container_name: fgs-backup
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: CHANGE_ME_POSTGRES_PASSWORD
+      DB_USER: fgs_app
+      DB_NAME: fgs_vote
+      TZ: America/Toronto
+      # 每天備份一次；要更頻繁可把 86400 改成 3600（每小時）
+      BACKUP_INTERVAL_SECONDS: "86400"
+      BACKUP_KEEP_DAYS: "30"
+    volumes:
+      - /share/Container/fgs-ottawa-vote/backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - |
+        # ⚠️ 這裡的 $$ 是刻意的：Docker Compose 會把單一個 $ 當成變數插值，
+        #    寫 $$ 才會在容器裡變成真正的 $。少了這個，shell 變數全會變空字串。
+        set -o pipefail
+        echo "[backup] started, interval=$${BACKUP_INTERVAL_SECONDS}s, keeping $${BACKUP_KEEP_DAYS} days"
+        while true; do
+          D=$$(date +%F-%H%M)
+          OUT="/backups/fgs-$$D.sql.gz"
+          echo "[backup] $$(date '+%F %T') dumping to $$OUT"
+          if pg_dump -h db -U "$$DB_USER" -d "$$DB_NAME" --no-owner --no-privileges | gzip > "$$OUT"; then
+            echo "[backup] ok ($$(du -h "$$OUT" | cut -f1))"
+          else
+            echo "[backup] FAILED - removing partial file"
+            rm -f "$$OUT"
+          fi
+          find /backups -name 'fgs-*.sql.gz' -mtime +$${BACKUP_KEEP_DAYS} -delete
+          sleep "$${BACKUP_INTERVAL_SECONDS}"
+        done
+    networks: [fgs]
+
+  # ── Cloudflare Quick Tunnel（臨時公開網址，免費、不需網域）──────
+  # 啟動後容器日誌裡會出現一個像這樣的網址：
+  #     https://<隨機字串>.trycloudflare.com
+  # 那個網址就是你的公開入口，HTTPS 憑證由 Cloudflare 提供（有效）。
+  #
+  # ⚠️⚠️ 最重要的限制：網址是隨機的，而且「每次容器重啟就換一個」。
+  #      只要 NAS 重開機、斷電、或容器被重建，舊網址立刻失效，
+  #      任何已經印出去的 QR Code 全部報廢。
+  #      → 適合「現在立刻測試」，不適合正式選舉當天使用。
+  #
+  # ⚠️ Cloudflare 官方明文警告：這種無帳號通道「沒有可用性保證」，
+  #    且不建議用於正式環境（日誌裡會出現這段話）。
+  #
+  # 查詢網址的方法：Container Station → Containers → fgs-quicktunnel
+  #                → Logs → 搜尋 trycloudflare.com
+  #
+  # 不使用時請把這整段刪掉。
+  quicktunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: fgs-quicktunnel
+    restart: unless-stopped
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --url
+      - http://web:80
+    depends_on:
+      - web
+    networks: [fgs]
+
+
+volumes:
+  fgs_pgdata:
+  fgs_redisdata:
+
+networks:
+  fgs:
+    driver: bridge
