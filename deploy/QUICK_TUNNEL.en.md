@@ -92,7 +92,7 @@ URL — but remember it will need changing after any restart.
 
 The tunnel exposes **only** the voter site (port 80 of the web container). The
 admin console on 8081 is **not** published — keep administering it from the
-temple network at `http://192.168.1.245:8081`.
+temple network at `http://192.168.1.245:9081`.
 
 If you want a second temporary tunnel for the admin console, add another
 `cloudflared` service with `--url http://web:81`. **Do not do this for anything

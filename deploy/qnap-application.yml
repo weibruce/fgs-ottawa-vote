@@ -121,9 +121,12 @@ services:
     image: fgs-web:latest
     container_name: fgs-web
     restart: unless-stopped
+    # ⚠️ 刻意不用 8080 / 8081：QTS 桌面本身就佔用這兩個埠
+    #    （Web Administration = 8080、Secure Web Server = 8081），
+    #    直接沿用會讓這個容器建好卻起不來，狀態永遠停在 Created。
     ports:
-      - "8080:80"   # 投票端
-      - "8081:81"   # 管理後台
+      - "9080:80"   # 投票端
+      - "9081:81"   # 管理後台
     depends_on:
       - api
     environment:

@@ -1,7 +1,6 @@
 # ═══════════════════════════════════════════════════════════════════
 #  Tailscale Funnel 版本：免費的對外 HTTPS，不需要網域、不需要開埠。
 #  公開網址會是 https://fgs-vote.<你的tailnet>.ts.net
-#
 #  詳細說明：deploy/PUBLIC_ACCESS.en.md
 # ═══════════════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════════════
@@ -127,9 +126,12 @@ services:
     image: fgs-web:latest
     container_name: fgs-web
     restart: unless-stopped
+    # ⚠️ 刻意不用 8080 / 8081：QTS 桌面本身就佔用這兩個埠
+    #    （Web Administration = 8080、Secure Web Server = 8081），
+    #    直接沿用會讓這個容器建好卻起不來，狀態永遠停在 Created。
     ports:
-      - "8080:80"   # 投票端
-      - "8081:81"   # 管理後台
+      - "9080:80"   # 投票端
+      - "9081:81"   # 管理後台
     depends_on:
       - api
     environment:
@@ -181,21 +183,6 @@ services:
         done
     networks: [fgs]
 
-  # ── Tailscale Funnel（完全免費的對外 HTTPS，不需要網域）─────────
-  # Tailscale Funnel 會給你的 NAS 一個公開網址：
-  #     https://<hostname>.<你的 tailnet>.ts.net
-  # 憑證由 Tailscale 自動簽發，不需要買網域、不需要在路由器開任何埠。
-  # Funnel 對所有方案（含免費）都開放，且中繼伺服器無法解密你的流量。
-  #
-  # 使用前：
-  #   1. Tailscale 管理後台 → Access Controls，加入 nodeAttrs 允許 funnel：
-  #        "nodeAttrs": [ { "target": ["*"], "attr": ["funnel"] } ]
-  #   2. Settings → Keys → Generate auth key，貼到下面的 TS_AUTHKEY
-  #   3. 確認 deploy/tailscale-serve.json 已上傳到 NAS 的對應路徑
-  #
-  # ⚠️ Container Station 是否允許 cap_add / devices 尚未實測；
-  #    若容器起不來，改用 Cloudflare Tunnel（見 PUBLIC_ACCESS.en.md）。
-  # ⚠️ 不使用 Tailscale 的話，請把這整段刪掉。
   tailscale:
     image: tailscale/tailscale:latest
     container_name: fgs-tailscale

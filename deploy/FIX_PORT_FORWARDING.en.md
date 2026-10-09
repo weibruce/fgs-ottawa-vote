@@ -54,21 +54,26 @@ Log into `192.168.0.1`, find the WAN/Internet IP. It must be **142.112.62.31**.
 If it is something else, every forward below must be redone against the real IP,
 and the DDNS record needs to catch up.
 
-### 0.2 Which ports QTS itself uses  ⚠️ most important
+### 0.2 Which ports QTS itself uses  ⚠️ already resolved
 
 **Control Panel → General Settings → System Administration → System Port**
 
-Write down the HTTP and HTTPS ports. QTS defaults are `8080` and `443`.
+QTS defaults are HTTP `8080`, HTTPS `443`, Web Server `80`, Secure Web Server
+`8081`. On this NAS that is confirmed in practice: the voting container was
+published on 8080/8081 and **never started** — it stayed in `Created`.
 
-> ⚠️ **If QTS HTTP is 8080, there is a conflict.** The voting compose file
-> publishes the voter site on host port 8080. Two processes cannot share a port.
-> In that case skip to **Step 5b** before continuing.
+**This has been fixed.** The compose files now publish the voter site on
+**9080** and the admin console on **9081**, which do not collide with QTS.
+No action is needed here; just confirm `fgs-web` is `Running` after deploying.
 
 ### 0.3 Which ports the containers actually publish
 
-Container Station → Containers. `fgs-web` should show `8080->80` and `8081->81`.
-If it shows no port mapping, or the container is not running, stop and fix that
-first — port forwarding is pointless without a listening service.
+Container Station → Containers. `fgs-web` must be **Running** and show
+`9080->80` and `9081->81`.
+
+**If it says `Created`, it has never started** — that is the exact symptom of a
+port collision with QTS. Using the ports above is the fix; anything that depends
+on `web` (for example `fgs-quicktunnel`) will also sit in `Created` until it runs.
 
 ### 0.4 Whether the existing forwards work at all
 
@@ -101,7 +106,7 @@ Notes:
 - **Port 80 is required** for the free Let's Encrypt certificate. It can be
   closed again afterwards, but must be reopened for each renewal (~60 days),
   which is easy to forget — leaving it open is acceptable here.
-- Do not forward 8080/8081. The voting system is reached through 9005.
+- Do not forward 9080/9081. The voting system is reached through 9005.
 
 ## Step 2 — TP-Link: port forwarding rules
 
@@ -159,16 +164,20 @@ Add**
 | Port number | **9005** |
 | Destination protocol | **HTTP** |
 | Destination hostname | `localhost` |
-| Destination port | **8080** |
+| Destination port | **9080** |
 
-Do **not** add a rule for port 8081 (the admin console). It exposes every
+Do **not** add a rule for the admin console port (9081). It exposes every
 member's name, card number, phone, email and address. Administer from inside the
-temple network at `http://192.168.1.245:8081`.
+temple network at `http://192.168.1.245:9081`.
 
-### Step 5b — Only if QTS already occupies 8080
+### Step 5b — Port collision with QTS (already applied)
 
-Change the voting container's host ports so they do not collide. In the
-Application YAML, under the `web` service:
+QTS itself listens on **8080** (Web Administration) and **8081** (Secure Web
+Server). The voting container originally published those same ports, so it was
+created but could never start — Container Station showed it as `Created` with an
+empty log, indefinitely.
+
+The compose files now use:
 
 ```yaml
     ports:
@@ -176,10 +185,13 @@ Application YAML, under the `web` service:
       - "9081:81"   # admin
 ```
 
-Then set the reverse proxy **Destination port** to **9080**, and reach the admin
-console internally at `http://192.168.1.245:9081`.
+Consequences for every other document and for the reverse proxy rule:
 
-Apply via **Applications → fgs → Edit arrow → Recreate Application → Update**.
+| Thing | Old | New |
+|---|---|---|
+| Voter site on the LAN | `http://192.168.1.245:8080` | `http://192.168.1.245:9080` |
+| Admin console on the LAN | `http://192.168.1.245:8081` | `http://192.168.1.245:9081` |
+| Reverse proxy destination | `localhost:8080` | `localhost:9080` |
 
 ## Step 6 — Test end to end from outside
 

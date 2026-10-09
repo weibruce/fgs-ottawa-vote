@@ -1,16 +1,6 @@
 # ═══════════════════════════════════════════════════════════════════
-#  ⚠️ 這是「公開網域」版本：比 qnap-application.yml 多一個 cloudflared 容器。
-#
-#  用途：讓不在同一個網路的會員也能投票。
-#        cloudflared 主動對外連線，所以「不需要」在路由器上開任何埠，
-#        佛堂的兩層 NAT（Bell → TP-Link）完全不影響。
-#
-#  使用前：
-#    1. 先在 Cloudflare 建立 Tunnel，取得 token
-#    2. 把下面的 PASTE_YOUR_TUNNEL_TOKEN_HERE 換成你的 token
-#    3. 整份貼進 Container Station 建立 Application
-#
-#  詳細步驟：deploy/PUBLIC_ACCESS.en.md
+#  Cloudflare Tunnel 版本（需要一個自己的網域）
+#  詳細說明：deploy/PUBLIC_ACCESS.en.md
 # ═══════════════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════════════
 #  佛光山幹部改選投票系統 — Container Station「Application」用 YAML
@@ -135,9 +125,12 @@ services:
     image: fgs-web:latest
     container_name: fgs-web
     restart: unless-stopped
+    # ⚠️ 刻意不用 8080 / 8081：QTS 桌面本身就佔用這兩個埠
+    #    （Web Administration = 8080、Secure Web Server = 8081），
+    #    直接沿用會讓這個容器建好卻起不來，狀態永遠停在 Created。
     ports:
-      - "8080:80"   # 投票端
-      - "8081:81"   # 管理後台
+      - "9080:80"   # 投票端
+      - "9081:81"   # 管理後台
     depends_on:
       - api
     environment:
@@ -189,15 +182,6 @@ services:
         done
     networks: [fgs]
 
-  # ── Cloudflare Tunnel（讓外網可以連進來，且不用改路由器）────────
-  # 用途：cloudflared 會「主動對外」連到 Cloudflare，所以不需要在路由器上
-  #       開任何埠，兩層 NAT、動態 IP 都不影響。
-  #
-  # 使用前要先去 Cloudflare 建一條 tunnel 並取得 token，然後把下面
-  # PASTE_YOUR_TUNNEL_TOKEN_HERE 換掉。
-  # 詳細步驟見 deploy/PUBLIC_ACCESS.en.md 的「Cloudflare Tunnel」章節。
-  #
-  # ⚠️ 不使用 Cloudflare 的話，請把這整段（到 networks 之前）刪掉。
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: fgs-tunnel

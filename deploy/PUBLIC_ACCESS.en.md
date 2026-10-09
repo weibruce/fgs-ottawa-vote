@@ -253,7 +253,7 @@ Do **not** create a public hostname for port 8081. It exposes every member's
 name, card number, phone, email and address, plus bulk export.
 
 Administer from inside the temple network instead:
-`http://192.168.1.245:8081`. The LAN ports stay published by the compose file,
+`http://192.168.1.245:9081`. The LAN ports stay published by the compose file,
 so on-site access is unaffected by the tunnel.
 
 If you truly need remote admin, put a Cloudflare **Access** policy in front of
@@ -262,7 +262,7 @@ that hostname (email one-time PIN) rather than leaving it open.
 ### Notes
 
 - On-site members on the temple Wi-Fi can keep using
-  `http://192.168.1.245:8080`; the tunnel and LAN access coexist.
+  `http://192.168.1.245:9080`; the tunnel and LAN access coexist.
 - Traffic passes through Cloudflare, which terminates TLS at its edge. That is
   a third party in the path — acceptable for most organisations, but a
   deliberate choice you should be aware of.

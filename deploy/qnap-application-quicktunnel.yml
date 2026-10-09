@@ -1,11 +1,8 @@
 # ═══════════════════════════════════════════════════════════════════
 #  Cloudflare Quick Tunnel 版本 —— 臨時公開網址（免費、不需網域）
-#
 #  啟動後在 fgs-quicktunnel 容器的 Logs 裡找 https://xxxx.trycloudflare.com
-#
 #  ⚠️ 網址每次重啟都會變。適合臨時測試，不適合正式選舉。
-#
-#  詳細說明：deploy/PUBLIC_ACCESS.en.md
+#  詳細說明：deploy/QUICK_TUNNEL.en.md
 # ═══════════════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════════════
 #  佛光山幹部改選投票系統 — Container Station「Application」用 YAML
@@ -130,9 +127,12 @@ services:
     image: fgs-web:latest
     container_name: fgs-web
     restart: unless-stopped
+    # ⚠️ 刻意不用 8080 / 8081：QTS 桌面本身就佔用這兩個埠
+    #    （Web Administration = 8080、Secure Web Server = 8081），
+    #    直接沿用會讓這個容器建好卻起不來，狀態永遠停在 Created。
     ports:
-      - "8080:80"   # 投票端
-      - "8081:81"   # 管理後台
+      - "9080:80"   # 投票端
+      - "9081:81"   # 管理後台
     depends_on:
       - api
     environment:
@@ -184,23 +184,6 @@ services:
         done
     networks: [fgs]
 
-  # ── Cloudflare Quick Tunnel（臨時公開網址，免費、不需網域）──────
-  # 啟動後容器日誌裡會出現一個像這樣的網址：
-  #     https://<隨機字串>.trycloudflare.com
-  # 那個網址就是你的公開入口，HTTPS 憑證由 Cloudflare 提供（有效）。
-  #
-  # ⚠️⚠️ 最重要的限制：網址是隨機的，而且「每次容器重啟就換一個」。
-  #      只要 NAS 重開機、斷電、或容器被重建，舊網址立刻失效，
-  #      任何已經印出去的 QR Code 全部報廢。
-  #      → 適合「現在立刻測試」，不適合正式選舉當天使用。
-  #
-  # ⚠️ Cloudflare 官方明文警告：這種無帳號通道「沒有可用性保證」，
-  #    且不建議用於正式環境（日誌裡會出現這段話）。
-  #
-  # 查詢網址的方法：Container Station → Containers → fgs-quicktunnel
-  #                → Logs → 搜尋 trycloudflare.com
-  #
-  # 不使用時請把這整段刪掉。
   quicktunnel:
     image: cloudflare/cloudflared:latest
     container_name: fgs-quicktunnel

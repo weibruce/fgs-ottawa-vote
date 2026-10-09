@@ -345,8 +345,8 @@ From a computer on the same Wi-Fi:
 
 | What | URL |
 |---|---|
-| Voting site | `http://<NAS-IP>:8080` |
-| Admin console | `http://<NAS-IP>:8081` — user `admin`, password `admin123` |
+| Voting site | `http://<NAS-IP>:9080` |
+| Admin console | `http://<NAS-IP>:9081` — user `admin`, password `admin123` |
 
 Check each of these, in order. Each one proves something different.
 
@@ -354,9 +354,9 @@ Check each of these, in order. Each one proves something different.
 
 | What | URL | Expected |
 |---|---|---|
-| Health check | `http://<NAS-IP>:8080/api/health` | `{"status":"ok","checks":{"api":"ok","postgres":"ok","redis":"ok"}}` |
-| Voting site | `http://<NAS-IP>:8080` | the voting entry page |
-| Admin console | `http://<NAS-IP>:8081` | a login page (`admin` / `admin123`) |
+| Health check | `http://<NAS-IP>:9080/api/health` | `{"status":"ok","checks":{"api":"ok","postgres":"ok","redis":"ok"}}` |
+| Voting site | `http://<NAS-IP>:9080` | the voting entry page |
+| Admin console | `http://<NAS-IP>:9081` | a login page (`admin` / `admin123`) |
 
 Start with the health check — it is the fastest way to tell whether the backend,
 the database and Redis are all talking to each other.
@@ -401,7 +401,7 @@ If it is empty after an hour, the backup container is not working — tell me.
 
 ## Step 7 — Change the default admin password
 
-Log in to the admin console at `http://<NAS-IP>:8081` with `admin` /
+Log in to the admin console at `http://<NAS-IP>:9081` with `admin` /
 `admin123`, then change the password immediately.
 
 > ⚠️ **If members will vote from outside this Wi-Fi**, do not stop here. Plain
@@ -485,7 +485,7 @@ images. The volumes, and therefore all your data, are left alone.
 ## Step 4 — Verify (you)
 
 1. The voting site and admin console load
-2. `http://<NAS-IP>:8080/api/health` returns `"status":"ok"`
+2. `http://<NAS-IP>:9080/api/health` returns `"status":"ok"`
 3. **Open the Members page — the count should be unchanged.** This is the
    important check. If it dropped to zero, something deleted the volume; stop
    and restore from a backup (below) before doing anything else.
