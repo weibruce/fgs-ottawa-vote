@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480  # 管理員登入有效期 8 小時
 
+    # --- 上傳的媒體（候選人照片）---
+    # 上傳的檔案存這裡；容器請掛一個 volume，否則重建容器就消失。
+    upload_dir: str = "/app/uploads"
+    # 對外網址前綴。前端 <img src> 直接用，所以必須與 API 同源。
+    media_url_prefix: str = "/api/media"
+
     # --- 投票 ---
     poll_interval_min: int = 1   # 前端輪詢間隔下限（秒）
     poll_interval_max: int = 10  # 前端輪詢間隔上限（秒）

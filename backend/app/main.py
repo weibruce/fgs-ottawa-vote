@@ -1,10 +1,12 @@
 """FastAPI 應用入口 — 佛光山幹部改選投票系統"""
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.routers import (
@@ -66,6 +68,18 @@ async def global_exception_handler(request: Request, exc: Exception):
     logger.exception(f"未處理異常 {request.method} {request.url.path}: {exc}")
     detail = str(exc) if settings.debug else "系統內部錯誤，請稍後再試"
     return JSONResponse(status_code=500, content={"error": detail, "code": 5000})
+
+
+# --- 上傳的媒體檔案 ---
+# 候選人照片上傳後存到 upload_dir，並以 {media_url_prefix}/candidates/xxx.jpg 提供。
+# 與 API 同源，前端 <img src> 直接可用（開發時走 Vite proxy，正式走 nginx /api）。
+_upload_root = Path(settings.upload_dir)
+(_upload_root / "candidates").mkdir(parents=True, exist_ok=True)
+app.mount(
+    settings.media_url_prefix,
+    StaticFiles(directory=str(_upload_root)),
+    name="media",
+)
 
 
 # --- 路由 ---

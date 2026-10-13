@@ -1,5 +1,5 @@
 """候選人 CRUD 路由（按分會，需管理員認證）"""
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -7,6 +7,7 @@ from app.database import get_db
 from app.deps import get_current_admin
 from app.models.candidate import Candidate
 from app.services.simp_trad import compose_english_name, sync_name_pair
+from app.services import media_service
 from app.models.division import Division
 from app.models.round_ import RoundCandidate
 from app.models.vote import Vote, VoteCandidate
@@ -110,10 +111,65 @@ def update_candidate(
     if cand is None:
         raise HTTPException(status_code=404, detail="候選人不存在")
     payload = _sync_names(body.model_dump(exclude_unset=True))
+    old_avatar = cand.avatar_url
     for field, value in payload.items():
         setattr(cand, field, value)
     db.commit()
+    # 照片被換掉時，刪除先前的上傳檔（種子照片不會被動到）
+    if "avatar_url" in payload and old_avatar != cand.avatar_url:
+        media_service.delete_uploaded_photo(old_avatar)
     db.refresh(cand)
+    return _to_admin_out(cand, _division_names(db), None)
+
+
+@router.post("/avatar", response_model=dict)
+async def upload_avatar(
+    file: UploadFile = File(..., description="候選人照片（JPEG/PNG/WebP/GIF）"),
+    _admin=Depends(get_current_admin),
+):
+    """上傳候選人照片，回傳可公開存取的網址。
+
+    供「新增候選人」表單使用（此時還沒有 id）：
+    先上傳取得網址、填入 avatar_url，存檔時再一起寫入資料庫。
+    照片會重新編碼成 JPEG 存到候選人照片資料夾。
+    """
+    data = await file.read()
+    try:
+        url = media_service.save_candidate_photo(data, 0)
+    except media_service.PhotoError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"url": url}
+
+
+@router.post("/{candidate_id}/avatar", response_model=CandidateAdminOut)
+async def upload_candidate_avatar(
+    candidate_id: int,
+    file: UploadFile = File(..., description="候選人照片（JPEG/PNG/WebP/GIF）"),
+    db: Session = Depends(get_db),
+    _admin=Depends(get_current_admin),
+):
+    """上傳候選人照片。
+
+    照片會重新編碼成 JPEG 存到上傳資料夾，並把對應網址寫回 avatar_url。
+    舊的（本系統上傳的）照片會一併刪除，避免垃圾檔累積。
+    """
+    cand = db.get(Candidate, candidate_id)
+    if cand is None:
+        raise HTTPException(status_code=404, detail="候選人不存在")
+
+    data = await file.read()
+    try:
+        url = media_service.save_candidate_photo(data, candidate_id)
+    except media_service.PhotoError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    old = cand.avatar_url
+    cand.avatar_url = url
+    db.commit()
+    db.refresh(cand)
+
+    # 換檔成功後才刪舊檔
+    media_service.delete_uploaded_photo(old)
     return _to_admin_out(cand, _division_names(db), None)
 
 
@@ -129,6 +185,9 @@ def delete_candidate(
     from app.models.vote import VoteCandidate
     if db.query(VoteCandidate).filter(VoteCandidate.candidate_id == candidate_id).first():
         raise HTTPException(status_code=409, detail="該候選人已被投票引用，無法刪除")
+    uploaded = cand.avatar_url
     db.delete(cand)
     db.commit()
+    # 候選人刪掉了，上傳的照片也一併清掉（種子照片不受影響）
+    media_service.delete_uploaded_photo(uploaded)
     return {"message": "候選人已刪除"}

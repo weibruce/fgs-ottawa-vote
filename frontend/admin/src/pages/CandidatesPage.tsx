@@ -16,7 +16,13 @@ import { Button, Card, DivisionTag, Field, PageIntro } from '../components/ui'
 import { IconEdit, IconPlus, IconTrash } from '../components/icons'
 import { useAsync } from '../hooks/useAsync'
 import { apiError } from '../api/client'
-import { listCandidates, createCandidate, updateCandidate, deleteCandidate } from '../api/candidates'
+import {
+  listCandidates,
+  createCandidate,
+  updateCandidate,
+  deleteCandidate,
+  uploadCandidateAvatar,
+} from '../api/candidates'
 import { listRounds } from '../api/rounds'
 import { fetchDivisionOverview } from '../api/divisions'
 import type { CandidateInput } from '../api/types'
@@ -412,6 +418,7 @@ export function CandidatesPage() {
           initial={editing}
           onClose={() => setShowModal(false)}
           onSave={save}
+          onFlash={flash}
         />
       )}
 
@@ -460,11 +467,13 @@ function CandidateModal({
   initial,
   onClose,
   onSave,
+  onFlash,
 }: {
   divisionOptions: string[]
   initial: CandRow | null
   onClose: () => void
   onSave: (c: CandRow) => void
+  onFlash: (msg: string) => void
 }) {
   const [form, setForm] = useState<FormState>(() => ({
     member_no: initial?.member_no ?? '',
@@ -500,6 +509,25 @@ function CandidateModal({
 
   /** 英文全名留空時，提示後端將組合出的值 */
   const autoNameEn = [form.givenname.trim(), form.surname.trim()].filter(Boolean).join(' ')
+
+  const [uploading, setUploading] = useState(false)
+
+  /** 選檔 → 上傳 → 把回傳網址填進 avatar_url（存檔時才寫入資料庫） */
+  async function handleAvatarPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''                       // 允許重選同一個檔案
+    if (!file) return
+    setUploading(true)
+    try {
+      const { url } = await uploadCandidateAvatar(file)
+      set('avatar_url', url)
+      onFlash('照片已上傳，記得按儲存')
+    } catch (err) {
+      onFlash(apiError(err))
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const submit = () => {
     const name = form.name.trim()
@@ -650,13 +678,44 @@ function CandidateModal({
               placeholder="例如：會長候選人"
             />
           </Field>
-          <Field label="照片 URL avatar_url">
-            <input
-              className="ui-input"
-              value={form.avatar_url}
-              onChange={(e) => set('avatar_url', e.target.value)}
-              placeholder="/candidates/photo01.jpg"
-            />
+          <Field label="候選人照片" className="sm:col-span-2">
+            <div className="flex items-start gap-4">
+              {/* 預覽：有照片就顯示，載不到就退回姓氏圓形 */}
+              <AvatarThumb src={form.avatar_url} name={form.name} />
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-2">
+                  <label className="ui-btn-secondary cursor-pointer">
+                    {uploading ? '上傳中…' : '上傳照片'}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      disabled={uploading}
+                      onChange={handleAvatarPick}
+                    />
+                  </label>
+                  {form.avatar_url && (
+                    <button
+                      type="button"
+                      className="text-[12px] text-gray hover:text-primary"
+                      onClick={() => set('avatar_url', '')}
+                    >
+                      清除
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] leading-[16px] text-gray">
+                  上傳後會自動存到候選人照片資料夾並壓縮成 JPEG（最長邊 1000px）；
+                  URL 會自動填入下方的 avatar_url。也可以直接手動貼上外部網址。
+                </p>
+                <input
+                  className="ui-input"
+                  value={form.avatar_url}
+                  onChange={(e) => set('avatar_url', e.target.value)}
+                  placeholder="/candidates/photo01.jpg 或上傳後自動填入"
+                />
+              </div>
+            </div>
           </Field>
         </div>
 

@@ -130,6 +130,9 @@ services:
         until python -c "import os,psycopg2;psycopg2.connect(dbname=os.environ['DB_NAME'],user=os.environ['DB_USER'],password=os.environ['DB_PASSWORD'],host=os.environ['DB_HOST'],port=os.environ.get('DB_PORT','5432')).close()" 2>/dev/null;
         do echo 'waiting for postgresql...'; sleep 2; done;
         alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+    # 上傳的候選人照片；沒有這個 volume 的話，重建容器照片就消失
+    volumes:
+      - fgs_uploads:/app/uploads
     networks: [fgs]
 
   web:
@@ -234,6 +237,7 @@ services:
 volumes:
   fgs_pgdata:
   fgs_redisdata:
+  fgs_uploads:
 
 networks:
   fgs:
