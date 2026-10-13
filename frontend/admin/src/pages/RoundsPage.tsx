@@ -1,10 +1,10 @@
 /**
- * 進程管理 — 單一選舉進程（狀態／開始結束投票／票數設定／五區進度）＋ 當選結果
+ * 進程管理 — 單一選舉進程（狀態／開始結束投票／票數設定／所有分會進度）＋ 當選結果
  *
  * 沿用既有版面色票與間距節奏（Card / CardHeader / PageIntro / DivisionMark / ProgressBar…），
  * 不重新設計整頁視覺。資料來源：
  *   GET  /admin/rounds                     當前進程
- *   GET  /admin/rounds/{id}/progress       五區投票進度
+ *   GET  /admin/rounds/{id}/progress       所有分會投票進度
  *   PUT  /admin/rounds/{id}                票數上下限
  *   POST /admin/rounds/{id}/activate|close|confirm
  *   GET  /admin/divisions/officers         當選結果（會長／副會長）
@@ -136,7 +136,7 @@ function OfficerRow({
   )
 }
 
-/** 五區投票進度小卡 */
+/** 所有分會投票進度小卡 */
 function ProgressCard({ name, color, voted, total, pct }: {
   name: string
   color: string
@@ -326,7 +326,7 @@ export function RoundsPage() {
               選舉進程
             </p>
             <h2 className="mt-1.5 text-[20px] font-bold text-white font-serif leading-tight">
-              {target ? '分區會長選舉' : '尚未建立選舉進程'}
+              {target ? '分會會長選舉' : '尚未建立選舉進程'}
             </h2>
           </div>
           <div className="shrink-0 flex items-center gap-3">
@@ -397,7 +397,7 @@ export function RoundsPage() {
             </div>
           </div>
 
-          {/* 五區投票進度 */}
+          {/* 所有分會投票進度 */}
           <div className="mt-5 grid grid-cols-5 gap-3">
             {divisions.length === 0 && (
               <p className="col-span-5 py-6 text-center text-[12px] text-gray-deep">
@@ -431,7 +431,7 @@ export function RoundsPage() {
           }
           sub={
             <span className="block text-[12px] leading-5 text-gray">
-              各分區會長（第一名）／副會長（第二名）· 平票時請手動指派
+              各分會會長（第一名）／副會長（第二名）· 平票時請手動指派
             </span>
           }
           action={

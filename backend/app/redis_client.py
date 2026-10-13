@@ -21,10 +21,10 @@ def redis_ping() -> bool:
         return False
 
 
-# --- 計票 key 規範（分區級） ---
+# --- 計票 key 規範（分會級） ---
 # 票數: vote:count:{round_id}:{division_id}:{candidate_id}
 # 已投票人: vote:cast:{round_id}:{member_no}  (SET, 防重)
-# 分區已投票數: vote:division_cast:{round_id}:{division_id}
+# 分會已投票數: vote:division_cast:{round_id}:{division_id}
 # 輪次狀態快取: vote:round:{round_id}  (JSON: status, min, max)
 
 

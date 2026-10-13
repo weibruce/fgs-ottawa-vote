@@ -1,4 +1,4 @@
-"""候選人 CRUD 路由（按分區，需管理員認證）"""
+"""候選人 CRUD 路由（按分會，需管理員認證）"""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -40,12 +40,12 @@ def _to_admin_out(c: Candidate, div_names: dict[int, str], votes: dict[int, int]
 
 @router.get("", response_model=list[CandidateAdminOut])
 def list_candidates(
-    division_id: int | None = Query(None, description="按分區篩選"),
+    division_id: int | None = Query(None, description="按分會篩選"),
     round_id: int | None = Query(None, description="帶此參數時回傳各候選人在該輪次的得票數"),
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    """列出候選人（可按分區篩選；可附得票數）"""
+    """列出候選人（可按分會篩選；可附得票數）"""
     q = db.query(Candidate)
     if division_id is not None:
         q = q.filter(Candidate.division_id == division_id)
@@ -88,9 +88,9 @@ def _sync_names(data: dict) -> dict:
 def create_candidate(
     body: CandidateCreate, db: Session = Depends(get_db), _admin=Depends(get_current_admin)
 ):
-    """新增候選人（校驗分區存在）"""
+    """新增候選人（校驗分會存在）"""
     if db.get(Division, body.division_id) is None:
-        raise HTTPException(status_code=400, detail="分區不存在")
+        raise HTTPException(status_code=400, detail="分會不存在")
     cand = Candidate(**_sync_names(body.model_dump()))
     db.add(cand)
     db.commit()

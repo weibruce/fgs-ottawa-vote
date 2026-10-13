@@ -40,7 +40,7 @@ export function AppRouter() {
         <Route path="/vote/proxy" element={<ProxyPage />} />
         <Route path="/vote/results" element={<DivisionResultsPage />} />
 
-        {/* 五區總覽大屏（獨立全屏，不需登入） */}
+        {/* 所有分會總覽大屏（獨立全屏，不需登入） */}
         <Route path="/screen" element={<ScreenOverview />} />
 
         {/* 根路徑 → 投票入口 */}

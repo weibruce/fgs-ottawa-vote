@@ -13,7 +13,7 @@ class TieCandidateOut(BaseModel):
 
 
 class TieDivisionOut(BaseModel):
-    """有平票的分區"""
+    """有平票的分會"""
 
     division_id: int
     division_name: str
@@ -22,7 +22,7 @@ class TieDivisionOut(BaseModel):
 
 
 class DivisionProgressOut(BaseModel):
-    """單一分區的計票進度 + 平票偵測"""
+    """單一分會的計票進度 + 平票偵測"""
 
     division_id: int
     name: str
@@ -35,7 +35,7 @@ class DivisionProgressOut(BaseModel):
 
 
 class RoundProgressOut(BaseModel):
-    """輪次各分區進度"""
+    """輪次各分會進度"""
 
     round_id: int
     divisions: list[DivisionProgressOut] = Field(default_factory=list)

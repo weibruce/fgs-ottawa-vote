@@ -35,7 +35,7 @@ def confirm_identity(
     proxy_member_no: str = "",
 ) -> dict:
     """
-    姓名 + 卡號 → 簡繁匹配 → 確定分區 → 生成 voter_token
+    姓名 + 卡號 → 簡繁匹配 → 確定分會 → 生成 voter_token
     代投時**同時驗證代投人**的姓名 + 卡號（兩組都要正確）
     錯誤：404 卡號不存在 / 400 姓名不匹配 / 409 已投票 / 403 無權限(白名單)
     """
@@ -132,12 +132,12 @@ def confirm_identity(
         if member_no not in allowed:
             raise HTTPException(status_code=403, detail="您不在本輪投票白名單內")
 
-    # 6. 分區
+    # 6. 分會
     division = db.get(Division, member.division_id)
     if division is None:
-        raise HTTPException(status_code=500, detail="會員所屬分區資料錯誤")
+        raise HTTPException(status_code=500, detail="會員所屬分會資料錯誤")
 
-    # 7. 票數範圍（分區級覆蓋輪次級）
+    # 7. 票數範圍（分會級覆蓋輪次級）
     min_votes = division.min_votes if division.min_votes > 0 else rnd.min_votes
     max_votes = division.max_votes
 
@@ -145,7 +145,7 @@ def confirm_identity(
     token = _make_voter_token(member_no, member.division_id, round_id, is_proxy)
 
     # 8.5 候選人不可被委託（需求第 8 點）
-    #     該會員若是本輪任何分區的候選人，禁止別人替他代投
+    #     該會員若是本輪任何分會的候選人，禁止別人替他代投
     if is_proxy:
         is_candidate = (
             db.query(RoundCandidate)
@@ -183,6 +183,7 @@ def confirm_identity(
             "member_no": member_no,
             "division_id": member.division_id,
             "division_name": division.name,
+            "division_name_en": division.name_en or "",
             "is_proxy": is_proxy,
             "gender": member.gender,
             "phone": member.phone,
@@ -233,7 +234,7 @@ def submit_vote(
     proxy_member_no: str = "",
 ) -> dict:
     """
-    防重 + 票數校驗 + 分區校驗 + 輪次狀態校驗 → 事務寫 PG + Redis 計數
+    防重 + 票數校驗 + 分會校驗 + 輪次狀態校驗 → 事務寫 PG + Redis 計數
     """
     # 1. 解 token
     claims = _verify_voter_token(voter_token)
@@ -249,14 +250,14 @@ def submit_vote(
     if rnd is None or rnd.status != "active":
         raise HTTPException(status_code=400, detail="投票未開放")
 
-    # 3. 查會員（拿姓名 + 分區）
+    # 3. 查會員（拿姓名 + 分會）
     member = db.query(Member).filter(Member.member_no == token_member_no).first()
     if member is None:
         raise HTTPException(status_code=404, detail="會員不存在")
 
-    # 4. 分區校驗：token 分區 == 會員分區
+    # 4. 分會校驗：token 分會 == 會員分會
     if member.division_id != token_division_id:
-        raise HTTPException(status_code=403, detail="分區資訊不一致")
+        raise HTTPException(status_code=403, detail="分會資訊不一致")
 
     # 5. 票數校驗
     division = db.get(Division, member.division_id)
@@ -270,7 +271,7 @@ def submit_vote(
     if len(set(candidate_ids)) != len(candidate_ids):
         raise HTTPException(status_code=400, detail="不可重複選擇同一候選人")
 
-    # 6. 分區校驗：候選人全屬本分區
+    # 6. 分會校驗：候選人全屬本分會
     cands = (
         db.query(Candidate)
         .filter(Candidate.id.in_(candidate_ids))
@@ -344,7 +345,7 @@ def submit_vote(
         redis_client.delete(cast_key)
         raise HTTPException(status_code=500, detail="投票寫入失敗，請重試")
 
-    # 9. Redis 計數更新（分區級）
+    # 9. Redis 計數更新（分會級）
     try:
         pipe = redis_client.pipeline()
         for cid in candidate_ids:
@@ -362,10 +363,10 @@ def submit_vote(
     }
 
 
-# ============ 候選人名單（分區級，投票人用） ============
+# ============ 候選人名單（分會級，投票人用） ============
 def get_division_candidates(db: Session, round_id: int, division_id: int) -> dict:
     """
-    某輪次某分區的候選人名單 + 票數範圍
+    某輪次某分會的候選人名單 + 票數範圍
     前端投票頁（ChoosePage）載入
     """
     # 輪次
@@ -373,12 +374,12 @@ def get_division_candidates(db: Session, round_id: int, division_id: int) -> dic
     if rnd is None:
         raise HTTPException(status_code=404, detail="輪次不存在")
 
-    # 分區
+    # 分會
     div = db.get(Division, division_id)
     if div is None:
-        raise HTTPException(status_code=404, detail="分區不存在")
+        raise HTTPException(status_code=404, detail="分會不存在")
 
-    # 票數範圍（分區級覆蓋輪次級）
+    # 票數範圍（分會級覆蓋輪次級）
     min_votes = div.min_votes if div.min_votes > 0 else rnd.min_votes
     max_votes = div.max_votes
 
@@ -399,6 +400,7 @@ def get_division_candidates(db: Session, round_id: int, division_id: int) -> dic
         "division": {
             "id": div.id,
             "name": div.name,
+            "name_en": div.name_en or "",
             "code": div.code,
             "color": div.color,
             "min_votes": min_votes,
@@ -424,6 +426,7 @@ def get_division_candidates(db: Session, round_id: int, division_id: int) -> dic
                 "position": c.title,
                 "avatar_url": c.avatar_url or None,
                 "description": c.description or "",
+                "bio_en": c.bio_en or "",
                 "slogan": c.slogan or None,
                 "term_count": c.term_count,
                 "sort_order": c.sort_order,
@@ -437,8 +440,8 @@ def get_division_candidates(db: Session, round_id: int, division_id: int) -> dic
 
 # ============ 實時結果 ============
 def _division_result_dict(db: Session, rnd: Round, div: Division, round_id: int) -> dict:
-    """計算單分區結果（供 get_results / get_single_division_result / get_overview_results 共用）"""
-    # 本分區候選人（經輪次關聯）
+    """計算單分會結果（供 get_results / get_single_division_result / get_overview_results 共用）"""
+    # 本分會候選人（經輪次關聯）
     cands = (
         db.query(Candidate)
         .join(RoundCandidate, RoundCandidate.candidate_id == Candidate.id)
@@ -475,7 +478,7 @@ def _division_result_dict(db: Session, rnd: Round, div: Division, round_id: int)
             cand_votes = {c.id: _pg_candidate_votes(db, round_id, div.id, c.id) for c in cands}
             div_cast = pg_votes
 
-    # 本分區會員總數
+    # 本分會會員總數
     total_members = db.query(Member).filter(
         Member.division_id == div.id, Member.is_active == True
     ).count()
@@ -487,6 +490,7 @@ def _division_result_dict(db: Session, rnd: Round, div: Division, round_id: int)
         "division": {
             "id": div.id,
             "name": div.name,
+            "name_en": div.name_en or "",
             "code": div.code,
             "color": div.color,
             "min_votes": div.min_votes if div.min_votes > 0 else rnd.min_votes,
@@ -517,7 +521,7 @@ def _division_result_dict(db: Session, rnd: Round, div: Division, round_id: int)
 
 def get_results(db: Session, round_id: int) -> dict:
     """
-    五區彙總結果（GET /votes/results/{round_id}）
+    所有分會彙總結果（GET /votes/results/{round_id}）
     回傳型別：ResultsResponse（divisions: list[DivisionResult 扁平型）
     """
     rnd = db.get(Round, round_id)
@@ -528,7 +532,7 @@ def get_results(db: Session, round_id: int) -> dict:
 
     results = []
     for div in divisions:
-        # 本分區候選人
+        # 本分會候選人
         cands = (
             db.query(Candidate)
             .join(RoundCandidate, RoundCandidate.candidate_id == Candidate.id)
@@ -603,7 +607,7 @@ def get_results(db: Session, round_id: int) -> dict:
 
 def get_single_division_result(db: Session, round_id: int, division_id: int) -> dict:
     """
-    單分區結果（GET /votes/results?round_id=N&division_id=M）
+    單分會結果（GET /votes/results?round_id=N&division_id=M）
     回傳型別：FrontendDivisionResult（嵌套 division 物件）
     """
     rnd = db.get(Round, round_id)
@@ -611,13 +615,13 @@ def get_single_division_result(db: Session, round_id: int, division_id: int) -> 
         raise HTTPException(status_code=404, detail="輪次不存在")
     div = db.get(Division, division_id)
     if div is None:
-        raise HTTPException(status_code=404, detail="分區不存在")
+        raise HTTPException(status_code=404, detail="分會不存在")
     return _division_result_dict(db, rnd, div, round_id)
 
 
 def get_overview_results(db: Session, round_id: int) -> dict:
     """
-    五區彙總（GET /votes/results?round_id=N）
+    所有分會彙總（GET /votes/results?round_id=N）
     回傳型別：OverviewResult（divisions: list[FrontendDivisionResult 嵌套型）
     """
     rnd = db.get(Round, round_id)
@@ -676,6 +680,7 @@ def get_profile(db: Session, voter_token: str) -> dict:
         "surname": member.surname,
         "division_id": member.division_id,
         "division_name": division.name if division else "",
+        "division_name_en": (division.name_en or "") if division else "",
         "gender": member.gender,
         "phone": member.phone,
         "email": member.email,
@@ -695,7 +700,7 @@ def update_profile(
     """
     投票人更新**自己的**聯絡資料。
     只允許改 gender / phone / email / address；
-    姓名、卡號、所屬分區一律不可由此端點變更（身分識別欄位）。
+    姓名、卡號、所屬分會一律不可由此端點變更（身分識別欄位）。
     """
     claims = _verify_voter_token(voter_token)
     member_no = claims.get("member_no")
@@ -719,6 +724,7 @@ def update_profile(
         "surname": member.surname,
         "division_id": member.division_id,
         "division_name": division.name if division else "",
+        "division_name_en": (division.name_en or "") if division else "",
         "gender": member.gender,
         "phone": member.phone,
         "email": member.email,

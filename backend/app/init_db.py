@@ -1,11 +1,11 @@
-"""初始化資料庫 — 建立預設管理員 + 五個分區
+"""初始化資料庫 — 建立預設管理員 + 五個分會
 執行: .venv/bin/python -m app.init_db
 """
 from app.database import SessionLocal, engine, Base
 from app.models import Admin, Division
 from app.services.auth import hash_password
 
-# 五區預設配置
+# 所有分會預設配置
 DIVISIONS = [
     {"code": "east", "name": "東區", "min_votes": 1, "max_votes": 2, "color": "#C41E24", "sort_order": 1},
     {"code": "south", "name": "南區", "min_votes": 1, "max_votes": 2, "color": "#D98E04", "sort_order": 2},
@@ -40,14 +40,14 @@ def init():
         else:
             print(f"  · 管理員 {DEFAULT_ADMIN_USER} 已存在")
 
-        # 五區
+        # 所有分會
         for div_data in DIVISIONS:
             div = db.query(Division).filter(Division.code == div_data["code"]).first()
             if div is None:
                 db.add(Division(**div_data))
-                print(f"  ✓ 建立分區 {div_data['name']} ({div_data['code']})")
+                print(f"  ✓ 建立分會 {div_data['name']} ({div_data['code']})")
             else:
-                print(f"  · 分區 {div_data['name']} 已存在")
+                print(f"  · 分會 {div_data['name']} 已存在")
 
         db.commit()
         print("=== 初始化完成 ===")

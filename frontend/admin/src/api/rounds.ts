@@ -38,7 +38,7 @@ export async function resetRound(id: number): Promise<RoundOut> {
   return http.post<RoundOut>(`/admin/rounds/${id}/reset`)
 }
 
-/** 各分區投票進度 + 平票偵測 */
+/** 各分會投票進度 + 平票偵測 */
 export async function fetchRoundProgress(id: number): Promise<RoundProgress> {
   return http.get<RoundProgress>(`/admin/rounds/${id}/progress`)
 }

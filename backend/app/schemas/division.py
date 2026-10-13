@@ -1,11 +1,12 @@
-"""分區 schema（CRUD 請求/響應）"""
+"""分會 schema（CRUD 請求/響應）"""
 from datetime import datetime
 from pydantic import BaseModel, Field
 
 
 class DivisionBase(BaseModel):
     code: str = Field(..., min_length=1, max_length=32, description="區代碼 east/south/west/north/central")
-    name: str = Field(..., min_length=1, max_length=64, description="區名 東區/南區/...")
+    name: str = Field(..., min_length=1, max_length=64, description="分會名稱（中文）")
+    name_en: str = Field("", max_length=64, description="分會英文名稱；英文介面顯示用")
     min_votes: int = Field(1, ge=0, le=10)
     max_votes: int = Field(2, ge=1, le=10)
     opens_at: datetime | None = None
@@ -21,6 +22,7 @@ class DivisionCreate(DivisionBase):
 
 class DivisionUpdate(BaseModel):
     name: str | None = None
+    name_en: str | None = None
     min_votes: int | None = Field(None, ge=0, le=10)
     max_votes: int | None = Field(None, ge=1, le=10)
     opens_at: datetime | None = None
@@ -36,7 +38,7 @@ class DivisionOut(DivisionBase):
 
 
 class DivisionOverviewOut(DivisionOut):
-    """分區管理頁卡片用：附統計與當前輪次狀態"""
+    """分會管理頁卡片用：附統計與當前輪次狀態"""
 
     member_count: int = 0
     candidate_count: int = 0

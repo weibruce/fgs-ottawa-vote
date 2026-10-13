@@ -3,7 +3,7 @@
  *
  * 設計稿沒有此頁，沿用投票端設計語言（與 P2 身份核驗完成同一節奏）：
  * 單張卡片 → 置中金圈圖示（主紅勾）→ 主紅小字 → 襯線大名
- * → 淺米底資訊框（所屬分區 / 代理投票）→ 主紅主按鈕 + 描邊次按鈕 → 底部小字。
+ * → 淺米底資訊框（所屬分會 / 代理投票）→ 主紅主按鈕 + 描邊次按鈕 → 底部小字。
  * 無 session 一律回 /vote/verify。
  */
 import { useEffect, useState } from 'react'
@@ -16,7 +16,7 @@ import { useI18n } from '../i18n'
 export function SuccessPage() {
   const navigate = useNavigate()
   const { session } = useVoteStore()
-  const { t, nameOf } = useI18n()
+  const { t, nameOf, divisionOf } = useI18n()
 
   /** 投票視窗閘門：輪次非 active → 一律導到 /vote/window（第 6 點） */
   const [windowActive, setWindowActive] = useState<boolean | null>(null)
@@ -72,7 +72,7 @@ export function SuccessPage() {
 
         {/* ── 資訊框（對齊設計稿 02：與頁面同色底 + 淡金邊） ── */}
         <div className="mt-[24px] space-y-[13px] rounded-[12px] border border-[#E3D8C2] bg-cream px-[16px] py-[26px]">
-          <InfoRow label={t('confirmed.divisionLabel')} value={voter.division_name} />
+          <InfoRow label={t('confirmed.divisionLabel')} value={divisionOf(voter)} />
           <InfoRow
             label={t('confirmed.proxyLabel')}
             value={voter.is_proxy ? t('common.yes') : t('common.no')}

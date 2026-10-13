@@ -1,10 +1,10 @@
 /**
- * P5 投票結果（單分區即時統計）— 1:1 對齊設計稿 docs/ui/voting/voting_system_05.png
- * route: /vote/results（可用 ?division={id} 指定分區）
+ * P5 投票結果（單分會即時統計）— 1:1 對齊設計稿 docs/ui/voting/voting_system_05.png
+ * route: /vote/results（可用 ?division={id} 指定分會）
  *
  * 資料：GET /votes/results?round_id&division_id，每 2 秒輪詢（失敗保留上次畫面）
- * 分區：投票人 session（useVoteStore）；session 不存在時退回
- *      GET /votes/round/active 取當前投票的第一個分區
+ * 分會：投票人 session（useVoteStore）；session 不存在時退回
+ *      GET /votes/round/active 取當前投票的第一個分會
  *
  * 設計稿量測（416×647，卡片 y29–619 / x27–385）：
  *   進度區塊 y172–267（96px，內距 15）、領先列 y287–370（84px）、列高 59px、
@@ -181,11 +181,11 @@ function ResultRow({
 export function DivisionResultsPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const { t, translateError, nameOf } = useI18n()
+  const { t, translateError, nameOf, divisionOf } = useI18n()
   const { session } = useVoteStore()
   const paramDivision = Number(params.get('division') || 0)
 
-  // 無 session 時的後備分區（公開端點）
+  // 無 session 時的後備分會（公開端點）
   const [round, setRound] = useState<RoundPublicInfo | null>(null)
   useEffect(() => {
     let alive = true
@@ -226,7 +226,7 @@ export function DivisionResultsPage() {
   const maxVotes = results.reduce((m, r) => Math.max(m, r.votes), 0)
   const turnout = total > 0 ? (voted / total) * 100 : 0
 
-  // 結果 API 沒有頭像欄位 → 由同分區候選人名單補 id → avatar_url 對照（抓不到就退回姓氏圓形）
+  // 結果 API 沒有頭像欄位 → 由同分會候選人名單補 id → avatar_url 對照（抓不到就退回姓氏圓形）
   const [avatars, setAvatars] = useState<Record<number, string | null>>({})
   useEffect(() => {
     if (!ready) return
@@ -255,8 +255,8 @@ export function DivisionResultsPage() {
   const rest = ranked.filter((r) => !topIds.has(r.candidate_id))
 
   const divisionName =
-    data?.division.name ||
-    session?.voter.division_name ||
+    divisionOf(data?.division) ||
+    divisionOf(session?.voter) ||
     round?.divisions.find((d) => d.id === divisionId)?.name ||
     t('results.thisDivision')
 

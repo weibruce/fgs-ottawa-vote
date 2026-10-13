@@ -1,10 +1,10 @@
-"""候選人 schema（按分區 CRUD）"""
+"""候選人 schema（按分會 CRUD）"""
 from datetime import datetime
 from pydantic import BaseModel, Field
 
 
 class CandidateBase(BaseModel):
-    division_id: int = Field(..., description="所屬分區 ID")
+    division_id: int = Field(..., description="所屬分會 ID")
     # 姓名：中文只給一邊即可，後端會自動同步繁簡；英文可只給 givenname/surname
     name: str = Field("", max_length=128, description="姓名（繁）；留空時由簡體轉出")
     name_simp: str = Field("", max_length=128, description="姓名（簡）；留空時由繁體轉出")
@@ -16,7 +16,8 @@ class CandidateBase(BaseModel):
     title: str = Field("", max_length=128, description="職位")
     avatar_url: str = Field("", max_length=512, description="照片")
     slogan: str = Field("", max_length=200, description="競選宣言")
-    description: str = Field("", description="個人介紹")
+    description: str = Field("", description="個人介紹（中文）")
+    bio_en: str = Field("", description="個人介紹（英文版）")
     term_count: int = Field(0, ge=0, description="已任屆數")
     phone: str = Field("", max_length=32)
     email: str = Field("", max_length=254)
@@ -48,6 +49,7 @@ class CandidateUpdate(BaseModel):
     avatar_url: str | None = None
     slogan: str | None = None
     description: str | None = None
+    bio_en: str | None = None
     term_count: int | None = Field(None, ge=0)
     phone: str | None = None
     email: str | None = None

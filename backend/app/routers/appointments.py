@@ -2,7 +2,7 @@
 
 契約：docs/05_api_contract.md 第 7 節 /admin/appointments
 - GET    /admin/appointments?division_id=   名單（含 division_name）
-- GET    /admin/appointments/summary        五區彙總
+- GET    /admin/appointments/summary        所有分會彙總
 - POST   /admin/appointments                新增
 - PUT    /admin/appointments/{id}           修改（已確認 → 409）
 - DELETE /admin/appointments/{id}           刪除（已確認 → 409）
@@ -53,11 +53,11 @@ def _ensure_editable(appt: Appointment) -> None:
 
 @router.get("", response_model=list[AppointmentOut])
 def list_appointments(
-    division_id: int | None = Query(None, description="按分區篩選，不帶則全部"),
+    division_id: int | None = Query(None, description="按分會篩選，不帶則全部"),
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    """列出幹部指派（可按分區篩選）"""
+    """列出幹部指派（可按分會篩選）"""
     q = db.query(Appointment)
     if division_id is not None:
         q = q.filter(Appointment.division_id == division_id)
@@ -71,7 +71,7 @@ def appointment_summary(
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    """五區彙總：會長／副會長（取自 position）＋ 已指派數＋是否已確認"""
+    """所有分會彙總：會長／副會長（取自 position）＋ 已指派數＋是否已確認"""
     divisions = db.query(Division).order_by(Division.sort_order, Division.id).all()
     rows = db.query(Appointment).order_by(Appointment.division_id, Appointment.id).all()
 
@@ -108,9 +108,9 @@ def create_appointment(
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    """新增幹部指派（校驗分區存在）"""
+    """新增幹部指派（校驗分會存在）"""
     if db.get(Division, body.division_id) is None:
-        raise HTTPException(status_code=400, detail="分區不存在")
+        raise HTTPException(status_code=400, detail="分會不存在")
     appt = Appointment(**body.model_dump())
     db.add(appt)
     db.commit()
@@ -131,7 +131,7 @@ def update_appointment(
 
     patch = body.model_dump(exclude_unset=True)
     if patch.get("division_id") is not None and db.get(Division, patch["division_id"]) is None:
-        raise HTTPException(status_code=400, detail="分區不存在")
+        raise HTTPException(status_code=400, detail="分會不存在")
     for field, value in patch.items():
         setattr(appt, field, value)
     db.commit()
@@ -166,7 +166,7 @@ def confirm_appointments(
     if division_id is not None:
         division = db.get(Division, division_id)
         if division is None:
-            raise HTTPException(status_code=400, detail="分區不存在")
+            raise HTTPException(status_code=400, detail="分會不存在")
         q = q.filter(Appointment.division_id == division_id)
         scope = division.name
     count = q.update({Appointment.is_confirmed: True}, synchronize_session=False)

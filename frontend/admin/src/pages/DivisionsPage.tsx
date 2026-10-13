@@ -1,5 +1,5 @@
 /**
- * 分區管理 —— 1:1 對齊參考稿 docs/ui/admin/voting_system_dashboard_02.png
+ * 分會管理 —— 1:1 對齊參考稿 docs/ui/admin/voting_system_dashboard_02.png
  *
  * 幾何（量測自參考稿，1920×940 CSS px、DPR=1）：
  *   內容區左緣 x=288（側欄 256 + padding 32）
@@ -29,6 +29,7 @@ interface DivisionCardData {
   id: number
   code: string
   name: string
+  nameEn: string
   color: string
   members: number
   candidates: number
@@ -49,6 +50,7 @@ function toCardData(d: DivisionOverview): DivisionCardData {
     id: d.id,
     code: d.code,
     name: d.name,
+    nameEn: d.name_en ?? '',
     color: d.color,
     members: d.member_count,
     candidates: d.candidate_count,
@@ -67,7 +69,7 @@ const STAT_FIELDS: { key: StatKey; label: string; accent?: boolean }[] = [
   { key: 'voted', label: '已投票', accent: true }, // 參考稿三格中僅此格用主色
 ]
 
-/** 分區狀態 → 樣式（接 API 後以同一組狀態碼對應） */
+/** 分會狀態 → 樣式（接 API 後以同一組狀態碼對應） */
 const STATUS_TONE: Record<string, string> = {
   進行中: 'bg-[#D1FAE5] text-[#047857]',
 }
@@ -125,23 +127,24 @@ export function DivisionsPage() {
     )
   }
 
-  /** 新增或更新分區（呼叫後端後重新載入） */
+  /** 新增或更新分會（呼叫後端後重新載入） */
   const save = async (d: DivisionCardData) => {
     try {
       const body = {
         code: d.code,
         name: d.name,
+        name_en: d.nameEn,
         color: d.color,
         min_votes: 1,
         max_votes: 2,
         sort_order: rows.findIndex((r) => r.id === d.id),
       }
       if (editing) {
-        await updateDivision(d.id, { name: d.name, color: d.color })
-        flash('分區已更新')
+        await updateDivision(d.id, { name: d.name, name_en: d.nameEn, color: d.color })
+        flash('分會已更新')
       } else {
         await createDivision(body)
-        flash('分區已新增')
+        flash('分會已新增')
       }
       setShowModal(false)
       await reload()
@@ -154,7 +157,7 @@ export function DivisionsPage() {
     if (!window.confirm(`確定刪除 ${d.name}？`)) return
     try {
       await deleteDivision(d.id)
-      flash('分區已刪除')
+      flash('分會已刪除')
       setShowModal(false)
       await reload()
     } catch (e) {
@@ -163,7 +166,7 @@ export function DivisionsPage() {
   }
 
   return (
-    <AdminLayout title="分區管理">
+    <AdminLayout title="分會管理">
       {/* 參考稿說明列為 36px 高、距卡片 24px；共用 PageIntro 為 38px + 20px，
           故整列上移 1px，並在卡片格補 3px 讓卡片頂端落在 y=155 */}
       <div className="-mt-px">
@@ -171,18 +174,18 @@ export function DivisionsPage() {
           actions={
             <Button onClick={startAdd} className="h-9">
               <IconPlus size={17} />
-              新增分區
+              新增分會
             </Button>
           }
         >
-          維護五分區基本設定、投票視窗、票數限制
+          維護五分會基本設定、投票視窗、票數限制
         </PageIntro>
       </div>
 
       <div className="grid grid-cols-2 gap-4 pt-[3px]">
         {error && (
           <div className="col-span-2 rounded-lg border border-danger/30 bg-danger-bg px-4 py-3 text-[14px] text-danger">
-            載入分區失敗：{error}
+            載入分會失敗：{error}
           </div>
         )}
         {loading && rows.length === 0 && (
@@ -219,7 +222,7 @@ export function DivisionsPage() {
   )
 }
 
-/* ── 單張分區卡 ── */
+/* ── 單張分會卡 ── */
 
 function DivisionCard({
   division,
@@ -316,7 +319,7 @@ function DivisionCard({
   )
 }
 
-/* ── 新增／編輯分區（參考稿未顯示，維持既有功能） ── */
+/* ── 新增／編輯分會（參考稿未顯示，維持既有功能） ── */
 
 function DivisionModal({
   initial,
@@ -330,6 +333,7 @@ function DivisionModal({
   onDelete: (d: DivisionCardData) => void
 }) {
   const [name, setName] = useState(initial?.name ?? '')
+  const [nameEn, setNameEn] = useState(initial?.nameEn ?? '')
   const [code, setCode] = useState(initial?.code ?? '')
   const [color, setColor] = useState(initial?.color ?? '#8B1A1A')
 
@@ -339,6 +343,7 @@ function DivisionModal({
       id: initial?.id ?? Date.now(),
       code: code.trim().toLowerCase(),
       name: name.trim(),
+      nameEn: nameEn.trim(),
       color: color.toUpperCase(),
       members: initial?.members ?? 0,
       candidates: initial?.candidates ?? 0,
@@ -358,11 +363,11 @@ function DivisionModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-[18px] font-bold text-ink leading-none">
-          {initial ? '編輯分區' : '新增分區'}
+          {initial ? '編輯分會' : '新增分會'}
         </h3>
 
         <div className="mt-6 space-y-5">
-          <Field label="分區名稱">
+          <Field label="分會名稱">
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -371,7 +376,16 @@ function DivisionModal({
             />
           </Field>
 
-          <Field label="分區代號">
+          <Field label="分會英文名稱">
+            <input
+              value={nameEn}
+              onChange={(e) => setNameEn(e.target.value)}
+              placeholder="例如：East Chapter"
+              className="ui-input"
+            />
+          </Field>
+
+          <Field label="分會代號">
             <input
               value={code}
               onChange={(e) => setCode(e.target.value)}
@@ -413,7 +427,7 @@ function DivisionModal({
           <Button variant="outline" onClick={onClose}>
             取消
           </Button>
-          <Button onClick={submit}>{initial ? '儲存修改' : '新增分區'}</Button>
+          <Button onClick={submit}>{initial ? '儲存修改' : '新增分會'}</Button>
         </div>
       </div>
     </div>

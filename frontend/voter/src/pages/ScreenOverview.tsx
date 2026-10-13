@@ -1,13 +1,13 @@
 /**
- * P6 各分區投票狀態（五區即時總覽大屏）— 1:1 對齊設計稿 docs/ui/voting/voting_system_06.png
+ * P6 各分會投票狀態（所有分會即時總覽大屏）— 1:1 對齊設計稿 docs/ui/voting/voting_system_06.png
  * route: /screen（截圖代號 06_screen）— 獨立大屏，不需投票人 session
  *
  * 當前投票：GET /votes/round/active（公開端點）
- * 資料：GET /votes/results?round_id=N（五區彙總），每 3 秒輪詢；失敗保留上次畫面
+ * 資料：GET /votes/results?round_id=N（所有分會彙總），每 3 秒輪詢；失敗保留上次畫面
  *
  * 設計稿量測（415×808）：
  *   卡片 x25–384 / y24–774（內距 16）、標題 30px 襯線、小字 12px、
- *   分區區塊 324×170（淡金框 + 淡金底、圓角 12、內距 13、區塊間距 12）、
+ *   分會區塊 324×170（淡金框 + 淡金底、圓角 12、內距 13、區塊間距 12）、
  *   候選人列 13px（第一名主紅、其餘灰）、進度條高 6px（設計稿無可見軌道）
  */
 import { useCallback, useEffect, useState } from 'react'
@@ -78,7 +78,7 @@ export function ScreenOverview() {
       .catch((e: AxiosError<ApiError>) => setRoundError(translateError(messageForError(e))))
   }, [translateError])
 
-  // 五區彙總（3 秒輪詢；usePolling 於失敗時保留上次 data，不清空畫面）
+  // 所有分會彙總（3 秒輪詢；usePolling 於失敗時保留上次 data，不清空畫面）
   const { data, error, refresh } = usePolling<OverviewResult>(
     () =>
       getOverviewResults(round!.id)
@@ -101,7 +101,7 @@ export function ScreenOverview() {
     <VoteShell>
       <section className="vote-card-body px-4 pt-[26px] pb-6">
         {/* ── 頁首 ── */}
-        <p className="text-[12px] leading-[16px] font-bold text-primary">五區即時總覽</p>
+        <p className="text-[12px] leading-[16px] font-bold text-primary">所有分會即時總覽</p>
         <h1 className="mt-[5px] font-serif text-[30px] leading-[36px] font-bold text-ink">
           {t('screen.heading')}
         </h1>
@@ -109,7 +109,7 @@ export function ScreenOverview() {
 
         <div className="mt-[13px] h-px w-full bg-gold/50" />
 
-        {/* ── 五區區塊 ── */}
+        {/* ── 所有分會區塊 ── */}
         <div className="mt-[16px] space-y-[12px]">
           {divisions.map((div) => (
             <DivisionBlock key={div.division.id} data={div} />
@@ -141,13 +141,13 @@ export function ScreenOverview() {
 }
 
 /**
- * 單一分區區塊 — 淡金底 + 淡金框 + 圓角 12 + 內距 13
+ * 單一分會區塊 — 淡金底 + 淡金框 + 圓角 12 + 內距 13
  * 上列：區名（16px 粗體深墨）＋ 右側「已投 / 總人數 人」
  * 下列：全部候選人（序號 + 姓名 + 票數 + 進度條）；第 1／2 名額外顯示長方形頭像
  * 整塊可點擊 → /vote/results?division={id}（Enter / Space 亦可）
  */
 function DivisionBlock({ data }: { data: DivisionResult }) {
-  const { t, nameOf } = useI18n()
+  const { t, nameOf, divisionOf } = useI18n()
   const navigate = useNavigate()
   const { division, voted_count, total_count, results } = data
   // 依票數高→低排序；顯示**全部**候選人（後端已回傳全部）
@@ -161,7 +161,7 @@ function DivisionBlock({ data }: { data: DivisionResult }) {
       role="button"
       tabIndex={0}
       data-division-card={division.id}
-      aria-label={t('screen.openDivision', { division: division.name })}
+      aria-label={t('screen.openDivision', { division: divisionOf(division) })}
       onClick={openResults}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -173,7 +173,7 @@ function DivisionBlock({ data }: { data: DivisionResult }) {
     >
       {/* 上列 */}
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[16px] leading-[24px] font-bold text-ink">{division.name}</span>
+        <span className="text-[16px] leading-[24px] font-bold text-ink">{divisionOf(division)}</span>
         <span className="shrink-0 text-[12px] leading-[24px] text-gray">
           {t('common.people', { voted: voted_count, total: total_count })}
         </span>

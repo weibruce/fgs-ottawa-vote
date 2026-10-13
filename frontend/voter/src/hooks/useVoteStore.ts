@@ -64,7 +64,7 @@ export function useVoteStore() {
   return { session, save, reset }
 }
 
-/** 工具：從 session 取分區 id */
+/** 工具：從 session 取分會 id */
 export function sessionDivisionId(s: VoteSession | null): number | null {
   return s ? s.voter.division_id : null
 }

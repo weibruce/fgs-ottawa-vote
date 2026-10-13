@@ -29,6 +29,7 @@ class VoterInfo(BaseModel):
     member_no: str
     division_id: int
     division_name: str
+    division_name_en: str = ""
     is_proxy: bool
     # 聯絡資料（個人資料更新頁需要預填，否則整批覆寫會清空）
     gender: str = ""
@@ -80,7 +81,7 @@ class SubmitVoteResponse(BaseModel):
     votes_cast: int
 
 
-# --- 候選人名單（分區級，投票人用） ---
+# --- 候選人名單（分會級，投票人用） ---
 class CandidateOut(BaseModel):
     id: int
     division_id: int
@@ -97,6 +98,7 @@ class CandidateOut(BaseModel):
     position: str
     avatar_url: str | None = None
     description: str
+    bio_en: str = ""
     slogan: str | None = None
     term_count: int
     sort_order: int
@@ -105,6 +107,7 @@ class CandidateOut(BaseModel):
 class DivisionOut(BaseModel):
     id: int
     name: str
+    name_en: str = ""
     code: str
     color: str
     min_votes: int
@@ -173,13 +176,13 @@ class FrontendDivisionResult(BaseModel):
 
 
 class OverviewResult(BaseModel):
-    """GET /votes/results?round_id=N 回傳（五區彙總）"""
+    """GET /votes/results?round_id=N 回傳（所有分會彙總）"""
     round_id: int
     divisions: list[FrontendDivisionResult]
 
 
 class DivisionResultsResponse(BaseModel):
-    """GET /votes/results?round_id=N&division_id=M 回傳（單分區）"""
+    """GET /votes/results?round_id=N&division_id=M 回傳（單分會）"""
     division: FrontendDivisionResult
 
 

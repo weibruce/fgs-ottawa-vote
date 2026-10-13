@@ -70,7 +70,7 @@ const HEAD_STATS = 'px-5 pt-[20px] pb-[24px] -mb-[18px]' // 標題 14px、標題
 /* ── 頁面 ── */
 
 export function VoteConfigPage() {
-  // 進程（當前 active）、系統設定（入口連結）、分區進度、儀表板（代理投票數）
+  // 進程（當前 active）、系統設定（入口連結）、分會進度、儀表板（代理投票數）
   const { data, error: loadError, reload } = useAsync(async () => {
     const [rounds, settings, divisions, summary] = await Promise.all([
       listRounds(),
@@ -296,7 +296,7 @@ export function VoteConfigPage() {
               title={<span className="text-[18px] leading-none">統一投票入口</span>}
               sub={
                 <span className="block leading-none" style={{ marginTop: 11 }}>
-                  五區共用同一連結/二維碼
+                  所有分會共用同一連結/二維碼
                 </span>
               }
             />

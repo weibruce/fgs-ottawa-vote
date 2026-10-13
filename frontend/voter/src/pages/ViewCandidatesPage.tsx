@@ -1,7 +1,7 @@
 /**
  * P3-6 查看候選人信息（route /vote/candidates）
  *
- * 獨立頁面：唯讀瀏覽當前分區的全部候選人，與 ChoosePage 的投票選取邏輯完全無關。
+ * 獨立頁面：唯讀瀏覽當前分會的全部候選人，與 ChoosePage 的投票選取邏輯完全無關。
  *   - 沒有任何 input[type=radio]／選取圓標／data-selected
  *   - 沒有「已選 N/M 票」、沒有「確認投票」按鈕
  *   - 標題 viewCandidates.heading、提示列 viewCandidates.banner
@@ -21,14 +21,14 @@ import type { AxiosError } from 'axios'
 import { VoteShell } from '../components/VoteShell'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { getActiveRound, getDivisionCandidates, messageForError } from '../api/client'
-import { pickName, useI18n } from '../i18n'
+import {useI18n} from '../i18n'
 import { useVoteStore } from '../hooks/useVoteStore'
 import type { ApiError, Candidate, DivisionCandidates } from '../types'
 
 export function ViewCandidatesPage() {
   const navigate = useNavigate()
   const { session } = useVoteStore()
-  const { t, translateError, nameOf } = useI18n()
+  const { t, translateError, nameOf, divisionOf } = useI18n()
 
   const divisionId = session?.voter.division_id ?? 0
   const roundId = session?.round_id ?? 0
@@ -100,7 +100,7 @@ export function ViewCandidatesPage() {
   // 狀態非 active → 轉往投票視窗狀態頁（閘門）
   if (windowActive === false) return <Navigate to="/vote/window" replace />
 
-  const divisionName = data?.division.name ?? session.voter.division_name
+  const divisionName = divisionOf(data?.division ?? session.voter)
 
   return (
     <VoteShell>
@@ -181,13 +181,11 @@ function ViewCandidateCard({
   candidate: Candidate
   onOpen: () => void
 }) {
-  const { t, nameOf } = useI18n()
-  const displayName = nameOf(candidate)
+  const { t, nameLines } = useI18n()
+  const { primary: displayName, secondary: englishLine } = nameLines(candidate)
   const initial = displayName.trim().charAt(0)
-  // 次要行：英文名（資料，不翻譯）；英文模式下主名即英文，改用「職位 · 屆數」避免重複
-  const englishName = pickName('en', candidate)
   const secondary =
-    (englishName && englishName !== displayName ? englishName : '') ||
+    englishLine ||
     t('choose.secondaryTerms', { position: candidate.position, n: candidate.term_count })
 
   return (

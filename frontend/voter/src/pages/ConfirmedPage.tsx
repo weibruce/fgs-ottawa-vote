@@ -11,7 +11,7 @@
  *   按鈕 y440–487（h48）、卡片 pt75 / pb76。
  *
  * 本批（VOTE7 第 2、3 點）：
- *   資訊框只留會員卡號、所屬分區（第 5 點既有）。
+ *   資訊框只留會員卡號、所屬分會（第 5 點既有）。
  *   四顆按鈕全部改用 .vote-btn，以 2×2 grid 排列，順序為：
  *     ① 開始投票／查看我的投票（依 session.already_voted 切換文案與目的地：
  *        未投票 → /vote/choose；已投票 → /vote/choose?view=1 唯讀查看）
@@ -33,7 +33,7 @@ import { getActiveRound } from '../api/client'
 export function ConfirmedPage() {
   const navigate = useNavigate()
   const { session } = useVoteStore()
-  const { t, nameOf } = useI18n()
+  const { t, nameOf, divisionOf } = useI18n()
 
   // 第 6 點閘門：null = 查詢中（先照常顯示），false = 非 active（轉往視窗頁）
   const [windowActive, setWindowActive] = useState<boolean | null>(null)
@@ -87,11 +87,11 @@ export function ConfirmedPage() {
           {nameOf(voter)}
         </h1>
 
-        {/* ── 淺米底資訊框（第 5 點：只留會員卡號、所屬分區） ── */}
+        {/* ── 淺米底資訊框（第 5 點：只留會員卡號、所屬分會） ── */}
         {/* label 欄以 max-content 撐開（中文最小 74px 與設計稿一致；英文長 label 不換行） */}
         <dl className="mt-[18px] grid w-full grid-cols-[max-content_1fr] items-center gap-x-[14px] gap-y-[13px] rounded-[12px] border border-[#e3d8c2] bg-cream px-[14px] pt-[36px] pb-[34px]">
           <InfoRow label={t('confirmed.cardLabel')} value={voter.member_no} />
-          <InfoRow label={t('confirmed.divisionLabel')} value={voter.division_name} />
+          <InfoRow label={t('confirmed.divisionLabel')} value={divisionOf(voter)} />
         </dl>
 
         {/* ── 代投提示框（第 3 點：淡金底 + 淡金邊，僅代投時額外顯示） ── */}
@@ -99,7 +99,7 @@ export function ConfirmedPage() {
           <div className="mt-[16px] w-full rounded-[12px] border border-[#E3D8C2] bg-intro px-[16px] py-[16px]">
             <p className="text-[13px] leading-[22px] text-ink">
               {t('confirmed.proxyNoticeTitle', {
-                division: voter.division_name,
+                division: divisionOf(voter),
                 name: nameOf(voter),
                 no: voter.member_no,
               })}

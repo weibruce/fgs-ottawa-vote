@@ -24,7 +24,7 @@ import {
 
 const NAV = [
   { to: '/', label: '儀表板', Icon: IconDashboard },
-  { to: '/divisions', label: '分區管理', Icon: IconMapPin },
+  { to: '/divisions', label: '分會管理', Icon: IconMapPin },
   { to: '/candidates', label: '候選人管理', Icon: IconCandidate },
   { to: '/members', label: '會員名單', Icon: IconMembers },
   { to: '/vote-config', label: '投票配置', Icon: IconVoteConfig },

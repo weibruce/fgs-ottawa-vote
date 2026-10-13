@@ -11,7 +11,7 @@ class MemberCreate(BaseModel):
     name_simp: str = Field("", max_length=128, description="姓名（簡）；留空時由繁體轉出")
     givenname: str = Field("", max_length=128)
     surname: str = Field("", max_length=128)
-    division_id: int = Field(..., description="所屬分區 ID")
+    division_id: int = Field(..., description="所屬分會 ID")
     gender: str = Field("", max_length=16, description="性別")
     phone: str = Field("", max_length=32, description="手機號")
     email: str = Field("", max_length=254)

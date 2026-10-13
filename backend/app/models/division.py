@@ -1,4 +1,4 @@
-"""分區模型（五區：東/南/西/北/中）"""
+"""分會模型（五個分會：東/南/西/北/中）"""
 from datetime import datetime
 from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -11,7 +11,8 @@ class Division(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     # 區代碼（east/south/west/north/central）
     code: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
-    name: Mapped[str] = mapped_column(String(64), nullable=False)  # 東區/南區/...
+    name: Mapped[str] = mapped_column(String(64), nullable=False)  # 分會名稱（中文）
+    name_en: Mapped[str] = mapped_column(String(64), default="")  # 分會英文名稱
     # 每區每人可投票數範圍
     min_votes: Mapped[int] = mapped_column(Integer, default=1)
     max_votes: Mapped[int] = mapped_column(Integer, default=2)

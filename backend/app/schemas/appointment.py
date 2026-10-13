@@ -1,10 +1,10 @@
-"""幹部指派 schema（按分區 CRUD + 彙總 + 確認鎖定）"""
+"""幹部指派 schema（按分會 CRUD + 彙總 + 確認鎖定）"""
 from datetime import datetime
 from pydantic import BaseModel, Field
 
 
 class AppointmentBase(BaseModel):
-    division_id: int = Field(..., description="所屬分區 ID")
+    division_id: int = Field(..., description="所屬分會 ID")
     position: str = Field(..., min_length=1, max_length=64, description="職務：會長/副會長/祕書/財務/總務…")
     name: str = Field(..., min_length=1, max_length=128, description="被任命人姓名")
     term: str = Field("", max_length=64, description="任期，如 2026-2028")
@@ -32,7 +32,7 @@ class AppointmentOut(AppointmentBase):
 
 
 class AppointmentSummaryOut(BaseModel):
-    """五區彙總：當選會長／副會長 + 已指派數量 + 是否已確認"""
+    """所有分會彙總：當選會長／副會長 + 已指派數量 + 是否已確認"""
 
     division_id: int
     division_name: str

@@ -1,7 +1,7 @@
 """實時計票路由（需管理員認證）
 
 - GET /admin/tally?round_id=&division_id=      單區結果 + 進度 + 平票偵測
-- GET /admin/tally/overview?round_id=          五區彙總
+- GET /admin/tally/overview?round_id=          所有分會彙總
 - GET /admin/tally/voters?round_id=&division_id= 投票人明細（匿名時 items 空）
 
 得票數直接由 vote_candidates JOIN votes 依 round_id + division_id GROUP BY 統計，
@@ -42,7 +42,7 @@ def _get_round(db: Session, round_id: int) -> Round:
 def _get_division(db: Session, division_id: int) -> Division:
     d = db.get(Division, division_id)
     if d is None:
-        raise HTTPException(status_code=404, detail="分區不存在")
+        raise HTTPException(status_code=404, detail="分會不存在")
     return d
 
 
@@ -80,7 +80,7 @@ def _vote_counts(db: Session, round_id: int, division_id: int) -> dict[int, int]
 def _division_candidates(
     db: Session, round_id: int, division_id: int
 ) -> list[TallyCandidateOut]:
-    """該輪次該分區的候選人（含 0 票者），依輪次設定排序"""
+    """該輪次該分會的候選人（含 0 票者），依輪次設定排序"""
     rows = (
         db.query(Candidate, RoundCandidate.sort_order)
         .join(RoundCandidate, RoundCandidate.candidate_id == Candidate.id)
@@ -151,7 +151,7 @@ def _overview_row(db: Session, round_id: int, d: Division) -> TallyOverviewRow:
 @router.get("", response_model=TallyOut)
 def get_tally(
     round_id: int = Query(..., description="輪次 ID"),
-    division_id: int = Query(..., description="分區 ID"),
+    division_id: int = Query(..., description="分會 ID"),
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
@@ -190,7 +190,7 @@ def get_tally_overview(
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    """五區彙總（每區進度 + 平票標記）"""
+    """所有分會彙總（每區進度 + 平票標記）"""
     _get_round(db, round_id)
     divisions = (
         db.query(Division)
@@ -204,7 +204,7 @@ def get_tally_overview(
 @router.get("/voters", response_model=VoterDetailResponse)
 def get_tally_voters(
     round_id: int = Query(..., description="輪次 ID"),
-    division_id: int = Query(..., description="分區 ID"),
+    division_id: int = Query(..., description="分會 ID"),
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):

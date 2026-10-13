@@ -3,12 +3,12 @@
  *
  * 版面（自上而下）
  *   1. PageIntro：左說明、右「+ 新增幹部指派」
- *   2. 分區膠囊分頁（東/南/西/北/中）
+ *   2. 分會膠囊分頁（東/南/西/北/中）
  *   3. 新增幹部指派表單卡（預設展開，標題列按鈕可收合）
- *   4. 幹部名單卡：分區色塊 + 標題/當選資訊 + 已指派數，下方 3 張幹部卡
+ *   4. 幹部名單卡：分會色塊 + 標題/當選資訊 + 已指派數，下方 3 張幹部卡
  *
  * 資料來源：API（src/api/appointments.ts）
- *   - 分區分頁 / 顏色：GET /admin/appointments/summary（division_name + color）
+ *   - 分會分頁 / 顏色：GET /admin/appointments/summary（division_name + color）
  *   - 名單：GET /admin/appointments?division_id=
  *   - 當選資訊 + 已確認狀態：GET /admin/appointments/summary
  *   - 寫入：POST / PUT /{id} / DELETE /{id}
@@ -161,16 +161,16 @@ export function AppointmentsPage() {
   const [saving, setSaving] = useState(false)
   const [writeError, setWriteError] = useState<string | null>(null)
 
-  // 五區彙總：取得該區真實 division_id（DB id 可能與版面序號不同）＋當選資訊
+  // 所有分會彙總：取得該區真實 division_id（DB id 可能與版面序號不同）＋當選資訊
   const {
     data: summary,
     error: summaryError,
     reload: reloadSummary,
   } = useAsync<AppointmentSummary[]>(() => fetchAppointmentSummary(), [])
 
-  // 分區分頁與顏色皆來自 summary（API），不再依賴 mock
+  // 分會分頁與顏色皆來自 summary（API），不再依賴 mock
   const divisionTabs = summary ?? []
-  // 首次載入後把預設分區設為第一區（參考稿預設東區）
+  // 首次載入後把預設分會設為第一區（參考稿預設東區）
   useEffect(() => {
     if (!division && divisionTabs.length > 0) setDivision(divisionTabs[0].division_name)
   }, [division, divisionTabs])
@@ -223,7 +223,7 @@ export function AppointmentsPage() {
   const save = async () => {
     if (saving) return
     if (!divisionId) {
-      setWriteError('分區資料尚未載入，請稍後再試')
+      setWriteError('分會資料尚未載入，請稍後再試')
       return
     }
     if (!form.name.trim()) {
@@ -287,7 +287,7 @@ export function AppointmentsPage() {
           </Button>
         }
       >
-        各區當選會長指派本區幹部・不走投票・手動錄入
+        各分會當選會長指派本區幹部・不走投票・手動錄入
       </PageIntro>
 
       {pageError && (
@@ -296,7 +296,7 @@ export function AppointmentsPage() {
         </div>
       )}
 
-      {/* 分區膠囊分頁 */}
+      {/* 分會膠囊分頁 */}
       <div className="mt-[2px] inline-flex items-center gap-1 rounded-[10px] border border-border bg-card p-2">
         {divisionTabs.map((d) => (
           <button

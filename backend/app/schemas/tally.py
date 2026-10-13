@@ -1,4 +1,4 @@
-"""實時計票 schema（單區結果 / 五區總覽 / 投票人明細）"""
+"""實時計票 schema（單區結果 / 所有分會總覽 / 投票人明細）"""
 from datetime import datetime
 from pydantic import BaseModel
 
@@ -15,7 +15,7 @@ class TallyRoundOut(BaseModel):
 
 
 class TallyDivisionOut(BaseModel):
-    """計票結果內的分區資訊"""
+    """計票結果內的分會資訊"""
 
     id: int
     name: str
@@ -55,7 +55,7 @@ class TallyOut(BaseModel):
 
 
 class TallyOverviewRow(BaseModel):
-    """五區彙總的單列"""
+    """所有分會彙總的單列"""
 
     division_id: int
     name: str

@@ -24,7 +24,7 @@ router = APIRouter(prefix="/votes", tags=["votes"])
 
 
 def _round_info(db: Session, r: Round) -> RoundInfoOut:
-    """把 Round ORM 轉成投票人端需要的 RoundInfoOut（含五分區設定）"""
+    """把 Round ORM 轉成投票人端需要的 RoundInfoOut（含五分會設定）"""
     from app.schemas.vote import DivisionOut
 
     divisions = (
@@ -83,7 +83,7 @@ def get_active_round(db: Session = Depends(get_db)):
 @router.get("/round/{round_id}", response_model=RoundInfoOut)
 def get_round_info(round_id: int, db: Session = Depends(get_db)):
     """
-    輪次資訊（投票人用）：狀態、票數配置、分區列表
+    輪次資訊（投票人用）：狀態、票數配置、分會列表
     前端用於顯示投票視窗狀態（未開始/進行中/已結束）
     """
     r = db.get(Round, round_id)
@@ -98,7 +98,7 @@ def confirm_identity(
     db: Session = Depends(get_db),
 ):
     """
-    身份確認：姓名 + 卡號 → 簡繁匹配 → 確定分區 → voter_token
+    身份確認：姓名 + 卡號 → 簡繁匹配 → 確定分會 → voter_token
     錯誤：404 卡號不存在 / 400 姓名不匹配 / 409 已投票 / 403 白名單外
     """
     result = vote_service.confirm_identity(
@@ -114,8 +114,8 @@ def submit_vote(
     db: Session = Depends(get_db),
 ):
     """
-    提交投票：voter_token + 候選人名單 → 防重/票數/分區校驗 → PG + Redis
-    錯誤：401 token無效 / 400 票數不符 / 403 跨分區 / 409 重複
+    提交投票：voter_token + 候選人名單 → 防重/票數/分會校驗 → PG + Redis
+    錯誤：401 token無效 / 400 票數不符 / 403 跨分會 / 409 重複
     """
     result = vote_service.submit_vote(
         db, body.voter_token, body.round_id, body.candidate_ids,
@@ -130,7 +130,7 @@ def get_results(
     round_id: int,
     db: Session = Depends(get_db),
 ):
-    """五區彙總結果：Redis MGET 讀取 + PG 回填 + 候選人名單"""
+    """所有分會彙總結果：Redis MGET 讀取 + PG 回填 + 候選人名單"""
     return vote_service.get_results(db, round_id)
 
 
@@ -138,17 +138,17 @@ def get_results(
     "/results",
     response_model=None,
     include_in_schema=True,
-    summary="分區/彙總結果查詢（query 參數版）",
+    summary="分會/彙總結果查詢（query 參數版）",
 )
 def get_results_query(
     round_id: int = Query(..., description="輪次 ID"),
-    division_id: int | None = Query(None, description="分區 ID（不傳則回五區彙總）"),
+    division_id: int | None = Query(None, description="分會 ID（不傳則回所有分會彙總）"),
     db: Session = Depends(get_db),
 ):
     """
     前端對齊版結果查詢：
-    - 傳 division_id → 回單分區 FrontendDivisionResult
-    - 不傳 division_id → 回五區彙總 OverviewResult
+    - 傳 division_id → 回單分會 FrontendDivisionResult
+    - 不傳 division_id → 回所有分會彙總 OverviewResult
     """
     if division_id is not None:
         return vote_service.get_single_division_result(db, round_id, division_id)
@@ -162,7 +162,7 @@ def get_division_candidates(
     db: Session = Depends(get_db),
 ):
     """
-    候選人名單（分區級）：某輪次某分區的候選人 + 票數範圍
+    候選人名單（分會級）：某輪次某分會的候選人 + 票數範圍
     前端投票頁用
     """
     return vote_service.get_division_candidates(db, round_id, division_id)
@@ -181,7 +181,7 @@ def read_profile(
 def patch_profile(body: ProfileUpdateRequest, db: Session = Depends(get_db)):
     """
     更新本人聯絡資料（性別／手機號／Email／地址）。
-    以 voter_token 驗身；姓名、卡號、所屬分區不可變更。
+    以 voter_token 驗身；姓名、卡號、所屬分會不可變更。
     """
     return vote_service.update_profile(
         db,

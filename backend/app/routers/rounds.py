@@ -74,7 +74,7 @@ def _round_to_out(r: Round, db: Session, tie_divisions: list[TieDivisionOut] | N
 
 
 def _sync_round_candidates(db: Session, round_id: int, candidate_ids: list[int]):
-    """同步輪次-候選人關聯（先刪舊再插新，按分區分組）"""
+    """同步輪次-候選人關聯（先刪舊再插新，按分會分組）"""
     db.query(RoundCandidate).filter(RoundCandidate.round_id == round_id).delete()
     for idx, cid in enumerate(candidate_ids):
         cand = db.get(Candidate, cid)
@@ -91,7 +91,7 @@ def _sync_round_candidates(db: Session, round_id: int, candidate_ids: list[int])
 
 
 def _round_divisions(db: Session, r: Round) -> list[Division]:
-    """本輪次涵蓋的分區（依候選人關聯；無候選人時退回全部啟用分區）"""
+    """本輪次涵蓋的分會（依候選人關聯；無候選人時退回全部啟用分會）"""
     div_ids = [
         row[0]
         for row in db.query(RoundCandidate.division_id)
@@ -108,7 +108,7 @@ def _round_divisions(db: Session, r: Round) -> list[Division]:
 
 
 def _division_progress(db: Session, r: Round, division: Division) -> DivisionProgressOut:
-    """單一分區進度 + 最高票平票偵測"""
+    """單一分會進度 + 最高票平票偵測"""
     cands = (
         db.query(Candidate.id, Candidate.name)
         .join(RoundCandidate, RoundCandidate.candidate_id == Candidate.id)
@@ -164,7 +164,7 @@ def _division_progress(db: Session, r: Round, division: Division) -> DivisionPro
 
 
 def _tie_divisions(db: Session, r: Round) -> list[TieDivisionOut]:
-    """本輪次所有平票分區（供 confirm 回傳提示）"""
+    """本輪次所有平票分會（供 confirm 回傳提示）"""
     ties: list[TieDivisionOut] = []
     for d in _round_divisions(db, r):
         p = _division_progress(db, r, d)
@@ -189,7 +189,7 @@ def list_rounds(db: Session = Depends(get_db), _admin=Depends(get_current_admin)
 
 @router.get("/{round_id}/progress", response_model=RoundProgressOut)
 def round_progress(round_id: int, db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
-    """各分區進度 + 最高票平票偵測"""
+    """各分會進度 + 最高票平票偵測"""
     r = db.get(Round, round_id)
     if r is None:
         raise HTTPException(status_code=404, detail="輪次不存在")

@@ -20,7 +20,7 @@ import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from '
 import { VoteShell } from '../components/VoteShell'
 import { getActiveRound, getDivisionCandidates } from '../api/client'
 import { useVoteStore } from '../hooks/useVoteStore'
-import { pickName, useI18n } from '../i18n'
+import { useI18n } from '../i18n'
 import type { Lang } from '../i18n'
 import type { Candidate } from '../types'
 
@@ -66,7 +66,7 @@ export function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [params] = useSearchParams()
   const { session } = useVoteStore()
-  const { t, lang, nameOf } = useI18n()
+  const { t, lang, nameLines } = useI18n()
 
   /** 投票視窗閘門：狀態非 active → 導到 /vote/window。
    *  例外：從唯讀的「查看我的投票」（from=view / from=done）或「查看候選人信息」
@@ -115,7 +115,7 @@ export function CandidateDetailPage() {
     async function load() {
       try {
         let roundId = session?.round_id ?? Number(queryRound || 0)
-        // 已知分區（session 優先，其次選擇頁帶的 query）
+        // 已知分會（session 優先，其次選擇頁帶的 query）
         let divisionIds: number[] = []
         if (session) divisionIds = [session.voter.division_id]
         else if (Number(queryDivision || 0)) divisionIds = [Number(queryDivision)]
@@ -134,7 +134,11 @@ export function CandidateDetailPage() {
             if (!alive) return
             setCandidate(found)
             if (!state.divisionName) {
-              setDivisionName(session?.voter.division_name || res.data.division.name)
+              setDivisionName(
+                (lang === 'en'
+                  ? (res.data.division.name_en || session?.voter.division_name || res.data.division.name)
+                  : (res.data.division.name || session?.voter.division_name || ''))
+              )
             }
             setLoading(false)
             return
@@ -202,12 +206,12 @@ export function CandidateDetailPage() {
     )
   }
 
-  // 顯示名（依當前語言）＋ 英文名副標（固定英文，缺 name_en 時由 givenname + surname 組合）
-  const displayName = nameOf(candidate)
-  // 英文模式下主名本身就是英文，避免副標與主名重複
-  const englishName = pickName('en', candidate)
-  const showEnglish = englishName !== '' && englishName !== displayName
+  // 兩行姓名：第一行依語言（English＝Surname Givenname），第二行英文名
+  const { primary: displayName, secondary: englishName } = nameLines(candidate)
+  const showEnglish = englishName !== ''
   const initial = displayName.charAt(0)
+  // 個人簡介：英文介面用 bio_en（沒有就退回中文），繁中／简中一律用中文版
+  const bioText = (lang === 'en' ? (candidate.bio_en || candidate.description) : candidate.description) || ''
 
   return (
     <VoteShell>
@@ -245,34 +249,23 @@ export function CandidateDetailPage() {
         {/* 4. 分隔線 */}
         <div className="mt-[16px] border-t border-gold-pale" />
 
-        {/* 5. 淺米底資訊列 */}
+        {/* 5. 淺米底資訊列（只顯示所屬分會；已移除「現任屆數」） */}
         <div className="mt-[18px] flex h-[47px] items-center justify-between rounded-[10px] bg-light-bg px-[12px]">
-          <p className="flex items-baseline gap-[16px]">
-            <span className="text-[14px] leading-[20px] text-ink">{t('detail.termsLabel')}</span>
-            <span className="text-[14px] font-bold leading-[20px] text-ink">
-              {t('detail.termsValue', { n: candidate.term_count })}
-            </span>
-          </p>
           <p className="flex items-baseline gap-[16px]">
             <span className="text-[14px] leading-[20px] text-ink">{t('detail.divisionLabel')}</span>
             <span className="text-[14px] font-bold leading-[20px] text-ink">{divisionName}</span>
           </p>
         </div>
 
-        {/* 6. 競選理念（後端 slogan） */}
-        <h2 className="mt-[17px] text-[13px] font-bold leading-[18px] text-primary">
-          {t('detail.sloganTitle')}
-        </h2>
-        <p className="mt-[4px] text-[14px] leading-[25px] text-ink">
-          {candidate.slogan || <span className="text-gray-light">{t('common.notProvided')}</span>}
-        </p>
-
-        {/* 7. 介紹框（後端 description；金色左側緞帶） */}
+        {/* 6. 介紹框（中文用 description、英文用 bio_en；金色左側緞帶）
+            已移除「競選理念（slogan）」整段 */}
         <div className="mt-[18px] rounded-[10px] border-l-[3px] border-gold bg-intro px-[14px] py-[14px]">
           <h3 className="text-[13px] font-bold leading-[18px] text-primary">
             {t('detail.descTitle')}
           </h3>
-          <p className="mt-[4px] text-[12px] leading-[18px] text-ink">{candidate.description}</p>
+          <p className="mt-[4px] text-[12px] leading-[18px] text-ink">
+            {bioText || <span className="text-gray-light">{t('common.notProvided')}</span>}
+          </p>
         </div>
 
         {/* 8. 返回（依 ?from= 回到唯讀我的投票／候選人信息／候選人名單） */}

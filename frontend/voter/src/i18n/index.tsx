@@ -61,7 +61,7 @@ const zhHant: Dict = {
 
   // ── P1 身份驗證 ──
   'verify.heading': '會員信息',
-  'verify.intro': '請輸入會員資料，以識別您的所屬分區。',
+  'verify.intro': '請輸入會員資料，以識別您的所屬分會。',
   'verify.nameLabel': '會員姓名',
   'verify.namePlaceholder': '請輸入姓名（簡、繁體均可）',
   'verify.cardLabel': '會員卡號',
@@ -70,7 +70,7 @@ const zhHant: Dict = {
   'verify.proxyNameLabel': '代投人姓名',
   'verify.proxyCardLabel': '代投人佛光會員卡號',
   'verify.submit': '提交',
-  'verify.footer': '系統將依姓名與會員卡號比對資料，僅可投本分區選舉。',
+  'verify.footer': '系統將依姓名與會員卡號比對資料，僅可投本分會選舉。',
   'verify.errNoRound': '尚未取得投票輪次，請稍後再試',
   'verify.errNeedFields': '請輸入會員姓名與佛光會員卡號',
   'verify.errNeedProxy': '代投時請填寫代投人姓名與佛光會員卡號',
@@ -115,7 +115,7 @@ const zhHant: Dict = {
   'proxy.confirmLine1': '我{name}（卡號：{no}），正在代理以下會員進行投票',
   'proxy.confirmName': '委託人姓名：{name}',
   'proxy.confirmCard': '委託人卡號：{no}',
-  'proxy.confirmDivision': '委託人所屬分區：{division}',
+  'proxy.confirmDivision': '委託人所屬分會：{division}',
   'proxy.confirmWarn': '提交後不可修改，請核對信息。',
   'proxy.confirmOk': '確認',
   'proxy.confirmCancel': '返回修改',
@@ -178,19 +178,19 @@ const zhHant: Dict = {
   'results.roundStat': '{round}。{division}即時統計',
   'results.thisDivision': '本區',
 
-  // ── P6 各分區投票狀態 ──
+  // ── P6 各分會投票狀態 ──
   'screen.heading': '各分會投票狀態',
   'screen.sub': '顯示各區全部候選人得票',
   'screen.loading': '正在載入各分會投票狀態…',
   'screen.empty': '尚無投票資料',
   'screen.footer': '資料依各區投票進度同步更新；最終結果以投票結束後公告為準。',
-  'screen.roundOverview': '{round} · 五區即時總覽',
+  'screen.roundOverview': '{round} · 所有分會即時總覽',
   'screen.openDivision': '查看{division}投票結果',
 
   // ── P7 投票成功 ──
   'success.heading': '投票成功',
   'success.viewResults': '查看本區投票結果',
-  'success.viewOverview': '查看五區總覽',
+  'success.viewOverview': '查看所有分會總覽',
   'success.footer': '感謝您的參與，投票已完成。請等待11月01日選舉結果公佈。',
 
   // ── 後端錯誤訊息（以 detail 精確比對） ──
@@ -200,7 +200,7 @@ const zhHant: Dict = {
   'err.windowNotStarted': '投票尚未開始',
   'err.votesOutOfRange': '票數不合法',
   'err.notInWhitelist': '您無許可權參與本輪投票',
-  'err.crossDivision': '僅可投本分區候選人',
+  'err.crossDivision': '僅可投本分會候選人',
   'err.alreadyVoted': '您已投過票，無需重複投票',
   'err.proxyAlreadyVoted': '您的投票已被{proxyName}代投，無需重複投票',
   'err.tokenInvalid': '驗證已過期，請重新確認身份',
@@ -236,7 +236,7 @@ const zhHans: Dict = {
   'app.orgLine2': '各分会会务干部改选',
 
   'verify.heading': '会员信息',
-  'verify.intro': '请输入会员资料，以识别您的所属分区。',
+  'verify.intro': '请输入会员资料，以识别您的所属分会。',
   'verify.nameLabel': '会员姓名',
   'verify.namePlaceholder': '请输入姓名（简、繁体均可）',
   'verify.cardLabel': '会员卡号',
@@ -245,7 +245,7 @@ const zhHans: Dict = {
   'verify.proxyNameLabel': '代投人姓名',
   'verify.proxyCardLabel': '代投人佛光会员卡号',
   'verify.submit': '提交',
-  'verify.footer': '系统将依姓名与会员卡号比对资料，仅可投本分区选举。',
+  'verify.footer': '系统将依姓名与会员卡号比对资料，仅可投本分会选举。',
   'verify.errNoRound': '尚未取得投票轮次，请稍后再试',
   'verify.errNeedFields': '请输入会员姓名与佛光会员卡号',
   'verify.errNeedProxy': '代投时请填写代投人姓名与佛光会员卡号',
@@ -288,7 +288,7 @@ const zhHans: Dict = {
   'proxy.confirmLine1': '我{name}（卡号：{no}），正在代理以下会员进行投票',
   'proxy.confirmName': '委托人姓名：{name}',
   'proxy.confirmCard': '委托人卡号：{no}',
-  'proxy.confirmDivision': '委托人所属分区：{division}',
+  'proxy.confirmDivision': '委托人所属分会：{division}',
   'proxy.confirmWarn': '提交后不可修改，请核对信息。',
   'proxy.confirmOk': '确认',
   'proxy.confirmCancel': '返回修改',
@@ -366,7 +366,7 @@ const zhHans: Dict = {
   'err.windowNotStarted': '投票尚未开始',
   'err.votesOutOfRange': '票数不合法',
   'err.notInWhitelist': '您无权限参与本轮投票',
-  'err.crossDivision': '仅可投本分区候选人',
+  'err.crossDivision': '仅可投本分会候选人',
   'err.alreadyVoted': '您已投过票，无需重复投票',
   'err.proxyAlreadyVoted': '您的投票已被{proxyName}代投，无需重复投票',
   'err.tokenInvalid': '验证已过期，请重新确认身份',
@@ -606,6 +606,60 @@ export function pickName(lang: Lang, e: NameFields | null | undefined): string {
   return trad || simp || en
 }
 
+/**
+ * 候選人姓名的兩行顯示（需求第 3 點）：
+ *   第一行 — English 介面：Surname Givenname（西式順序）
+ *            繁中：繁體姓名　／　简中：簡體姓名
+ *   第二行 — 英文名 name_en
+ * 若第二行與第一行相同（含僅順序不同，例如後端自動組出的 givenname+surname）
+ * 或為空，就只顯示一行，避免出現「Chiu Shu-Fang／Shu-Fang Chiu」這種重複。
+ */
+export function candidateNameLines(
+  lang: Lang,
+  e: NameFields | null | undefined,
+): { primary: string; secondary: string } {
+  if (!e) return { primary: '', secondary: '' }
+  const trad = (e.name_trad ?? e.name ?? '').trim()
+  const simp = (e.name_simp ?? '').trim()
+  const gn = (e.givenname ?? '').trim()
+  const sn = (e.surname ?? '').trim()
+  const en = (e.name_en ?? '').trim()
+
+  let primary: string
+  if (lang === 'en') primary = [sn, gn].filter(Boolean).join(' ') || en || trad || simp
+  else if (lang === 'zh-Hans') primary = simp || trad || en
+  else primary = trad || simp || en
+
+  // 只跳過「完全相同」的第二行；若只是姓名順序不同（例如 name_en 由後端
+  // 自動組成的 givenname+surname，與 English 介面的 surname+givenname 相反），
+  // 仍照需求顯示兩行。
+  const secondary = en && en !== primary ? en : ''
+  return { primary, secondary }
+}
+
+/** 分會物件或投票人資料中可能的欄位（後端兩種形狀都有） */
+export interface DivisionNameFields {
+  name?: string | null
+  name_en?: string | null
+  division_name?: string | null
+  division_name_en?: string | null
+}
+
+/**
+ * 分會名稱顯示（需求第 5 點）：
+ *   English 介面 → name_en / division_name_en（沒有就退回中文）
+ *   繁中／简中   → 中文名稱
+ */
+export function pickDivisionName(
+  lang: Lang,
+  d: DivisionNameFields | null | undefined,
+): string {
+  if (!d) return ''
+  const zh = (d.division_name ?? d.name ?? '').trim()
+  const en = (d.division_name_en ?? d.name_en ?? '').trim()
+  return lang === 'en' ? en || zh : zh || en
+}
+
 interface I18nContextValue {
   lang: Lang
   setLang: (l: Lang) => void
@@ -614,17 +668,21 @@ interface I18nContextValue {
   translateError: (detail: string) => string
   /**
    * 輪次顯示名。
-   * 繁中直接用後端名稱（如「第一輪 · 分區選舉」）；简中／English 改用
+   * 繁中直接用後端名稱（如「第一輪 · 分會選舉」）；简中／English 改用
    * 「第 N 輪 / Round N」，避免中文專有名詞混在譯文裡。
    */
   roundLabel: (name: string | null | undefined, roundNo: number | null | undefined) => string
   /**
-   * 輪次短名（取「第一輪 · 分區選舉」的「第一輪」）。
+   * 輪次短名（取「第一輪 · 分會選舉」的「第一輪」）。
    * 简中／English 同樣改用「第 N 輪 / Round N」。
    */
   roundShort: (name: string | null | undefined, roundNo: number | null | undefined) => string
   /** 依當前語言挑選姓名（pickName 的綁定版） */
   nameOf: (e: NameFields | null | undefined) => string
+  /** 候選人姓名兩行顯示（第一行依語言、第二行英文名） */
+  nameLines: (e: NameFields | null | undefined) => { primary: string; secondary: string }
+  /** 分會名稱（英文介面用 name_en） */
+  divisionOf: (d: DivisionNameFields | null | undefined) => string
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null)
@@ -699,9 +757,19 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     [lang],
   )
 
+  const nameLines = useCallback(
+    (e: NameFields | null | undefined) => candidateNameLines(lang, e),
+    [lang],
+  )
+
+  const divisionOf = useCallback(
+    (d: DivisionNameFields | null | undefined) => pickDivisionName(lang, d),
+    [lang],
+  )
+
   const value = useMemo(
-    () => ({ lang, setLang, t, translateError, roundLabel, roundShort, nameOf }),
-    [lang, setLang, t, translateError, roundLabel, roundShort, nameOf],
+    () => ({ lang, setLang, t, translateError, roundLabel, roundShort, nameOf, nameLines, divisionOf }),
+    [lang, setLang, t, translateError, roundLabel, roundShort, nameOf, nameLines, divisionOf],
   )
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>

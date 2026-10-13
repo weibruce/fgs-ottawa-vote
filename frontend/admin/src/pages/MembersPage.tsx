@@ -1,7 +1,7 @@
 /**
  * 會員名單 — 1:1 對齊參考稿 docs/ui/admin/voting_system_dashboard_04.png
  * 幾何量測（1920×940）：
- *   分區小卡 h=106 / gap-3；篩選列 h=38；表格卡片 y 352→904（表頭 41px、資料列 46px、頁尾 51px）
+ *   分會小卡 h=106 / gap-3；篩選列 h=38；表格卡片 y 352→904（表頭 41px、資料列 46px、頁尾 51px）
  * 資料來源：src/api/members.ts（listMembers / createMember / updateMember / deleteMember /
  *          fetchMemberStats / importMembers）
  *
@@ -408,7 +408,7 @@ export function MembersPage() {
   }, [keyword])
 
   const statsQuery = useAsync(() => fetchMemberStats(), [])
-  // 分區下拉與表單共用同一份 stats（若尚未載入則表單分區為空）
+  // 分會下拉與表單共用同一份 stats（若尚未載入則表單分會為空）
   const divisions = statsQuery.data ?? []
   const statusParam: MemberQuery['status'] =
     status === 'all'
@@ -563,7 +563,7 @@ export function MembersPage() {
         會員名單維護·支援 Excel/CSV 匯入·簡繁雙存
       </PageIntro>
 
-      {/* ── 五區統計小卡（h=106；區名 12px、人數 26px 襯線、已投 12px） ── */}
+      {/* ── 所有分會統計小卡（h=106；區名 12px、人數 26px 襯線、已投 12px） ── */}
       <div className="grid grid-cols-5 gap-3 mt-6">
         {stats.map((d) => (
           <Card key={d.division_id} className="relative h-[106px] pl-4 pt-[19px]">
@@ -614,7 +614,7 @@ export function MembersPage() {
           className="ui-select w-[102px] pl-4"
           style={{ backgroundPosition: 'right 1px center' }}
         >
-          <option value="all">全部分區</option>
+          <option value="all">全部分會</option>
           {(statsQuery.data ?? []).map((d) => (
             <option key={d.division_id} value={String(d.division_id)}>
               {d.division_name}

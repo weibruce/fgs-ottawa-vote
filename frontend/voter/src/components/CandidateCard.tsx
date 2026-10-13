@@ -7,7 +7,7 @@
  * 互動：整張卡點擊 = 切換選取；頭像點擊 = 前往候選人詳情
  * 頭像：有 avatar_url 用照片（外圈金色細框），沒有則退回姓氏圓形（bg-avatar + 主紅襯線字）
  */
-import { pickName, useI18n } from '../i18n'
+import {useI18n} from '../i18n'
 import type { Candidate } from '../types'
 
 export interface CandidateCardProps {
@@ -32,15 +32,12 @@ export function CandidateCard({
   onToggle,
   onDetail,
 }: CandidateCardProps) {
-  const { t, nameOf } = useI18n()
-  // 顯示名（依當前語言）＋ 姓氏圓形頭像取顯示名的第一個字
-  const displayName = nameOf(candidate)
+  const { t, nameLines } = useI18n()
+  // 兩行顯示：第一行依語言（English＝Surname Givenname）、第二行英文名
+  const { primary: displayName, secondary: englishLine } = nameLines(candidate)
   const surname = displayName.trim().charAt(0)
-  // 次要行：固定英文名（資料，不翻譯）；沒有英文名時退回職位 · 屆數
-  const englishName = pickName('en', candidate)
-  // 英文模式下主名已是英文，副標改用「職位 · 屆數」避免重複
   const secondary =
-    (englishName && englishName !== displayName ? englishName : '') ||
+    englishLine ||
     t('choose.secondaryTerms', { position: candidate.position, n: candidate.term_count })
 
   const interactive = !disabled && !readOnly

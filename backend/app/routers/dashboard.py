@@ -13,7 +13,7 @@ router = APIRouter(prefix="/admin/dashboard", tags=["admin-dashboard"])
 
 
 def _candidate_counts_by_div(db: Session, round_id: int | None) -> dict[int, int]:
-    """各分區候選人名數（可限定輪次）"""
+    """各分會候選人名數（可限定輪次）"""
     q = db.query(Candidate.division_id, func.count(Candidate.id)).filter(
         Candidate.is_active == True  # noqa: E712
     )
@@ -31,7 +31,7 @@ def dashboard_summary(db: Session = Depends(get_db), _admin=Depends(get_current_
     Dashboard 總覽：
     - current_round：最新一個 active 輪次（無則最新一個）
     - stats：會員總數 / 已投票 / 候選人總數 / 代投票數
-    - divisions：各分區 會員數 / 候選人名數 / 已投票 / 顏色
+    - divisions：各分會 會員數 / 候選人名數 / 已投票 / 顏色
     """
     # 當前輪次：優先用 active，其次最新建立
     cur = (
@@ -45,7 +45,7 @@ def dashboard_summary(db: Session = Depends(get_db), _admin=Depends(get_current_
     # 候選人名數（全部啟用）
     cand_total = db.query(func.count(Candidate.id)).filter(Candidate.is_active == True).scalar() or 0  # noqa: E712
 
-    # 分區維度統計
+    # 分會維度統計
     divs = (
         db.query(Division).filter(Division.is_active == True).order_by(Division.sort_order, Division.id).all()  # noqa: E712
     )
@@ -60,7 +60,7 @@ def dashboard_summary(db: Session = Depends(get_db), _admin=Depends(get_current_
         members = db.query(func.count(Member.id)).filter(
             Member.division_id == d.id, Member.is_active == True  # noqa: E712
         ).scalar() or 0
-        # 該分區已投票（若有限定輪次，統計該輪次）
+        # 該分會已投票（若有限定輪次，統計該輪次）
         vq = db.query(func.count(Vote.id)).filter(Vote.division_id == d.id)
         pq = db.query(func.count(Vote.id)).filter(Vote.division_id == d.id, Vote.is_proxy == True)  # noqa: E712
         if cur is not None and cur.status in ("active", "closed", "locked"):

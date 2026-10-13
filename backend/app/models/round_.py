@@ -16,7 +16,7 @@ class Round(Base):
     round_no: Mapped[int] = mapped_column(Integer, default=1)
     # 狀態機: draft → active → closed → locked
     status: Mapped[str] = mapped_column(String(16), default="draft", index=True)
-    # 票數範圍（分區級由 division 控制，這是輪次級預設）
+    # 票數範圍（分會級由 division 控制，這是輪次級預設）
     min_votes: Mapped[int] = mapped_column(Integer, default=1)
     max_votes: Mapped[int] = mapped_column(Integer, default=2)
     # 匿名投票（True=後臺隱藏投票人明細）
@@ -29,7 +29,7 @@ class Round(Base):
     # 加賽標記
     is_runoff: Mapped[bool] = mapped_column(Boolean, default=False)
     parent_round_id: Mapped[int | None] = mapped_column(ForeignKey("rounds.id"), nullable=True)
-    # 加賽所在分區（第一輪加賽時記錄）
+    # 加賽所在分會（第一輪加賽時記錄）
     division_id: Mapped[int | None] = mapped_column(ForeignKey("divisions.id"), nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -39,7 +39,7 @@ class Round(Base):
 
 
 class RoundCandidate(Base):
-    """輪次-候選人關聯（某輪次包含哪些候選人，按分區）"""
+    """輪次-候選人關聯（某輪次包含哪些候選人，按分會）"""
     __tablename__ = "round_candidates"
     __table_args__ = (
         UniqueConstraint("round_id", "candidate_id", name="uq_round_candidate"),

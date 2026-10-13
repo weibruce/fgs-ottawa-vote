@@ -4,7 +4,7 @@
  *   說明列 y95..133｜膠囊分頁 y157..206｜實時結果卡 y231..759｜投票人明細卡 y784..
  *   卡頭色帶 110px（primary 5%）｜候選人列距 64px、進度條 12px
  *
- * 資料來源：/admin/tally（單區）、/admin/divisions/officers（五區總覽分區卡）、
+ * 資料來源：/admin/tally（單區）、/admin/divisions/officers（所有分會總覽分會卡）、
  *          /admin/tally/voters（明細，匿名時整個模組不顯示）
  * 輪詢間隔取自 /admin/settings.poll_interval_sec（讀不到預設 2 秒）。
  */
@@ -37,8 +37,8 @@ import type {
 
 /* ── 常數 ── */
 
-/** 「五區總覽」不是分區，而是所有分區的彙總 */
-const ALL_DIVISIONS = '五區總覽'
+/** 「所有分會總覽」不是分會，而是所有分會的彙總 */
+const ALL_DIVISIONS = '所有分會總覽'
 
 /** 選舉名稱（契約的 TallyOut 未提供，版面固定文案） */
 const TALLY_TITLE = '會長/副會長選舉'
@@ -52,7 +52,7 @@ interface TallyCandidate {
   id: number
   rank: number
   name: string
-  /** 職位標示；計票頁不再顯示職稱，分區檢視一律為空字串 */
+  /** 職位標示；計票頁不再顯示職稱，分會檢視一律為空字串 */
   label: string
   votes: number
   /** 候選人照片；無資料時退回姓氏圓形 */
@@ -205,11 +205,11 @@ function TopCandidateCard({
   votes: number
   avatarUrl: string
   accent: string
-  /** 五區總覽卡內空間較小 → 縮小照片與間距（單區檢視維持原本尺寸） */
+  /** 所有分會總覽卡內空間較小 → 縮小照片與間距（單區檢視維持原本尺寸） */
   compact?: boolean
 }) {
   const badgeColor = rank === 1 ? RANK1_COLOR : RANK2_COLOR
-  // 單區檢視用原本尺寸；五區總覽卡內空間較小 → compact 縮一級
+  // 單區檢視用原本尺寸；所有分會總覽卡內空間較小 → compact 縮一級
   const avatarSize = compact ? 64 : 112
   const flowerSize = compact ? 13 : 16
   const noSize = compact ? 'text-[10px]' : 'text-[12px]'
@@ -300,9 +300,9 @@ function CandidateRow({
   )
 }
 
-/* ── 五區總覽：單一分區結果卡 ── */
+/* ── 所有分會總覽：單一分會結果卡 ── */
 
-/** 每區一張卡：分區標籤＋投票進度＋該區候選人得票（照片／姓名／票數，依票數高→低） */
+/** 每區一張卡：分會標籤＋投票進度＋該區候選人得票（照片／姓名／票數，依票數高→低） */
 function DivisionResultCard({ row }: { row: DivisionOfficers }) {
   const pct = row.total_members > 0 ? Math.round((row.voted_count / row.total_members) * 100) : 0
   const maxVotes = row.candidates.reduce((max, c) => Math.max(max, c.vote_count), 0)
@@ -396,21 +396,21 @@ export function TallyPage() {
   const settingsState = useAsync(fetchSettings, [])
   const intervalSec = settingsState.data?.poll_interval_sec ?? 2
 
-  // 五區彙總（同時提供分區名稱 → id 對照）
+  // 所有分會彙總（同時提供分會名稱 → id 對照）
   const overviewState = useAsync(
     () => (roundId !== null ? fetchTallyOverview(roundId) : Promise.resolve([])),
     [roundId],
   )
   const overview = overviewState.data
 
-  // 五區總覽卡片：直接用 /admin/divisions/officers（單一 API，含各區候選人照片與票數）
+  // 所有分會總覽卡片：直接用 /admin/divisions/officers（單一 API，含各分會候選人照片與票數）
   const officersState = useAsync<DivisionOfficers[]>(
     () => (roundId !== null ? fetchDivisionOfficers(roundId) : Promise.resolve([])),
     [roundId],
   )
   const officers = useMemo(() => officersState.data ?? [], [officersState.data])
 
-  // 分區清單（名稱 + 標識色）：分頁與顏色一律來自 API，載入中不借用 mock
+  // 分會清單（名稱 + 標識色）：分頁與顏色一律來自 API，載入中不借用 mock
   const divisionsState = useAsync<DivisionOut[]>(() => listDivisions(), [])
   const divisions = divisionsState.data ?? []
 
@@ -427,7 +427,7 @@ export function TallyPage() {
     [roundId, divId],
   )
 
-  // 候選人照片：計票 API 不含 avatar_url，另取分區候選人清單補上（純顯示用）
+  // 候選人照片：計票 API 不含 avatar_url，另取分會候選人清單補上（純顯示用）
   const candidatesState = useAsync<CandidateOut[]>(
     () =>
       roundId !== null && divId !== null
@@ -476,8 +476,8 @@ export function TallyPage() {
   // enabled 僅在首次 render 生效，而進程是非同步載入；固定啟用，未取得進程時 reloadAll 直接返回
   const polling = usePolling(reloadAll, intervalSec * 1000)
 
-  // 分頁列：優先用計票總覽的分區，其次用分區清單（兩者都來自 API）
-  // 分區名單是非同步載入的；若目前選取不在名單中（且非「五區總覽」）就切到第一個分區
+  // 分頁列：優先用計票總覽的分會，其次用分會清單（兩者都來自 API）
+  // 分會名單是非同步載入的；若目前選取不在名單中（且非「所有分會總覽」）就切到第一個分會
   useEffect(() => {
     if (division === ALL_DIVISIONS) return
     const names = overview?.map((r) => r.name) ?? divisions.map((d) => d.name)
@@ -502,7 +502,7 @@ export function TallyPage() {
         voted,
         total,
         pct: total > 0 ? Math.round((voted / total) * 100) : 0,
-        // 五區總覽改以分區卡呈現（officersState），此處不需候選人列
+        // 所有分會總覽改以分會卡呈現（officersState），此處不需候選人列
         candidates: [],
         detailNote: '',
         detailRows: [],
@@ -571,7 +571,7 @@ export function TallyPage() {
           </div>
         }
       >
-        實時計票面板 · 分區切換或五區總覽
+        實時計票面板 · 分會切換或所有分會總覽
       </PageIntro>
 
       {error && (
@@ -624,10 +624,10 @@ export function TallyPage() {
 
         <div className="space-y-5 px-6 pt-7 pb-6">
           {division === ALL_DIVISIONS ? (
-            // 五區總覽：每個分區一張卡（一行 2 個），呈現該區投票結果
+            // 所有分會總覽：每個分會一張卡（一行 2 個），呈現該區投票結果
             officers.length === 0 ? (
               <p className="py-8 text-center text-[13px] text-gray">
-                {officersState.loading ? '載入中…' : '尚無分區結果'}
+                {officersState.loading ? '載入中…' : '尚無分會結果'}
               </p>
             ) : (
               <div className="grid grid-cols-2 gap-5">
@@ -696,8 +696,8 @@ export function TallyPage() {
                     {tallyState.loading || votersState.loading
                       ? '載入中…'
                       : division === ALL_DIVISIONS
-                        ? '請切換分區查看投票人明細'
-                        : '此分區尚無投票明細'}
+                        ? '請切換分會查看投票人明細'
+                        : '此分會尚無投票明細'}
                   </td>
                 </tr>
               )}

@@ -32,14 +32,14 @@ export function ChoosePage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const { session, save } = useVoteStore()
-  const { t, translateError, nameOf } = useI18n()
+  const { t, translateError, nameOf, divisionOf } = useI18n()
 
   // 唯讀模式：已投票後從「查看投票」進入（第 8 點）
   const isView = params.get('view') === '1'
   // 來源：DonePage 的「返回查看投票」會帶 from=done（第 5 節第 2 點）
   const fromDone = params.get('from') === 'done'
 
-  // 分區一律以 session 為準（query 僅作為退路）
+  // 分會一律以 session 為準（query 僅作為退路）
   const divisionId = session?.voter.division_id ?? Number(params.get('division') || 0)
   const roundId = session?.round_id ?? 0
   const minVotes = session?.min_votes ?? 1
@@ -205,7 +205,7 @@ export function ChoosePage() {
   // 進程是否已結束（closed/locked）→ 僅唯讀的「查看最終投票結果」依此啟用
   const votingClosed = roundStatus === 'closed' || roundStatus === 'locked'
 
-  const divisionName = data?.division.name ?? session.voter.division_name
+  const divisionName = divisionOf(data?.division ?? session.voter)
   const selectedNames = selected
     .map((id) => {
       const c = candidates.find((x) => x.id === id)

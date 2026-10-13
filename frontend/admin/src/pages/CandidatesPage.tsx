@@ -36,6 +36,7 @@ interface CandRow {
   avatar_url: string
   slogan: string
   description: string
+  bio_en: string
   term_count: number
   phone: string
   email: string
@@ -102,7 +103,7 @@ function AvatarThumb({ src, name }: { src: string; name: string }) {
 }
 
 export function CandidatesPage() {
-  // 同時取得分區（名稱↔ID）、進程（取 active 以帶出得票數）、候選人
+  // 同時取得分會（名稱↔ID）、進程（取 active 以帶出得票數）、候選人
   const { data, loading, error, reload } = useAsync(async () => {
     const [rounds, divisions] = await Promise.all([listRounds(), fetchDivisionOverview()])
     const cur = rounds.find((r) => r.status === 'active') ?? rounds[0] ?? null
@@ -128,6 +129,7 @@ export function CandidatesPage() {
       avatar_url: c.avatar_url ?? '',
       slogan: c.slogan ?? '',
       description: c.description ?? '',
+      bio_en: c.bio_en ?? '',
       term_count: c.term_count ?? 0,
       phone: c.phone ?? '',
       email: c.email ?? '',
@@ -159,7 +161,7 @@ export function CandidatesPage() {
     setTimeout(() => setToast(null), 2500)
   }
 
-  /** 分頁：全部 + 各分區（順序取自資料，計數由資料推導） */
+  /** 分頁：全部 + 各分會（順序取自資料，計數由資料推導） */
   const tabs = useMemo(() => {
     const names: string[] = []
     for (const c of rows) if (!names.includes(c.division)) names.push(c.division)
@@ -200,7 +202,7 @@ export function CandidatesPage() {
   const save = async (c: CandRow) => {
     const division_id = divIdByName[c.division]
     if (!division_id) {
-      flash('找不到對應分區')
+      flash('找不到對應分會')
       return
     }
     const body: CandidateInput = {
@@ -216,6 +218,7 @@ export function CandidatesPage() {
       avatar_url: c.avatar_url,
       slogan: c.slogan,
       description: c.description,
+      bio_en: c.bio_en,
       term_count: c.term_count,
       phone: c.phone,
       email: c.email,
@@ -254,7 +257,7 @@ export function CandidatesPage() {
           </Button>
         }
       >
-        各分區候選人名單（投票開始後不可修改）
+        各分會候選人名單（投票開始後不可修改）
       </PageIntro>
 
       {error && (
@@ -437,6 +440,7 @@ interface FormState {
   avatar_url: string
   slogan: string
   description: string
+  bio_en: string
   term_count: string
   phone: string
   email: string
@@ -475,6 +479,7 @@ function CandidateModal({
     avatar_url: initial?.avatar_url ?? '',
     slogan: initial?.slogan ?? '',
     description: initial?.description ?? '',
+    bio_en: initial?.bio_en ?? '',
     term_count: String(initial?.term_count ?? 0),
     phone: initial?.phone ?? '',
     email: initial?.email ?? '',
@@ -516,6 +521,7 @@ function CandidateModal({
       avatar_url: form.avatar_url.trim(),
       slogan: form.slogan.trim(),
       description: form.description.trim(),
+      bio_en: form.bio_en.trim(),
       term_count: Number(form.term_count) || 0,
       phone: form.phone.trim(),
       email: form.email.trim(),
@@ -750,6 +756,16 @@ function CandidateModal({
               value={form.description}
               onChange={(e) => set('description', e.target.value)}
               rows={3}
+              className="ui-input h-auto resize-none py-3"
+            />
+          </Field>
+
+          <Field label="個人介紹（英文版）" className="sm:col-span-2">
+            <textarea
+              value={form.bio_en}
+              onChange={(e) => set('bio_en', e.target.value)}
+              rows={3}
+              placeholder="English biography — shown when the voter selects English"
               className="ui-input h-auto resize-none py-3"
             />
           </Field>

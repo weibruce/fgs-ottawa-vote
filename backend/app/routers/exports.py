@@ -118,12 +118,12 @@ def _stream(content: bytes, filename: str, ext: str) -> StreamingResponse:
 # ─────────────────────────── 資料解析 ───────────────────────────
 
 def _get_division(db: Session, division_id: int | None) -> Division | None:
-    """驗證並取得分區（未給 → None；不存在 → 404）"""
+    """驗證並取得分會（未給 → None；不存在 → 404）"""
     if division_id is None:
         return None
     div = db.get(Division, division_id)
     if div is None:
-        raise HTTPException(status_code=404, detail="分區不存在")
+        raise HTTPException(status_code=404, detail="分會不存在")
     return div
 
 
@@ -180,13 +180,13 @@ def _vote_detail(
     req_anonymous: bool,
     include_round: bool = False,
 ) -> tuple[list[str], list[list]]:
-    """投票明細：姓名/卡號/所屬分區/是否代投/投票時間/投了誰
+    """投票明細：姓名/卡號/所屬分會/是否代投/投票時間/投了誰
 
     匿名判定：`req_anonymous` 且該輪次 `anonymous` 皆為真 → 去掉姓名/卡號/是否代投。
     """
     masked = bool(req_anonymous and rnd is not None and rnd.anonymous)
-    headers = ["所屬分區", "投票時間", "投了誰"] if masked else [
-        "姓名", "卡號", "所屬分區", "是否代投", "投票時間", "投了誰",
+    headers = ["所屬分會", "投票時間", "投了誰"] if masked else [
+        "姓名", "卡號", "所屬分會", "是否代投", "投票時間", "投了誰",
     ]
     if include_round:
         headers = ["輪次"] + headers
@@ -222,7 +222,7 @@ def _vote_detail(
 
 
 def _candidate_vote_counts(db: Session, rnd: Round | None, division_id: int) -> dict[str, int]:
-    """某輪次某分區：候選人名 → 得票數"""
+    """某輪次某分會：候選人名 → 得票數"""
     if rnd is None:
         return {}
     rows = (
@@ -239,9 +239,9 @@ def _candidate_vote_counts(db: Session, rnd: Round | None, division_id: int) -> 
 def _division_summary(
     db: Session, rnd: Round | None, division_id: int | None
 ) -> tuple[list[str], list[list]]:
-    """五區彙總：會員數/已投票/投票率/候選人數/代投票數/最高票/平票"""
+    """所有分會彙總：會員數/已投票/投票率/候選人數/代投票數/最高票/平票"""
     headers = [
-        "分區", "會員數", "已投票", "投票率", "候選人數",
+        "分會", "會員數", "已投票", "投票率", "候選人數",
         "代投票數", "最高票候選人", "最高票數", "是否平票",
     ]
     rows: list[list] = []
@@ -287,7 +287,7 @@ def _appointments_rows(
     db: Session, division_id: int | None
 ) -> tuple[list[str], list[list]]:
     """幹部指派名單"""
-    headers = ["分區", "職務", "姓名", "任期", "任命人", "是否確認", "建立時間"]
+    headers = ["分會", "職務", "姓名", "任期", "任命人", "是否確認", "建立時間"]
     q = db.query(Appointment)
     if division_id is not None:
         q = q.filter(Appointment.division_id == division_id)
@@ -363,13 +363,13 @@ def _collect(
         if kind == "round2_votes":
             stem = f"{prefix}第二輪投票明細" if prefix else "第二輪投票明細"
         else:
-            stem = f"{prefix}投票明細" if prefix else "各分區投票明細"
+            stem = f"{prefix}投票明細" if prefix else "各分會投票明細"
         return stem, [("投票明細", headers, rows)]
 
     if kind == "division_summary":
         rnd = _resolve_round(db, kind, round_id)
         headers, rows = _division_summary(db, rnd, division_id)
-        return "五區彙總統計", [("彙總統計", headers, rows)]
+        return "所有分會彙總統計", [("彙總統計", headers, rows)]
 
     if kind == "appointments":
         headers, rows = _appointments_rows(db, division_id)
@@ -386,7 +386,7 @@ def _collect(
         rounds = db.query(Round).order_by(Round.round_no, Round.id).all()
 
         summary_headers = [
-            "輪次", "分區", "會員數", "已投票", "投票率", "候選人數",
+            "輪次", "分會", "會員數", "已投票", "投票率", "候選人數",
             "代投票數", "最高票候選人", "最高票數", "是否平票",
         ]
         summary_rows: list[list] = []
@@ -487,7 +487,7 @@ def download_export(
 @router.post("/{kind}")
 def create_export(
     kind: str,
-    division_id: int | None = Query(None, description="分區 ID（不帶=全部分區）"),
+    division_id: int | None = Query(None, description="分會 ID（不帶=全部分會）"),
     round_id: int | None = Query(None, description="輪次 ID（不帶=當前/預設輪次）"),
     anonymous: bool = Query(False, description="匿名模式（與輪次 anonymous 同時為真才遮蔽）"),
     format: str = Query("csv", description="csv | xlsx"),

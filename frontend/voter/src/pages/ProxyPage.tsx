@@ -36,7 +36,7 @@ type Notice = { kind: 'i18n'; key: string } | { kind: 'api'; text: string }
 export function ProxyPage() {
   const navigate = useNavigate()
   const { session, save } = useVoteStore()
-  const { t, translateError, nameOf } = useI18n()
+  const { t, translateError, nameOf, divisionOf } = useI18n()
 
   const [targetName, setTargetName] = useState('')
   const [targetCard, setTargetCard] = useState('')
@@ -250,7 +250,7 @@ export function ProxyPage() {
                 {t('proxy.confirmCard', { no: pending.voter.member_no })}
               </span>
               <span className="block">
-                {t('proxy.confirmDivision', { division: pending.voter.division_name })}
+                {t('proxy.confirmDivision', { division: divisionOf(pending.voter) })}
               </span>
             </div>
             <div className="mt-[12px] border-t border-border" />

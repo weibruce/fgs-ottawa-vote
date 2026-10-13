@@ -14,7 +14,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   window_not_started: '投票尚未開始',
   votes_out_of_range: '票數不合法',
   not_in_whitelist: '您無許可權參與本輪投票',
-  cross_division: '僅可投本分區候選人',
+  cross_division: '僅可投本分會候選人',
   already_voted: '您已投過票，無需重複投票',
   token_invalid: '驗證已過期，請重新確認身份',
 }
@@ -113,7 +113,7 @@ export function submitVote(req: {
   })
 }
 
-/** 單分區即時結果（GET /votes/results?round_id&division_id） */
+/** 單分會即時結果（GET /votes/results?round_id&division_id） */
 export function getDivisionResults(roundId: number, divisionId: number) {
   return api.get<import('../types').DivisionResult>('/results', {
     params: { round_id: roundId, division_id: divisionId },
@@ -129,6 +129,7 @@ export interface ProfileOut {
   surname: string
   division_id: number
   division_name: string
+  division_name_en?: string
   gender: string
   phone: string
   email: string
@@ -160,7 +161,7 @@ export function updateProfile(req: {
   })
 }
 
-/** 五區彙總結果（GET /votes/results?round_id） */
+/** 所有分會彙總結果（GET /votes/results?round_id） */
 export function getOverviewResults(roundId: number) {
   return api.get<import('../types').OverviewResult>('/results', {
     params: { round_id: roundId },

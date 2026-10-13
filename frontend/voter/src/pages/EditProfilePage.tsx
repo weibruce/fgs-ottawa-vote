@@ -8,7 +8,7 @@
  *       與唯讀三列（不再只依賴 session，避免 session 過舊／缺欄位時存檔把資料清空）。
  *       載入中欄位 disabled；失敗顯示 translateError(messageForError(e)) 並可重試。
  *
- * 儲存 → PATCH /api/votes/profile（只允許改這四欄；姓名、卡號、所屬分區不可變更）
+ * 儲存 → PATCH /api/votes/profile（只允許改這四欄；姓名、卡號、所屬分會不可變更）
  *       成功後用回傳值更新表單、唯讀列與 session 的 voter，並顯示 edit.saved；
  *       失敗用 translateError(messageForError(e)) 顯示。
  *
@@ -38,7 +38,7 @@ const GENDER_OPTIONS = ['男', '女', '其他', '未填'] as const
 export function EditProfilePage() {
   const navigate = useNavigate()
   const { session, save, reset } = useVoteStore()
-  const { t, translateError, nameOf } = useI18n()
+  const { t, translateError, nameOf, divisionOf } = useI18n()
 
   // 四個可編輯欄位（先以 session 既有值預填，載入後由伺服器回傳值覆寫）
   const [gender, setGender] = useState(() => session?.voter.gender ?? '')
@@ -116,7 +116,7 @@ export function EditProfilePage() {
   // 唯讀三列：優先顯示伺服器回傳值，尚未取得時退回 session
   const nameSource = profile ?? voter
   const memberNo = profile?.member_no || voter.member_no
-  const divisionName = profile?.division_name || voter.division_name
+  const divisionName = divisionOf(profile ?? voter)
 
   /** 儲存：PATCH 後端，成功以回傳值更新表單、唯讀列與 session.voter */
   async function handleSubmit() {

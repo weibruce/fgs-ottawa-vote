@@ -3,13 +3,14 @@
  * 對齊後端 app/schemas/vote.py
  */
 
-/** 五區代號 */
+/** 所有分會代號 */
 export type DivisionCode = '東' | '南' | '西' | '北' | '中'
 
-/** 分區 */
+/** 分會 */
 export interface Division {
   id: number
   name: string              // 「東區」
+  name_en: string           // 英文名稱（英文介面顯示用）
   code: string              // 「east」
   color: string             // 代表色 hex（#C41E24）
   min_votes: number         // 本區最少票數
@@ -33,7 +34,8 @@ export interface Candidate {
   gender?: string | null
   position: string          // 職位（後端 title 欄位）
   avatar_url: string | null
-  description: string       // 競選理念
+  description: string       // 個人介紹（中文）
+  bio_en?: string           // 個人介紹（英文版，英文介面顯示）
   slogan: string | null     // 候選人宣言
   term_count: number        // 現任屆數
   sort_order: number
@@ -53,6 +55,7 @@ export interface VoterInfo {
   member_no: string
   division_id: number
   division_name: string
+  division_name_en?: string
   is_proxy: boolean
   /** 代投人（後端已驗證姓名＋卡號） */
   proxy_name: string | null
@@ -108,7 +111,7 @@ export interface SubmitRequest {
   proxy_member_no?: string | null
 }
 
-/** 候選人名單（分區級，GET /votes/round/{id}/division/{div_id}） */
+/** 候選人名單（分會級，GET /votes/round/{id}/division/{div_id}） */
 export interface DivisionCandidates {
   division: Division
   candidates: Candidate[]
@@ -130,7 +133,7 @@ export interface CandidateResult {
   is_leading: boolean
 }
 
-/** 分區結果（前端嵌套型，GET /votes/results?round_id&division_id） */
+/** 分會結果（前端嵌套型，GET /votes/results?round_id&division_id） */
 export interface DivisionResult {
   division: Division
   voted_count: number
@@ -139,7 +142,7 @@ export interface DivisionResult {
   status: 'draft' | 'active' | 'closed' | 'locked'
 }
 
-/** 五區彙總結果（GET /votes/results?round_id） */
+/** 所有分會彙總結果（GET /votes/results?round_id） */
 export interface OverviewResult {
   round_id: number
   divisions: DivisionResult[]

@@ -20,11 +20,13 @@ export interface LoginResult extends AdminMe {
   token_type: string
 }
 
-/* ── 分區 ── */
+/* ── 分會 ── */
 export interface DivisionOut {
   id: number
   code: string
   name: string
+  /** 分會英文名稱 */
+  name_en: string
   min_votes: number
   max_votes: number
   opens_at: string | null
@@ -62,6 +64,8 @@ export interface CandidateOut {
   avatar_url: string
   slogan: string
   description: string
+  /** 個人介紹（英文版） */
+  bio_en: string
   term_count: number
   phone: string
   email: string
@@ -94,6 +98,7 @@ export interface CandidateInput {
   avatar_url?: string
   slogan?: string
   description?: string
+  bio_en?: string
   term_count?: number
   phone?: string
   email?: string
@@ -184,9 +189,9 @@ export interface RoundOut {
   created_at: string
   updated_at: string
   candidate_ids: number[]
-  /** confirm 時回傳：是否有分區平票 */
+  /** confirm 時回傳：是否有分會平票 */
   has_tie?: boolean
-  /** confirm 時回傳：平票分區明細 */
+  /** confirm 時回傳：平票分會明細 */
   tie_divisions?: TieDivision[]
 }
 

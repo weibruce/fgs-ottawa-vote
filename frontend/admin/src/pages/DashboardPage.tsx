@@ -3,7 +3,7 @@
  * 幾何：banner 132px｜統計卡 4 欄 gap 28px｜下層 2:1
  *
  * 資料來源（docs/05_api_contract.md）：
- *   GET /api/admin/dashboard/summary —— 統計 / 各分區
+ *   GET /api/admin/dashboard/summary —— 統計 / 各分會
  *   GET /api/admin/settings/activity —— 活動日誌（最新在前）
  */
 import { useNavigate } from 'react-router-dom'
@@ -106,13 +106,13 @@ export function DashboardPage() {
 
   /* ── 四張統計卡（標籤與參考稿逐字一致，值／副標由 API 帶入） ── */
   const statCards = [
-    { label: '總會員人數', value: stats?.total_members ?? 0, sub: '五區合計' },
+    { label: '總會員人數', value: stats?.total_members ?? 0, sub: '所有分會合計' },
     {
       label: '已投票',
       value: stats?.votes_cast ?? 0,
       sub: `投票率 ${stats?.vote_rate_pct ?? 0}%`,
     },
-    { label: '候選人總數', value: stats?.candidate_total ?? 0, sub: '各區合計' },
+    { label: '候選人總數', value: stats?.candidate_total ?? 0, sub: '各分會合計' },
     {
       label: '代理投票',
       value: stats?.proxy_votes ?? 0,
@@ -173,12 +173,12 @@ export function DashboardPage() {
         })}
       </div>
 
-      {/* ── 分區狀態 + 活動日誌 ── */}
+      {/* ── 分會狀態 + 活動日誌 ── */}
       <div className="grid grid-cols-3 gap-6 mt-6">
         <Card className="col-span-2">
           <CardHeader
-            title="各分區投票狀態"
-            sub="五區實時進度總覽"
+            title="各分會投票狀態"
+            sub="所有分會實時進度總覽"
             action={<LinkMore onClick={() => navigate('/tally')}>查看詳情</LinkMore>}
           />
           <div className="px-5 py-[22px] space-y-[18px]">

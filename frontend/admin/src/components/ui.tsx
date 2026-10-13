@@ -187,7 +187,7 @@ export function ProgressBar({
   )
 }
 
-/* ── 分區標識（方形色塊 + 區名首字） ── */
+/* ── 分會標識（方形色塊 + 區名首字） ── */
 
 export function DivisionMark({
   name,
@@ -216,7 +216,7 @@ export function DivisionMark({
   )
 }
 
-/* ── 分區小標籤（40×20px、12px 白字） ── */
+/* ── 分會小標籤（40×20px、12px 白字） ── */
 
 export function DivisionTag({
   name,

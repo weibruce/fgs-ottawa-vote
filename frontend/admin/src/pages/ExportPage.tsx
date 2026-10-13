@@ -46,18 +46,18 @@ function IconMedal({ size = 21 }: IconProps) {
 
 /* ── 匯出項目卡片圖示（依參考稿順序：統計圖／獎章／統計圖／人員／日曆） ── */
 const CARD_ICON: Record<string, { Icon: ComponentType<IconProps>; size: number }> = {
-  各分區投票明細: { Icon: IconTally, size: 25 },
+  各分會投票明細: { Icon: IconTally, size: 25 },
   幹部指派名單: { Icon: IconMedal, size: 21 },
-  五區彙總統計: { Icon: IconTally, size: 25 },
+  所有分會彙總統計: { Icon: IconTally, size: 25 },
   會員名單: { Icon: IconMembers, size: 25 },
   完整選舉報告: { Icon: IconCalendar, size: 25 },
 }
 
 /* ── 卡片標題 → 後端匯出類型（契約第 8 節） ── */
 const KIND_BY_TITLE: Record<string, ExportKind> = {
-  各分區投票明細: 'division_votes',
+  各分會投票明細: 'division_votes',
   幹部指派名單: 'appointments',
-  五區彙總統計: 'division_summary',
+  所有分會彙總統計: 'division_summary',
   會員名單: 'members',
   完整選舉報告: 'full_report',
 }
@@ -194,19 +194,19 @@ function ExportButton({
 /** 匯出項目目錄（純 UI 目錄：後端 /exports/{kind} 為固定集合，非動態資料） */
 const EXPORT_CARDS: { title: string; desc: string; formats: string[] }[] = [
   {
-    title: '各分區投票明細',
-    desc: '姓名、卡號、所屬分區、是否代投、投票時間、投了誰（匿名模式下不顯示身份）',
+    title: '各分會投票明細',
+    desc: '姓名、卡號、所屬分會、是否代投、投票時間、投了誰（匿名模式下不顯示身份）',
     formats: ['Excel', 'CSV'],
   },
-  { title: '幹部指派名單', desc: '按分區匯出各區幹部任命資料', formats: ['Excel'] },
+  { title: '幹部指派名單', desc: '按分會匯出各分會幹部任命資料', formats: ['Excel'] },
   {
-    title: '五區彙總統計',
-    desc: '各分區投票率、得票分布、平票情況彙總報表',
+    title: '所有分會彙總統計',
+    desc: '各分會投票率、得票分布、平票情況彙總報表',
     formats: ['Excel', 'PDF'],
   },
   {
     title: '會員名單',
-    desc: '包含卡號、簡繁雙存姓名、分區、手機的完整名單',
+    desc: '包含卡號、簡繁雙存姓名、分會、手機的完整名單',
     formats: ['Excel', 'CSV'],
   },
   { title: '完整選舉報告', desc: '包含全部結果、指派的終局報告文件', formats: ['PDF'] },
@@ -218,13 +218,13 @@ export function ExportPage() {
   const [anonymous, setAnonymous] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
-  /* 篩選選項由後端提供（分區 / 進程） */
+  /* 篩選選項由後端提供（分會 / 進程） */
   const { data: divisions } = useAsync(() => listDivisions(), [])
   const { data: rounds } = useAsync(() => listRounds(), [])
   const { data: history, loading: historyLoading, error: historyError, reload: reloadHistory } =
     useAsync(() => fetchExportHistory(), [])
 
-  const divisionOptions = ['全部分區', ...(divisions ?? []).map((d) => d.name)]
+  const divisionOptions = ['全部分會', ...(divisions ?? []).map((d) => d.name)]
   const roundOptions = ['全部進程', ...(rounds ?? []).map((r) => r.name)]
 
   const divisionId =
@@ -267,14 +267,14 @@ export function ExportPage() {
     <AdminLayout title="資料匯出">
       {/* 說明列：參考稿為單行文字，緊接下 24px 為篩選卡（無操作鈕，故不使用 PageIntro 的 38px 高度） */}
       <p className="mb-6 text-[14px] leading-5 text-gray-deep [word-spacing:-3px]">
-        根據投票設定匯出完整資料 · 支援按分區篩選 · 匿名模式下遵循同一規則
+        根據投票設定匯出完整資料 · 支援按分會篩選 · 匿名模式下遵循同一規則
       </p>
 
       {/* ── 篩選條件 ── */}
       <Card className="mb-6 flex items-center gap-3 px-4 py-4">
         <IconFilter size={16} className="shrink-0 text-gray-deep" />
         <span className="shrink-0 text-[14px] text-ink-soft">篩選條件：</span>
-        <FilterSelect label="分區" value={division} onChange={setDivision} options={divisionOptions} />
+        <FilterSelect label="分會" value={division} onChange={setDivision} options={divisionOptions} />
         <FilterSelect label="進程" value={round} onChange={setRound} options={roundOptions} />
         <label className="ml-auto flex cursor-pointer items-center gap-2">
           <input

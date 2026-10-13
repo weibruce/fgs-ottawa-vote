@@ -1,4 +1,4 @@
-"""分區 CRUD 路由（需管理員認證）"""
+"""分會 CRUD 路由（需管理員認證）"""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func
@@ -27,7 +27,7 @@ def _current_round(db: Session) -> Round | None:
 
 @router.get("", response_model=list[DivisionOut])
 def list_divisions(db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
-    """列出所有分區（按 sort_order）"""
+    """列出所有分會（按 sort_order）"""
     return db.query(Division).order_by(Division.sort_order, Division.id).all()
 
 
@@ -71,7 +71,7 @@ class OfficerAssignIn(BaseModel):
 
 
 def _officer_rows(db: Session, round_id: int) -> list[dict]:
-    """各分區的候選人得票排名 + 會長／副會長（自動或手動指派）"""
+    """各分會的候選人得票排名 + 會長／副會長（自動或手動指派）"""
     divisions = db.query(Division).order_by(Division.sort_order, Division.id).all()
 
     counts: dict[int, dict[int, int]] = {}
@@ -163,7 +163,7 @@ def division_officers(
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    """各分區當選結果：第一名會長、第二名副會長；平票時需手動指派"""
+    """各分會當選結果：第一名會長、第二名副會長；平票時需手動指派"""
     cur = _current_round(db)
     rid = round_id or (cur.id if cur else None)
     if rid is None:
@@ -185,7 +185,7 @@ def assign_officers(
     """
     div = db.get(Division, division_id)
     if div is None:
-        raise HTTPException(status_code=404, detail="分區不存在")
+        raise HTTPException(status_code=404, detail="分會不存在")
 
     for cid in (body.chair_candidate_id, body.vice_candidate_id):
         if cid is None:
@@ -194,7 +194,7 @@ def assign_officers(
         if cand is None:
             raise HTTPException(status_code=400, detail="候選人不存在")
         if cand.division_id != division_id:
-            raise HTTPException(status_code=400, detail="候選人不屬於該分區")
+            raise HTTPException(status_code=400, detail="候選人不屬於該分會")
     if (
         body.chair_candidate_id is not None
         and body.chair_candidate_id == body.vice_candidate_id
@@ -220,7 +220,7 @@ def assign_officers(
 
 @router.get("/overview", response_model=list[DivisionOverviewOut])
 def division_overview(db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
-    """分區管理頁：五區基本設定 + 會員/候選人/已投票統計 + 當前輪次狀態"""
+    """分會管理頁：所有分會基本設定 + 會員/候選人/已投票統計 + 當前輪次狀態"""
     cur = _current_round(db)
     divisions = db.query(Division).order_by(Division.sort_order, Division.id).all()
 
@@ -269,9 +269,9 @@ def division_overview(db: Session = Depends(get_db), _admin=Depends(get_current_
 def create_division(
     body: DivisionCreate, db: Session = Depends(get_db), _admin=Depends(get_current_admin)
 ):
-    """新增分區"""
+    """新增分會"""
     if db.query(Division).filter(Division.code == body.code).first():
-        raise HTTPException(status_code=409, detail=f"分區代碼 {body.code} 已存在")
+        raise HTTPException(status_code=409, detail=f"分會代碼 {body.code} 已存在")
     div = Division(**body.model_dump())
     db.add(div)
     db.commit()
@@ -286,10 +286,10 @@ def update_division(
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    """更新分區"""
+    """更新分會"""
     div = db.get(Division, division_id)
     if div is None:
-        raise HTTPException(status_code=404, detail="分區不存在")
+        raise HTTPException(status_code=404, detail="分會不存在")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(div, field, value)
     db.commit()
@@ -301,18 +301,18 @@ def update_division(
 def delete_division(
     division_id: int, db: Session = Depends(get_db), _admin=Depends(get_current_admin)
 ):
-    """刪除分區（若有候選人/會員則拒絕）"""
+    """刪除分會（若有候選人/會員則拒絕）"""
     div = db.get(Division, division_id)
     if div is None:
-        raise HTTPException(status_code=404, detail="分區不存在")
+        raise HTTPException(status_code=404, detail="分會不存在")
     # 檢查是否有關聯數據
     from app.models.candidate import Candidate
     from app.models.member import Member
     if db.query(Candidate).filter(Candidate.division_id == division_id).first():
-        raise HTTPException(status_code=409, detail="該分區下有候選人，無法刪除")
+        raise HTTPException(status_code=409, detail="該分會下有候選人，無法刪除")
     if db.query(Member).filter(Member.division_id == division_id).first():
-        raise HTTPException(status_code=409, detail="該分區下有會員，無法刪除")
+        raise HTTPException(status_code=409, detail="該分會下有會員，無法刪除")
     db.delete(div)
     db.commit()
-    return {"message": "分區已刪除"}
+    return {"message": "分會已刪除"}
 

@@ -1,4 +1,4 @@
-"""候選人模型（屬某分區）"""
+"""候選人模型（屬某分會）"""
 from datetime import datetime
 from sqlalchemy import String, Integer, Text, Boolean, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -21,7 +21,8 @@ class Candidate(Base):
     title: Mapped[str] = mapped_column(String(128), default="")  # 職位
     avatar_url: Mapped[str] = mapped_column(String(512), default="")  # 照片
     slogan: Mapped[str] = mapped_column(String(200), default="")  # 宣言 ≤200 字
-    description: Mapped[str] = mapped_column(Text, default="")  # 個人介紹
+    description: Mapped[str] = mapped_column(Text, default="")  # 個人介紹（中文）
+    bio_en: Mapped[str] = mapped_column(Text, default="")  # 個人介紹（英文版）
     term_count: Mapped[int] = mapped_column(Integer, default=0)  # 已任屆數
     # 聯絡與背景資料
     phone: Mapped[str] = mapped_column(String(32), default="")

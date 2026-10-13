@@ -41,7 +41,7 @@ HEADER_ALIASES: dict[str, set[str]] = {
     "name_simp": {"姓名(簡)", "姓名（簡）", "簡體姓名", "简体姓名", "name_simp"},
     "givenname": {"givenname", "given_name", "英文名", "名字(英)"},
     "surname": {"surname", "family_name", "英文姓", "姓氏(英)"},
-    "division": {"所屬分區", "所属分区", "所屬分會", "所属分会", "分區", "分区", "分會", "分会",
+    "division": {"所屬分會", "所属分区", "所屬分會", "所属分会", "分會", "分区", "分會", "分会",
                  "division", "division_name", "區", "区"},
     "gender": {"性別", "性别", "gender", "sex"},
     "phone": {"手機號", "手机号", "手機", "手机", "手機號碼", "手机号码", "電話", "电话", "phone", "mobile"},
@@ -121,7 +121,7 @@ def _normalize_name(name: str) -> tuple[str, str]:
 
 @router.get("", response_model=MemberPage)
 def list_members(
-    division_id: int | None = Query(None, description="按分區篩選"),
+    division_id: int | None = Query(None, description="按分會篩選"),
     status: str | None = Query(None, description="voted / not_voted / proxy_voted"),
     q: str | None = Query(None, description="比對卡號或姓名（繁簡皆可）"),
     page: int = Query(1, ge=1),
@@ -129,7 +129,7 @@ def list_members(
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    """會員名單（分頁 + 分區/投票狀態/關鍵字篩選；has_voted 由當前輪次票表推導）"""
+    """會員名單（分頁 + 分會/投票狀態/關鍵字篩選；has_voted 由當前輪次票表推導）"""
     cur = _current_round(db)
     voted = _voted_map(db, cur.id if cur is not None else None)
 
@@ -184,14 +184,14 @@ def list_members(
     return MemberPage(total=total, page=page, page_size=page_size, items=items)
 
 
-# ── 五區統計小卡 ────────────────────────────────────────────────────────
+# ── 所有分會統計小卡 ────────────────────────────────────────────────────────
 
 @router.get("/stats", response_model=list[MemberStatsOut])
 def member_stats(
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    """五區會員統計（total = 有效會員數；voted = 當前輪次已投票數）"""
+    """所有分會會員統計（total = 有效會員數；voted = 當前輪次已投票數）"""
     cur = _current_round(db)
     divisions = db.query(Division).order_by(Division.sort_order, Division.id).all()
 
@@ -254,7 +254,7 @@ def create_member(
     if db.query(Member).filter(Member.member_no == member_no).first():
         raise HTTPException(status_code=409, detail=f"會員卡號 {member_no} 已存在")
     if db.get(Division, body.division_id) is None:
-        raise HTTPException(status_code=400, detail="分區不存在")
+        raise HTTPException(status_code=400, detail="分會不存在")
 
     # 姓名同步：只給繁或只給簡都會補出另一邊
     name_trad, name_simp = sync_name_pair(
@@ -319,7 +319,7 @@ def update_member(
         member.name_simp = name_simp
     if "division_id" in data and data["division_id"] is not None:
         if db.get(Division, data["division_id"]) is None:
-            raise HTTPException(status_code=400, detail="分區不存在")
+            raise HTTPException(status_code=400, detail="分會不存在")
         member.division_id = data["division_id"]
     for _f in ("givenname", "surname", "gender", "phone", "email", "address"):
         if _f in data and data[_f] is not None:
@@ -422,7 +422,7 @@ def _parse_import_rows(raw: bytes, filename: str, divisions: list[Division]) -> 
         raise ValueError("找不到表頭，需包含「佛光會員卡號」與「姓名」（或「姓名(簡)」）欄位")
 
     def _div_key(text: str) -> str:
-        """分區名稱歸一：去空白、去「分會／分会」後綴，讓「東區」與「東區分會」互通"""
+        """分會名稱歸一：去空白、去「分會／分会」後綴，讓「東區」與「東區分會」互通"""
         t = re.sub(r"[\s\u3000]+", "", str(text or "")).strip()
         return re.sub(r"(分會|分会)$", "", t)
 
@@ -471,7 +471,7 @@ def _parse_import_rows(raw: bytes, filename: str, divisions: list[Division]) -> 
             errors.append(ImportErrorItem(row=row_no, member_no=member_no, reason="姓名不可為空"))
             continue
         if not division_raw:
-            errors.append(ImportErrorItem(row=row_no, member_no=member_no, reason="所屬分區不可為空"))
+            errors.append(ImportErrorItem(row=row_no, member_no=member_no, reason="所屬分會不可為空"))
             continue
 
         division_id = (
@@ -481,7 +481,7 @@ def _parse_import_rows(raw: bytes, filename: str, divisions: list[Division]) -> 
             or div_lookup.get(_div_key(division_raw).lower())
         )
         if division_id is None:
-            errors.append(ImportErrorItem(row=row_no, member_no=member_no, reason=f"分區不存在：{division_raw}"))
+            errors.append(ImportErrorItem(row=row_no, member_no=member_no, reason=f"分會不存在：{division_raw}"))
             continue
         if member_no in seen:
             errors.append(ImportErrorItem(row=row_no, member_no=member_no, reason="檔案中卡號重複"))
