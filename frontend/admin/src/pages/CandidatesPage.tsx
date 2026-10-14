@@ -68,6 +68,7 @@ const COLUMNS: { key: string; label: string; w: number; align?: 'right' }[] = [
   { key: 'name_simp', label: '姓名(簡)', w: 100 },
   { key: 'givenname', label: 'givenname', w: 110 },
   { key: 'surname', label: 'surname', w: 100 },
+  { key: 'name_en', label: '英文名', w: 150 },
   { key: 'gender', label: '性別', w: 72 },
   { key: 'division', label: '所屬分會', w: 100 },
   { key: 'photo', label: '照片', w: 80 },
@@ -334,6 +335,9 @@ export function CandidatesPage() {
                   </td>
                   <td className="h-[69px] px-4 py-0 text-[14px] text-ink-soft">
                     {c.surname || '—'}
+                  </td>
+                  <td className="h-[69px] px-4 py-0 text-[14px] text-ink">
+                    {c.name_en || '—'}
                   </td>
                   <td className="h-[69px] px-4 py-0 text-[14px] text-ink-soft">
                     {c.gender || '—'}
