@@ -2,10 +2,13 @@
 import { http } from './client'
 import type { CandidateOut, CandidateInput } from './types'
 
-export function listCandidates(divisionId?: number, roundId?: number) {
+export function listCandidates(divisionId?: number, roundId?: number, onlyInRound = false) {
   const params: Record<string, unknown> = {}
   if (divisionId) params.division_id = divisionId
   if (roundId) params.round_id = roundId
+  // 只有計票頁需要「只列出該輪次的候選人」；
+  // 候選人管理頁一定要帶 false，否則新建、尚未加入輪次的候選人會看不到
+  if (roundId && onlyInRound) params.only_in_round = true
   return http.get<CandidateOut[]>('/admin/candidates', { params })
 }
 

@@ -20,6 +20,21 @@ def _division_names(db: Session) -> dict[int, str]:
     return {d.id: d.name for d in db.query(Division).all()}
 
 
+def _current_round(db: Session):
+    """當前輪次：優先進行中，其次最新建立（與 members.py 相同邏輯）"""
+    from app.models.round_ import Round
+
+    rnd = (
+        db.query(Round)
+        .filter(Round.status == "active")
+        .order_by(Round.id.desc())
+        .first()
+    )
+    if rnd is None:
+        rnd = db.query(Round).order_by(Round.id.desc()).first()
+    return rnd
+
+
 def _vote_counts(db: Session, round_id: int) -> dict[int, int]:
     """某輪次各候選人得票數（即時統計，300 人規模直接 GROUP BY）"""
     rows = (
@@ -43,14 +58,24 @@ def _to_admin_out(c: Candidate, div_names: dict[int, str], votes: dict[int, int]
 def list_candidates(
     division_id: int | None = Query(None, description="按分會篩選"),
     round_id: int | None = Query(None, description="帶此參數時回傳各候選人在該輪次的得票數"),
+    only_in_round: bool = Query(
+        False,
+        description="只回傳已加入該輪次的候選人（計票頁用）。"
+        "候選人管理頁不要帶，否則新建、尚未加入輪次的候選人會看不到。",
+    ),
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    """列出候選人（可按分會篩選；可附得票數）"""
+    """列出候選人（可按分會篩選；可附得票數）
+
+    ⚠️ round_id 本身**只用來帶出票數**，不會過濾名單。
+       需要「只列出該輪次的候選人」請另外帶 only_in_round=true。
+       （先前 round_id 直接 INNER JOIN 篩選，導致新建候選人消失。）
+    """
     q = db.query(Candidate)
     if division_id is not None:
         q = q.filter(Candidate.division_id == division_id)
-    if round_id is not None:
+    if round_id is not None and only_in_round:
         q = (
             q.join(RoundCandidate, RoundCandidate.candidate_id == Candidate.id)
             .filter(RoundCandidate.round_id == round_id)
@@ -94,6 +119,26 @@ def create_candidate(
         raise HTTPException(status_code=400, detail="分會不存在")
     cand = Candidate(**_sync_names(body.model_dump()))
     db.add(cand)
+    db.flush()   # 先取得 cand.id
+
+    # 自動加入「當前輪次」，否則新候選人不會出現在投票端
+    # （後台沒有挑選輪次候選人的介面，不自動加入就得靠 API 才進得去）
+    rnd = _current_round(db)
+    if rnd is not None:
+        next_order = (
+            db.query(func.max(RoundCandidate.sort_order))
+            .filter(RoundCandidate.round_id == rnd.id)
+            .scalar()
+        )
+        db.add(
+            RoundCandidate(
+                round_id=rnd.id,
+                candidate_id=cand.id,
+                division_id=cand.division_id,
+                sort_order=(next_order + 1) if next_order is not None else 0,
+            )
+        )
+
     db.commit()
     db.refresh(cand)
     return _to_admin_out(cand, _division_names(db), None)
@@ -118,6 +163,40 @@ def update_candidate(
     # 照片被換掉時，刪除先前的上傳檔（種子照片不會被動到）
     if "avatar_url" in payload and old_avatar != cand.avatar_url:
         media_service.delete_uploaded_photo(old_avatar)
+    # 分會換了 → 同步輪次關聯的分會（否則投票端分組會不一致）
+    if "division_id" in payload:
+        db.query(RoundCandidate).filter(RoundCandidate.candidate_id == cand.id).update(
+            {RoundCandidate.division_id: cand.division_id}, synchronize_session=False
+        )
+        db.commit()
+
+    # 安全網：若這位候選人還沒加入當前輪次（舊資料、或建立時還沒有輪次），
+    # 編輯時順便補上 —— 否則他永遠不會出現在投票端，而後台沒有地方可以加。
+    rnd = _current_round(db)
+    if rnd is not None:
+        linked = (
+            db.query(RoundCandidate)
+            .filter(
+                RoundCandidate.round_id == rnd.id,
+                RoundCandidate.candidate_id == cand.id,
+            )
+            .first()
+        )
+        if linked is None:
+            next_order = (
+                db.query(func.max(RoundCandidate.sort_order))
+                .filter(RoundCandidate.round_id == rnd.id)
+                .scalar()
+            )
+            db.add(
+                RoundCandidate(
+                    round_id=rnd.id,
+                    candidate_id=cand.id,
+                    division_id=cand.division_id,
+                    sort_order=(next_order + 1) if next_order is not None else 0,
+                )
+            )
+            db.commit()
     db.refresh(cand)
     return _to_admin_out(cand, _division_names(db), None)
 
@@ -185,6 +264,11 @@ def delete_candidate(
     from app.models.vote import VoteCandidate
     if db.query(VoteCandidate).filter(VoteCandidate.candidate_id == candidate_id).first():
         raise HTTPException(status_code=409, detail="該候選人已被投票引用，無法刪除")
+    # 先解除輪次關聯：RoundCandidate.candidate_id 的 FK 是 NO ACTION，
+    # 直接刪候選人會違反外鍵而 500
+    db.query(RoundCandidate).filter(RoundCandidate.candidate_id == candidate_id).delete(
+        synchronize_session=False
+    )
     uploaded = cand.avatar_url
     db.delete(cand)
     db.commit()

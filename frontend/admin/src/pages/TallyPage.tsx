@@ -431,7 +431,7 @@ export function TallyPage() {
   const candidatesState = useAsync<CandidateOut[]>(
     () =>
       roundId !== null && divId !== null
-        ? listCandidates(divId, roundId)
+        ? listCandidates(divId, roundId, true)
         : Promise.resolve([]),
     [roundId, divId],
   )
