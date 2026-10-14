@@ -2,6 +2,7 @@
 狀態機：draft → active → closed → locked
 """
 import json
+import logging
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -18,6 +19,7 @@ from app.services.activity import log_action
 from app.schemas.round import (RoundUpdate, RoundOut, DivisionProgressOut, RoundProgressOut, TieCandidateOut, TieDivisionOut)
 
 router = APIRouter(prefix="/admin/rounds", tags=["admin-rounds"])
+logger = logging.getLogger("fgs-vote")
 
 # 允許的狀態轉換
 ALLOWED_TRANSITIONS = {
@@ -292,6 +294,98 @@ def confirm_round(round_id: int, db: Session = Depends(get_db), _admin=Depends(g
     db.commit()
     db.refresh(r)
     return _round_to_out(r, db, tie_divisions=_tie_divisions(db, r))
+
+
+
+def _clear_round_redis(round_id: int) -> int:
+    """刪除本輪相關的所有 Redis 計數，回傳刪除的 key 數。
+
+    key 規範見 app/redis_client.py：
+      vote:count:{round}:{div}:{cand} / vote:cast:{round}:{member}
+      vote:division_cast:{round}:{div} / vote:round:{round}
+    註：計票讀取時「Redis 全 0 且有 PG 投票」會自動由 PG 回填，
+        所以清 Redis 一定要搭配刪除 PG 的 votes，兩邊才一致。
+    """
+    from app.redis_client import redis_client
+
+    patterns = [
+        f"vote:count:{round_id}:*",
+        f"vote:cast:{round_id}:*",
+        f"vote:division_cast:{round_id}:*",
+        f"vote:round:{round_id}",
+    ]
+    n = 0
+    try:
+        for pat in patterns:
+            for key in redis_client.scan_iter(match=pat, count=500):
+                redis_client.delete(key)
+                n += 1
+    except Exception as exc:  # noqa: BLE001 - Redis 掛掉不該讓清除失敗
+        logger.warning(f"清除 Redis 計數失敗（round {round_id}）：{exc}")
+    return n
+
+
+@router.post("/{round_id}/clear-votes", response_model=RoundOut)
+def clear_round_votes(
+    round_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)
+):
+    """清除本輪的投票紀錄（測試用）。
+
+    ⚠️ 會**永久刪除**這一輪的所有投票（votes / vote_candidates）與 Redis 計數，
+       並清空本輪各分會的會長／副會長手動指派（票都沒了，指派失去依據）。
+       不影響會員、候選人與其他輪次。
+
+    與 `reset` 的差別：reset 只把狀態退回 draft、**保留票數**；
+    這個端點才是真的把票清掉。
+    """
+    r = db.get(Round, round_id)
+    if r is None:
+        raise HTTPException(status_code=404, detail="進程不存在")
+
+    # 1. 先刪投票選項，再刪投票（vote_candidates 有 FK 指向兩邊）
+    vote_ids = [row[0] for row in db.query(Vote.id).filter(Vote.round_id == round_id).all()]
+    removed_choices = 0
+    if vote_ids:
+        removed_choices = (
+            db.query(VoteCandidate)
+            .filter(VoteCandidate.vote_id.in_(vote_ids))
+            .delete(synchronize_session=False)
+        )
+    removed_votes = (
+        db.query(Vote).filter(Vote.round_id == round_id).delete(synchronize_session=False)
+    )
+
+    # 2. 清空本輪各分會的手動當選指派
+    div_ids = [
+        row[0]
+        for row in db.query(RoundCandidate.division_id)
+        .filter(RoundCandidate.round_id == round_id)
+        .distinct()
+        .all()
+    ]
+    if div_ids:
+        db.query(Division).filter(Division.id.in_(div_ids)).update(
+            {
+                Division.chair_candidate_id: None,
+                Division.vice_candidate_id: None,
+                Division.officers_manual: False,
+            },
+            synchronize_session=False,
+        )
+    db.commit()
+
+    # 3. 清 Redis 計數
+    removed_keys = _clear_round_redis(round_id)
+
+    log_action(
+        db,
+        "round_clear_votes",
+        f"清除本輪投票：{r.name}（刪除 {removed_votes} 票 / {removed_choices} 個選項 / {removed_keys} 個 Redis key）",
+        operator=admin.username,
+    )
+    db.commit()
+    db.refresh(r)
+    return _round_to_out(r, db)
 
 
 @router.post("/{round_id}/reset", response_model=RoundOut)

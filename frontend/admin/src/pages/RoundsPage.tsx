@@ -23,6 +23,7 @@ import {
   closeRound,
   resetRound,
   confirmRound,
+  clearRoundVotes,
   updateRound,
 } from '../api/rounds'
 import { fetchDivisionOfficers, assignDivisionOfficers } from '../api/divisions'
@@ -394,6 +395,31 @@ export function RoundsPage() {
               >
                 <IconRefresh size={15} />
                 重新開始一輪
+              </Button>
+            )}
+            {target && (
+              <Button
+                variant="primary"
+                className="bg-white/10 border-white/40 text-white hover:bg-white/20"
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      '確定要清除本輪的所有投票紀錄嗎？\n\n' +
+                        '· 會永久刪除這一輪的票數與 Redis 計數\n' +
+                        '· 會清空各分會的會長／副會長手動指派\n' +
+                        '· 不影響會員、候選人與其他輪次\n\n' +
+                        '這個動作無法復原。',
+                    )
+                  )
+                    return
+                  void runAction(
+                    () => clearRoundVotes(target.id),
+                    '本輪投票紀錄已清除（可重新開始測試）。',
+                  )
+                }}
+                disabled={busy}
+              >
+                清除本輪投票
               </Button>
             )}
             {target?.status === 'closed' && (

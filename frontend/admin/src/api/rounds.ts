@@ -34,6 +34,11 @@ export async function confirmRound(id: number): Promise<RoundOut> {
  * 重新開始一輪投票：狀態退回 draft（未開始），可再次開啟。
  * ⚠️ 不清除任何投票紀錄。
  */
+/** 清除本輪所有投票紀錄（測試用；會永久刪除票數與 Redis 計數） */
+export async function clearRoundVotes(id: number): Promise<RoundOut> {
+  return http.post<RoundOut>(`/admin/rounds/${id}/clear-votes`)
+}
+
 export async function resetRound(id: number): Promise<RoundOut> {
   return http.post<RoundOut>(`/admin/rounds/${id}/reset`)
 }
