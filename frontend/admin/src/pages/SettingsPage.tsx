@@ -135,6 +135,7 @@ export function SettingsPage() {
 
   const [intervalSec, setIntervalSec] = useState(String(POLLING_DEFAULTS.intervalSec))
   const [healthCheckSec, setHealthCheckSec] = useState(String(POLLING_DEFAULTS.healthCheckSec))
+  const [proxyLimit, setProxyLimit] = useState('1')
   const [toast, setToast] = useState<string | null>(null)
 
   /* 載入完成 → 填入輪詢與健康檢查欄位（資料未到前沿用設計稿預設值） */
@@ -219,14 +220,20 @@ export function SettingsPage() {
       flash('健康檢查間隔需為 1-3600 秒的整數')
       return
     }
+    const proxy = Number(proxyLimit)
+    if (!Number.isInteger(proxy) || proxy < 0 || proxy > 50) {
+      flash('代投上限需為 0-50 的整數（0 = 不限制）')
+      return
+    }
     try {
       setSaving(true)
       await updateSettings({
         poll_interval_sec: poll,
         health_check_interval_sec: health,
+        proxy_vote_limit: proxy,
       })
       await reload()
-      flash(`設定已儲存：輪詢 ${poll} 秒／健康檢查 ${health} 秒`)
+      flash(`設定已儲存：輪詢 ${poll} 秒／健康檢查 ${health} 秒／代投上限 ${proxy || '不限'} 位`)
     } catch (e) {
       flash(apiError(e))
     } finally {
@@ -238,6 +245,7 @@ export function SettingsPage() {
   const handleCancel = () => {
     setIntervalSec(String(data?.poll_interval_sec ?? POLLING_DEFAULTS.intervalSec))
     setHealthCheckSec(String(data?.health_check_interval_sec ?? POLLING_DEFAULTS.healthCheckSec))
+    setProxyLimit(String(data?.proxy_vote_limit ?? 1))
     flash('已取消修改')
   }
 
@@ -334,6 +342,24 @@ export function SettingsPage() {
                   className={inputClass}
                   value={healthCheckSec}
                   onChange={(e) => setHealthCheckSec(e.target.value)}
+                />
+              </Field>
+              <Field
+                label={<FieldLabel>代投上限（位）</FieldLabel>}
+                hint={
+                  <FieldHint>
+                    一位代投人在同一輪最多能代幾位會員投票，預設 1；填 0 表示不限制。
+                    代投人自己那一票不計入。
+                  </FieldHint>
+                }
+              >
+                <input
+                  type="number"
+                  min={0}
+                  max={50}
+                  className={inputClass}
+                  value={proxyLimit}
+                  onChange={(e) => setProxyLimit(e.target.value)}
                 />
               </Field>
             </div>

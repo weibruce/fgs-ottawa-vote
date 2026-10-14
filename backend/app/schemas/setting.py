@@ -15,6 +15,7 @@ class SettingsOut(BaseModel):
     anonymous_default: bool = True
     retention_days: int = 365
     timezone: str = "Asia/Taipei"
+    proxy_vote_limit: int = 1
 
 
 class SettingsUpdate(BaseModel):
@@ -29,6 +30,9 @@ class SettingsUpdate(BaseModel):
     anonymous_default: bool | None = Field(None, description="新輪次預設匿名")
     retention_days: int | None = Field(None, ge=1, le=3650, description="投票資料保留天數")
     timezone: str | None = Field(None, max_length=64, description="時區")
+    proxy_vote_limit: int | None = Field(
+        None, ge=0, le=50, description="一位代投人本輪最多能代幾位會員投票（0 = 不限制）"
+    )
 
 
 class ActivityOut(BaseModel):

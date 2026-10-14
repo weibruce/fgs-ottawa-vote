@@ -18,6 +18,7 @@ from app.redis_client import (
     vote_cast_key,
     division_cast_key,
 )
+from app.services import settings_service
 from app.services.simp_trad import match_member_name
 
 settings = get_settings()
@@ -98,6 +99,30 @@ def confirm_identity(
         ):
             raise HTTPException(status_code=400, detail="代投人姓名與卡號不匹配，請核實")
 
+        # 3.6 代投上限（系統設定 proxy_vote_limit，預設 1）
+        #     一位代投人在同一輪最多只能代 N 位會員投票。
+        #     只計算 is_proxy=True 且 proxy_member_no=代投人卡號 的票 ——
+        #     代投人自己那一票不算在內。
+        limit = settings_service.get_one(db, "proxy_vote_limit")
+        if isinstance(limit, int) and limit > 0:
+            used = (
+                db.query(Vote)
+                .filter(
+                    Vote.round_id == round_id,
+                    Vote.is_proxy == True,  # noqa: E712
+                    Vote.proxy_member_no == proxy_member.member_no,
+                )
+                .count()
+            )
+            if used >= limit:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        f"代投上限為 {limit} 位："
+                        f"{proxy_member.name_trad}本輪已代投 {used} 位，無法再代投"
+                    ),
+                )
+
     # 4. 是否已投票：**不再擋**。
     #    依需求，無論是否投過票都要能進入「身份核驗完成」頁，由前端依狀態決定
     #    後續動作（開始投票／查看投票）。真正的防重仍在 submit_vote（409）。
@@ -153,7 +178,12 @@ def confirm_identity(
     max_votes = division.max_votes
 
     # 8. 生成 voter_token（JWT，含 member_no + division_id + round_id + proxy）
-    token = _make_voter_token(member_no, member.division_id, round_id, is_proxy)
+    #     代投人卡號綁進 token：submit_vote 只信任 token 內的值，
+    #     不接受請求 body 自行宣稱的代投人（否則可繞過代投上限）。
+    token = _make_voter_token(
+        member_no, member.division_id, round_id, is_proxy,
+        proxy_member_no=proxy_member.member_no if proxy_member is not None else "",
+    )
 
     # 8.5 候選人不可被委託（需求第 8 點）
     #     該會員若是本輪任何分會的候選人，禁止別人替他代投
@@ -211,13 +241,21 @@ def confirm_identity(
     }
 
 
-def _make_voter_token(member_no: str, division_id: int, round_id: int, is_proxy: bool) -> str:
+def _make_voter_token(
+    member_no: str,
+    division_id: int,
+    round_id: int,
+    is_proxy: bool,
+    proxy_member_no: str = "",
+) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "member_no": member_no,
         "division_id": division_id,
         "round_id": round_id,
         "is_proxy": is_proxy,
+        # 代投人卡號（身份確認時已驗證）；非代投時為空字串
+        "proxy_member_no": proxy_member_no,
         "jti": str(uuid.uuid4()),
         "exp": now.timestamp() + settings.voter_token_expire_hours * 3600,
     }
@@ -252,9 +290,26 @@ def submit_vote(
     token_member_no = claims.get("member_no")
     token_division_id = claims.get("division_id")
     token_round_id = claims.get("round_id")
+    token_is_proxy = bool(claims.get("is_proxy"))
+    # 代投人卡號一律以 token 為準（身份確認時已驗證），不接受 body 自稱，
+    # 否則無法保證「代投上限」不被繞過。
+    token_proxy_member_no = claims.get("proxy_member_no") or ""
 
     if token_round_id != round_id:
         raise HTTPException(status_code=400, detail="輪次與憑證不符")
+
+    # 1.5 代投旗標一律以 token 為準 —— token 是身份確認階段簽發的，
+    #     body 只是重述。不信任 body 才能保證「代投上限」與 proxy 標記無法被繞過。
+    if token_is_proxy:
+        proxy = True
+        proxy_member_no = token_proxy_member_no
+        if not proxy_member_no:
+            # 舊版 token 沒帶代投人卡號 → 無法計入代投上限，要求重新驗證
+            raise HTTPException(status_code=401, detail="憑證缺少代投人資訊，請重新驗證身分")
+    else:
+        # 本人投票的 token 不得拿來當代投票用
+        proxy = False
+        proxy_member_no = ""
 
     # 2. 查輪次
     rnd = db.get(Round, round_id)
@@ -316,6 +371,36 @@ def submit_vote(
         # 殘留 key → 清除後繼續
         redis_client.delete(cast_key)
         redis_client.set(cast_key, "1", nx=True, ex=86400 * 7)
+
+    # 7.5 代投上限再檢查一次（defence in depth）
+    #     confirm_identity 與 submit_vote 之間可能已有其他代投完成，
+    #     因此寫票前用同一條件重算，避免超額。
+    if proxy and proxy_member_no:
+        _limit = settings_service.get_one(db, "proxy_vote_limit")
+        if isinstance(_limit, int) and _limit > 0:
+            _used = (
+                db.query(Vote)
+                .filter(
+                    Vote.round_id == round_id,
+                    Vote.is_proxy == True,  # noqa: E712
+                    Vote.proxy_member_no == proxy_member_no,
+                )
+                .count()
+            )
+            if _used >= _limit:
+                redis_client.delete(cast_key)
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"代投上限為 {_limit} 位，該代投人本輪已達上限",
+                )
+
+    # 7.6 代投人姓名也以會員檔為準（避免 body 塞入不實姓名，影響事後追溯）
+    if proxy and proxy_member_no:
+        _pm = db.query(Member).filter(Member.member_no == proxy_member_no).first()
+        if _pm is None:
+            redis_client.delete(cast_key)
+            raise HTTPException(status_code=404, detail="代投人資料不存在，請重新驗證身分")
+        proxy_name = _pm.name_trad
 
     # 8. 事務寫 PG
     try:

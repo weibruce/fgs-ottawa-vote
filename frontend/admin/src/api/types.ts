@@ -394,6 +394,8 @@ export interface SettingsOut {
   anonymous_default: boolean
   retention_days: number
   timezone: string
+  /** 一位代投人本輪最多能代幾位會員投票（0 = 不限制） */
+  proxy_vote_limit: number
 }
 
 export interface ActivityOut {

@@ -15,6 +15,7 @@ SETTING_DEFS: dict[str, tuple[type, object]] = {
     "anonymous_default": (bool, True),       # 新輪次預設匿名
     "retention_days": (int, 365),            # 投票資料保留天數
     "timezone": (str, "Asia/Taipei"),
+    "proxy_vote_limit": (int, 1),            # 一位代投人本輪最多能代幾位會員投票
 }
 
 
