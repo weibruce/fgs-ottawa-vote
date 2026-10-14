@@ -26,9 +26,20 @@ def _current_round(db: Session) -> Round | None:
 
 
 @router.get("", response_model=list[DivisionOut])
-def list_divisions(db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
-    """列出所有分會（按 sort_order）"""
-    return db.query(Division).order_by(Division.sort_order, Division.id).all()
+def list_divisions(
+    only_in_vote: bool = Query(
+        False,
+        description="只回傳「計入本次投票」的分會。跟候選人有關的頁面請帶 true；"
+        "分會管理／會員管理需要全部分會，維持 false。",
+    ),
+    db: Session = Depends(get_db),
+    _admin=Depends(get_current_admin),
+):
+    """列出分會（按 sort_order）"""
+    q = db.query(Division)
+    if only_in_vote:
+        q = q.filter(Division.include_in_vote == True)  # noqa: E712
+    return q.order_by(Division.sort_order, Division.id).all()
 
 
 # ── 當選結果（會長／副會長） ─────────────────────────────────────────────
@@ -70,9 +81,16 @@ class OfficerAssignIn(BaseModel):
     vice_candidate_id: int | None = None
 
 
-def _officer_rows(db: Session, round_id: int) -> list[dict]:
-    """各分會的候選人得票排名 + 會長／副會長（自動或手動指派）"""
-    divisions = db.query(Division).order_by(Division.sort_order, Division.id).all()
+def _officer_rows(db: Session, round_id: int, only_in_vote: bool = False) -> list[dict]:
+    """各分會的候選人得票排名 + 會長／副會長（自動或手動指派）
+
+    only_in_vote=True 時排除「不計入本次投票」的分會 —— 那些分會沒有候選人，
+    在當選結果／計票頁只會是空卡。
+    """
+    q = db.query(Division)
+    if only_in_vote:
+        q = q.filter(Division.include_in_vote == True)  # noqa: E712
+    divisions = q.order_by(Division.sort_order, Division.id).all()
 
     counts: dict[int, dict[int, int]] = {}
     rows = (
@@ -160,6 +178,7 @@ def _officer_rows(db: Session, round_id: int) -> list[dict]:
 @router.get("/officers", response_model=list[DivisionOfficersOut])
 def division_officers(
     round_id: int | None = Query(None),
+    only_in_vote: bool = Query(False, description="只回傳計入本次投票的分會"),
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
@@ -168,7 +187,7 @@ def division_officers(
     rid = round_id or (cur.id if cur else None)
     if rid is None:
         return []
-    return _officer_rows(db, rid)
+    return _officer_rows(db, rid, only_in_vote)
 
 
 @router.put("/{division_id}/officers", response_model=DivisionOfficersOut)
@@ -219,10 +238,17 @@ def assign_officers(
 
 
 @router.get("/overview", response_model=list[DivisionOverviewOut])
-def division_overview(db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
-    """分會管理頁：所有分會基本設定 + 會員/候選人/已投票統計 + 當前輪次狀態"""
+def division_overview(
+    only_in_vote: bool = Query(False, description="只回傳計入本次投票的分會"),
+    db: Session = Depends(get_db),
+    _admin=Depends(get_current_admin),
+):
+    """分會管理頁：分會基本設定 + 會員/候選人/已投票統計 + 當前輪次狀態"""
     cur = _current_round(db)
-    divisions = db.query(Division).order_by(Division.sort_order, Division.id).all()
+    q = db.query(Division)
+    if only_in_vote:
+        q = q.filter(Division.include_in_vote == True)  # noqa: E712
+    divisions = q.order_by(Division.sort_order, Division.id).all()
 
     member_counts = dict(
         db.query(Member.division_id, func.count(Member.id))

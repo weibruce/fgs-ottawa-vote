@@ -179,7 +179,7 @@ export function RoundsPage() {
   const progress = progressState.data
 
   const officersState = useAsync(
-    () => fetchDivisionOfficers(target?.id),
+    () => fetchDivisionOfficers(target?.id, true),
     [target?.id ?? 0],
   )
   const officers = officersState.data ?? []

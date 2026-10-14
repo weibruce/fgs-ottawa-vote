@@ -75,7 +75,7 @@ export function VoteConfigPage() {
     const [rounds, settings, divisions, summary] = await Promise.all([
       listRounds(),
       fetchSettings(),
-      fetchDivisionOverview(),
+      fetchDivisionOverview(true),
       fetchDashboardSummary(),
     ])
     const cur = rounds.find((r) => r.status === 'active') ?? rounds[0] ?? null

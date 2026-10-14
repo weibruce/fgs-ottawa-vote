@@ -71,8 +71,17 @@ def appointment_summary(
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    """所有分會彙總：會長／副會長（取自 position）＋ 已指派數＋是否已確認"""
-    divisions = db.query(Division).order_by(Division.sort_order, Division.id).all()
+    """所有分會彙總：會長／副會長（取自 position）＋ 已指派數＋是否已確認
+
+    只列出「計入本次投票」的分會：會長／副會長由選舉產生，
+    沒有候選人、不參與投票的分會（例如青年團）在這個頁面沒有意義。
+    """
+    divisions = (
+        db.query(Division)
+        .filter(Division.include_in_vote == True)  # noqa: E712
+        .order_by(Division.sort_order, Division.id)
+        .all()
+    )
     rows = db.query(Appointment).order_by(Appointment.division_id, Appointment.id).all()
 
     by_division: dict[int, list[Appointment]] = {}

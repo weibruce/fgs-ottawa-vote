@@ -112,7 +112,7 @@ function AvatarThumb({ src, name }: { src: string; name: string }) {
 export function CandidatesPage() {
   // 同時取得分會（名稱↔ID）、進程（取 active 以帶出得票數）、候選人
   const { data, loading, error, reload } = useAsync(async () => {
-    const [rounds, divisions] = await Promise.all([listRounds(), fetchDivisionOverview()])
+    const [rounds, divisions] = await Promise.all([listRounds(), fetchDivisionOverview(true)])
     const cur = rounds.find((r) => r.status === 'active') ?? rounds[0] ?? null
     const list = await listCandidates(undefined, cur?.id)
     const divIdByName: Record<string, number> = {}

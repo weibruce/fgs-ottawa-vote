@@ -219,7 +219,7 @@ export function ExportPage() {
   const [toast, setToast] = useState<string | null>(null)
 
   /* 篩選選項由後端提供（分會 / 進程） */
-  const { data: divisions } = useAsync(() => listDivisions(), [])
+  const { data: divisions } = useAsync(() => listDivisions(true), [])
   const { data: rounds } = useAsync(() => listRounds(), [])
   const { data: history, loading: historyLoading, error: historyError, reload: reloadHistory } =
     useAsync(() => fetchExportHistory(), [])

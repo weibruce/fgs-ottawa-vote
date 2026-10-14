@@ -405,13 +405,13 @@ export function TallyPage() {
 
   // 所有分會總覽卡片：直接用 /admin/divisions/officers（單一 API，含各分會候選人照片與票數）
   const officersState = useAsync<DivisionOfficers[]>(
-    () => (roundId !== null ? fetchDivisionOfficers(roundId) : Promise.resolve([])),
+    () => (roundId !== null ? fetchDivisionOfficers(roundId, true) : Promise.resolve([])),
     [roundId],
   )
   const officers = useMemo(() => officersState.data ?? [], [officersState.data])
 
   // 分會清單（名稱 + 標識色）：分頁與顏色一律來自 API，載入中不借用 mock
-  const divisionsState = useAsync<DivisionOut[]>(() => listDivisions(), [])
+  const divisionsState = useAsync<DivisionOut[]>(() => listDivisions(true), [])
   const divisions = divisionsState.data ?? []
 
   const divRow = overview?.find((r) => r.name === division)
@@ -450,7 +450,7 @@ export function TallyPage() {
     try {
       const [ov, off] = await Promise.all([
         fetchTallyOverview(roundId),
-        fetchDivisionOfficers(roundId),
+        fetchDivisionOfficers(roundId, true),
       ])
       overviewState.setData(ov)
       officersState.setData(off)
