@@ -42,6 +42,20 @@ else
   echo "   （沒有 dump 也能部署，只是資料庫會是空的）"
 fi
 
+# 3) 補上候選人照片。
+#    backend/uploads/ 被 .gitignore 排除（二進位、且和個資有關），所以不會在
+#    git archive 裡。但 DB dump 的 candidates.avatar_url 指向 /api/media/candidates/…，
+#    照片沒一起上去的話，後台與投票端的候選人頭像全部會是破圖。
+UPLOADS="$REPO/backend/uploads"
+if [ -d "$UPLOADS" ] && [ -n "$(find "$UPLOADS" -type f -print -quit)" ]; then
+  mkdir -p "$TMP/backend"
+  cp -r "$UPLOADS" "$TMP/backend/uploads"
+  (cd "$TMP" && zip -q -r "$OUT" backend/uploads)
+  echo "已加入候選人照片（$(find "$UPLOADS" -type f | wc -l) 個檔案，$(du -sh "$UPLOADS" | cut -f1)）"
+else
+  echo "ℹ️  backend/uploads/ 是空的，略過照片"
+fi
+
 echo
 echo "打包完成：$OUT"
 echo "大小：$(du -h "$OUT" | cut -f1)"

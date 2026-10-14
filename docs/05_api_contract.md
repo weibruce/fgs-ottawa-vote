@@ -191,7 +191,12 @@ query：`?division_id=&round_id=&anonymous=&format=csv|xlsx`
 ```json
 { "poll_interval_sec": 2, "health_check_interval_sec": 30,
   "vote_base_url": "https://vote.bgs.org/r1", "anonymous_default": true,
-  "retention_days": 365, "timezone": "Asia/Taipei" }
+  "retention_days": 365, "timezone": "Asia/Taipei",
+  "proxy_vote_limit": 1 }
+```
+
+> `proxy_vote_limit`：一位代投人在同一輪最多能代幾位會員投票，預設 1，`0` = 不限制。
+> 只計算 `is_proxy=true` 的票；代投人自己那一票不計入。
 ```
 
 `/activity` → `[{id, action, detail, operator, created_at}]`
