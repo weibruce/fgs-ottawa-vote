@@ -44,3 +44,4 @@ deploy/*.tar.gz
 deploy/.image-build/
 deploy/qnap-application.filled.yml
 deploy/*pw*.txt
+backend/uploads/

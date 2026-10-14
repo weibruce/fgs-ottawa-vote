@@ -73,13 +73,22 @@ async def global_exception_handler(request: Request, exc: Exception):
 # --- 上傳的媒體檔案 ---
 # 候選人照片上傳後存到 upload_dir，並以 {media_url_prefix}/candidates/xxx.jpg 提供。
 # 與 API 同源，前端 <img src> 直接可用（開發時走 Vite proxy，正式走 nginx /api）。
-_upload_root = Path(settings.upload_dir)
-(_upload_root / "candidates").mkdir(parents=True, exist_ok=True)
-app.mount(
-    settings.media_url_prefix,
-    StaticFiles(directory=str(_upload_root)),
-    name="media",
-)
+_upload_root = Path(settings.upload_dir).expanduser()
+try:
+    (_upload_root / "candidates").mkdir(parents=True, exist_ok=True)
+except OSError as exc:
+    # 目錄建不起來（權限、唯讀檔案系統、路徑不存在）時，
+    # 只停用照片上傳，不要讓整個 API 起不來 —— 投票本身不該被拖垮。
+    logger.error(
+        f"無法建立上傳目錄 {_upload_root}（{exc}）。"
+        f"候選人照片上傳將無法使用；請設定環境變數 UPLOAD_DIR 指向可寫入的位置。"
+    )
+else:
+    app.mount(
+        settings.media_url_prefix,
+        StaticFiles(directory=str(_upload_root)),
+        name="media",
+    )
 
 
 # --- 路由 ---
