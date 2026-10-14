@@ -7,6 +7,7 @@ class DivisionBase(BaseModel):
     code: str = Field(..., min_length=1, max_length=32, description="區代碼 east/south/west/north/central")
     name: str = Field(..., min_length=1, max_length=64, description="分會名稱（中文）")
     name_en: str = Field("", max_length=64, description="分會英文名稱；英文介面顯示用")
+    include_in_vote: bool = Field(True, description="是否計入本次投票；false 則整個投票流程都不出現")
     min_votes: int = Field(1, ge=0, le=10)
     max_votes: int = Field(2, ge=1, le=10)
     opens_at: datetime | None = None
@@ -23,6 +24,7 @@ class DivisionCreate(DivisionBase):
 class DivisionUpdate(BaseModel):
     name: str | None = None
     name_en: str | None = None
+    include_in_vote: bool | None = None
     min_votes: int | None = Field(None, ge=0, le=10)
     max_votes: int | None = Field(None, ge=1, le=10)
     opens_at: datetime | None = None

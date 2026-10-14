@@ -108,6 +108,7 @@ class DivisionOut(BaseModel):
     id: int
     name: str
     name_en: str = ""
+    include_in_vote: bool = True
     code: str
     color: str
     min_votes: int

@@ -23,6 +23,7 @@ import {
   closeRound,
   resetRound,
   confirmRound,
+  updateRound,
 } from '../api/rounds'
 import { fetchDivisionOfficers, assignDivisionOfficers } from '../api/divisions'
 import type { DivisionOfficers, OfficerCandidate, RoundOut } from '../api/types'
@@ -185,6 +186,8 @@ export function RoundsPage() {
   const [busy, setBusy] = useState(false)
   const [savingOfficers, setSavingOfficers] = useState<number | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [nameDraft, setNameDraft] = useState('')
+  const [savingName, setSavingName] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
   /* 手動指派選擇（division_id → 會長／副會長候選人 id 字串） */
@@ -245,6 +248,30 @@ export function RoundsPage() {
       if (!cur.vice) return { ...prev, [divId]: { ...cur, vice: id } }
       return { ...prev, [divId]: { chair: id, vice: cur.chair } }
     })
+  }
+
+  /** 把目前輪次名稱帶入輸入框（輪次載入 / 切換時） */
+  useEffect(() => {
+    if (target) setNameDraft(target.name)
+  }, [target?.id, target?.name])
+
+  /** 儲存選舉名稱 */
+  async function handleSaveName() {
+    if (!target) return
+    const next = nameDraft.trim()
+    if (!next || next === target.name) return
+    setSavingName(true)
+    setActionError(null)
+    setNotice(null)
+    try {
+      await updateRound(target.id, { name: next })
+      setNotice(`選舉名稱已更新為「${next}」。`)
+      await roundsState.reload()
+    } catch (e) {
+      setActionError(apiError(e))
+    } finally {
+      setSavingName(false)
+    }
   }
 
   async function handleAssign(div: DivisionOfficers) {
@@ -386,6 +413,30 @@ export function RoundsPage() {
         </header>
 
         <div className="px-6 pt-6 pb-6">
+          {/* 選舉名稱（顯示在投票端） */}
+          <div className="mb-6">
+            <label className="text-[12px] font-semibold text-gray-deep">選舉名稱</label>
+            <p className="mt-1 text-[11px] leading-[16px] text-gray">
+              投票端會顯示這個名稱（繁中直接使用；简中／English 會自動轉換）。
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                className="ui-input max-w-[320px]"
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                placeholder="例如：分會幹部改選"
+                disabled={!target || savingName}
+              />
+              <Button
+                variant="primary"
+                disabled={!target || savingName || !nameDraft.trim() || nameDraft.trim() === target?.name}
+                onClick={() => void handleSaveName()}
+              >
+                {savingName ? '儲存中…' : '儲存名稱'}
+              </Button>
+            </div>
+          </div>
+
           {/* 票數設定 + 總票數 */}
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div className="text-right">

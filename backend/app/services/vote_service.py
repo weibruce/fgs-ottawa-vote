@@ -68,6 +68,17 @@ def confirm_identity(
             detail="您尚未繳納2026年會費，無法投票，請聯繫各分會會長處理",
         )
 
+    # 3.4 分會是否計入本次投票
+    #     不計入的分會，其會員在投票端會被明確擋下（而不是進去看到空的候選人清單）
+    member_div = db.get(Division, member.division_id)
+    if member_div is None:
+        raise HTTPException(status_code=403, detail="您的分會資料異常，請聯繫管理員")
+    if not member_div.include_in_vote:
+        raise HTTPException(
+            status_code=403,
+            detail=f"{member_div.name}本次不參與投票，如有疑問請聯繫管理員",
+        )
+
     # 3.5 代投人驗證（勾選代投時，兩組姓名＋卡號都要通過）
     proxy_member = None
     if is_proxy:
@@ -261,6 +272,9 @@ def submit_vote(
 
     # 5. 票數校驗
     division = db.get(Division, member.division_id)
+    # 防禦：即使持有舊 token，不計入本次投票的分會也不能送出
+    if division is None or not division.include_in_vote:
+        raise HTTPException(status_code=403, detail="此分會本次不參與投票")
     min_votes = division.min_votes if division and division.min_votes > 0 else rnd.min_votes
     max_votes = division.max_votes if division else rnd.max_votes
     if len(candidate_ids) < min_votes:
@@ -377,6 +391,9 @@ def get_division_candidates(db: Session, round_id: int, division_id: int) -> dic
     # 分會
     div = db.get(Division, division_id)
     if div is None:
+        raise HTTPException(status_code=404, detail="分會不存在")
+    # 不計入本次投票的分會，直接視為不存在，避免從投票端被繞過
+    if not div.include_in_vote:
         raise HTTPException(status_code=404, detail="分會不存在")
 
     # 票數範圍（分會級覆蓋輪次級）
@@ -528,7 +545,12 @@ def get_results(db: Session, round_id: int) -> dict:
     if rnd is None:
         raise HTTPException(status_code=404, detail="輪次不存在")
 
-    divisions = db.query(Division).filter(Division.is_active == True).order_by(Division.sort_order).all()
+    divisions = (
+        db.query(Division)
+        .filter(Division.is_active == True, Division.include_in_vote == True)  # noqa: E712
+        .order_by(Division.sort_order)
+        .all()
+    )
 
     results = []
     for div in divisions:
@@ -628,7 +650,12 @@ def get_overview_results(db: Session, round_id: int) -> dict:
     if rnd is None:
         raise HTTPException(status_code=404, detail="輪次不存在")
 
-    divisions = db.query(Division).filter(Division.is_active == True).order_by(Division.sort_order).all()
+    divisions = (
+        db.query(Division)
+        .filter(Division.is_active == True, Division.include_in_vote == True)  # noqa: E712
+        .order_by(Division.sort_order)
+        .all()
+    )
     return {
         "round_id": round_id,
         "divisions": [_division_result_dict(db, rnd, div, round_id) for div in divisions],

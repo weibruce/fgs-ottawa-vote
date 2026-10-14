@@ -13,6 +13,9 @@ class Division(Base):
     code: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(64), nullable=False)  # 分會名稱（中文）
     name_en: Mapped[str] = mapped_column(String(64), default="")  # 分會英文名稱
+    # 是否計入本次投票。false 時整個投票流程都不會出現這個分會
+    # （後台仍可管理其會員與資料，只是不能投票）
+    include_in_vote: Mapped[bool] = mapped_column(Boolean, default=True)
     # 每區每人可投票數範圍
     min_votes: Mapped[int] = mapped_column(Integer, default=1)
     max_votes: Mapped[int] = mapped_column(Integer, default=2)

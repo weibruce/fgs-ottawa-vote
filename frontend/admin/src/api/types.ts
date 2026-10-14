@@ -27,6 +27,8 @@ export interface DivisionOut {
   name: string
   /** 分會英文名稱 */
   name_en: string
+  /** 是否計入本次投票 */
+  include_in_vote: boolean
   min_votes: number
   max_votes: number
   opens_at: string | null

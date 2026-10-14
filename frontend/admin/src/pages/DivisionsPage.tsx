@@ -30,6 +30,7 @@ interface DivisionCardData {
   code: string
   name: string
   nameEn: string
+  includeInVote: boolean
   color: string
   members: number
   candidates: number
@@ -51,6 +52,7 @@ function toCardData(d: DivisionOverview): DivisionCardData {
     code: d.code,
     name: d.name,
     nameEn: d.name_en ?? '',
+    includeInVote: d.include_in_vote ?? true,
     color: d.color,
     members: d.member_count,
     candidates: d.candidate_count,
@@ -134,13 +136,19 @@ export function DivisionsPage() {
         code: d.code,
         name: d.name,
         name_en: d.nameEn,
+        include_in_vote: d.includeInVote,
         color: d.color,
         min_votes: 1,
         max_votes: 2,
         sort_order: rows.findIndex((r) => r.id === d.id),
       }
       if (editing) {
-        await updateDivision(d.id, { name: d.name, name_en: d.nameEn, color: d.color })
+        await updateDivision(d.id, {
+          name: d.name,
+          name_en: d.nameEn,
+          include_in_vote: d.includeInVote,
+          color: d.color,
+        })
         flash('分會已更新')
       } else {
         await createDivision(body)
@@ -247,7 +255,14 @@ function DivisionCard({
         <DivisionMark name={d.name} color={d.color} size={48} />
 
         <div className="min-w-0 flex-1 pt-[7px]">
-          <h3 className="text-[18px] font-bold leading-none text-ink">{d.name}</h3>
+          <h3 className="text-[18px] font-bold leading-none text-ink">
+            {d.name}
+            {!d.includeInVote && (
+              <span className="ml-2 align-middle rounded-full bg-[#FBF0E8] px-2 py-[3px] text-[11px] font-semibold leading-none text-[#A65A2E] border border-[#E8C9B0]">
+                不計入投票
+              </span>
+            )}
+          </h3>
           <p className="mt-[7px] -ml-0.5 flex items-center gap-1 text-[12px] leading-none text-gray">
             <IconMapPin size={14} className="shrink-0" />
             <span className="truncate">{d.address}</span>
@@ -334,6 +349,7 @@ function DivisionModal({
 }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [nameEn, setNameEn] = useState(initial?.nameEn ?? '')
+  const [includeInVote, setIncludeInVote] = useState(initial?.includeInVote ?? true)
   const [code, setCode] = useState(initial?.code ?? '')
   const [color, setColor] = useState(initial?.color ?? '#8B1A1A')
 
@@ -344,6 +360,7 @@ function DivisionModal({
       code: code.trim().toLowerCase(),
       name: name.trim(),
       nameEn: nameEn.trim(),
+      includeInVote,
       color: color.toUpperCase(),
       members: initial?.members ?? 0,
       candidates: initial?.candidates ?? 0,
@@ -383,6 +400,24 @@ function DivisionModal({
               placeholder="例如：East Chapter"
               className="ui-input"
             />
+          </Field>
+
+          <Field label="是否計入本次投票">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                checked={includeInVote}
+                onChange={(e) => setIncludeInVote(e.target.checked)}
+                className="mt-[3px] h-[16px] w-[16px] accent-[#8B1A1A]"
+              />
+              <span className="text-[13px] leading-[20px] text-ink">
+                計入投票
+                <span className="mt-[2px] block text-[11px] leading-[16px] text-gray">
+                  取消勾選後，這個分會<b>完全不會出現</b>在投票端（選舉資訊、候選人、
+                  結果、大屏），該分會會員驗證時也會被擋下。後台仍可正常管理它的會員與資料。
+                </span>
+              </span>
+            </label>
           </Field>
 
           <Field label="分會代號">

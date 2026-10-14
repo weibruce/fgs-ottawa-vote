@@ -99,7 +99,7 @@ def _round_divisions(db: Session, r: Round) -> list[Division]:
         .distinct()
         .all()
     ]
-    q = db.query(Division)
+    q = db.query(Division).filter(Division.include_in_vote == True)  # noqa: E712
     if div_ids:
         q = q.filter(Division.id.in_(div_ids))
     else:

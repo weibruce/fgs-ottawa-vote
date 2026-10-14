@@ -190,11 +190,11 @@ def get_tally_overview(
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    """所有分會彙總（每區進度 + 平票標記）"""
+    """所有分會彙總（每區進度 + 平票標記）—— 只含計入本次投票的分會"""
     _get_round(db, round_id)
     divisions = (
         db.query(Division)
-        .filter(Division.is_active == True)  # noqa: E712
+        .filter(Division.is_active == True, Division.include_in_vote == True)  # noqa: E712
         .order_by(Division.sort_order, Division.id)
         .all()
     )

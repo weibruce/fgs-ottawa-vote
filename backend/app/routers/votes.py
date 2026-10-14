@@ -27,15 +27,17 @@ def _round_info(db: Session, r: Round) -> RoundInfoOut:
     """把 Round ORM 轉成投票人端需要的 RoundInfoOut（含五分會設定）"""
     from app.schemas.vote import DivisionOut
 
+    # 只列出「計入本次投票」的分會；設為不計入的分會整個投票端都不會出現
     divisions = (
         db.query(Division)
-        .filter(Division.is_active == True)  # noqa: E712
+        .filter(Division.is_active == True, Division.include_in_vote == True)  # noqa: E712
         .order_by(Division.sort_order, Division.id)
         .all()
     )
     divs = [
         DivisionOut(
-            id=d.id, name=d.name, code=d.code, color=d.color,
+            id=d.id, name=d.name, name_en=d.name_en or "",
+            include_in_vote=d.include_in_vote, code=d.code, color=d.color,
             min_votes=d.min_votes, max_votes=d.max_votes,
             start_time=str(d.opens_at) if d.opens_at else None,
             end_time=str(d.closes_at) if d.closes_at else None,
