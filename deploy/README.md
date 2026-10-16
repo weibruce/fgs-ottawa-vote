@@ -189,8 +189,13 @@ docker compose exec db psql -U fgs_app -d fgs_vote -c \
 | **Quick Tunnel** | 0 元 | 只適合測試 | 網址每次重啟就換，**不能發給會員** |
 
 > 📄 **自訂域名走 Cloudflare Tunnel 的完整步驟：`deploy/CUSTOM_DOMAIN.zh.md`**
-> （以 `vote.ibpsottawa.org` 為例，含 DNS 搬遷記錄清單與驗證腳本
-> `deploy/check-dns.sh`）
+>
+> 兩條路線：
+> - **路線 B（建議）**：在 Cloudflare 新註冊一個投票專用域名（約 US$10／年）。
+>   不碰寺院現有 DNS，零風險，5 分鐘搞定。
+> - **路線 A**：把 `ibpsottawa.org` 的 DNS 搬到 Cloudflare，沿用
+>   `vote.ibpsottawa.org`。免費，但要動 nameserver，且要小心別弄壞
+>   Netfirms 上的網站與企業信箱。附驗證腳本 `deploy/check-dns.sh`。
 
 ### 方法 A：雲端主機（VPS）
 

@@ -1,12 +1,43 @@
-# 用固定域名 `vote.ibpsottawa.org` 對外（Cloudflare Tunnel）
+# 用固定域名對外（Cloudflare Tunnel）
 
 > 對象：把投票系統公開給會員、不想再依賴 Quick Tunnel 隨機網址的人
-> 前置：可以在 Netfirms 改 `ibpsottawa.org` 的 nameserver
-> 費用：**0 元**（Cloudflare 免費方案 + 免費 Tunnel + 免費 Access）
+> 費用：Cloudflare 免費方案 + 免費 Tunnel + 免費 Access；**域名約 US$10／年**
 
 ---
 
-## 一句話結論
+## 先選路線
+
+有兩條路，**先看這張表再決定要不要往下讀**：
+
+| | **路線 B：新註冊專用域名** ⭐ | **路線 A：用 `vote.ibpsottawa.org`** |
+|---|---|---|
+| 風險 | **幾乎為零** —— 完全不碰寺院現有 DNS | 要動 `ibpsottawa.org` 的 nameserver |
+| 影響現有網站 | 無 | 無（設對灰雲的話） |
+| 影響企業信箱 | 無 | **有風險**，MX／SPF 設錯就斷信 |
+| 需要誰配合 | 只需要你自己 | 需要 Netfirms 網域管理權 |
+| 前置時間 | **5 分鐘** | 幾小時～24 小時（等 NS 生效） |
+| 費用 | 約 US$10／年 | 0 元 |
+| 會員看到的網址 | `ibpsottawa-vote.org` 之類的新網址 | `vote.ibpsottawa.org`（原有品牌）|
+
+**建議走路線 B。** 多花 US$10／年，換到的是：
+不用碰寺院網站與信箱、不用等 DNS 生效、出錯的機率趨近於零。
+**路線 A 整段（第 0～4 步）可以完全跳過。**
+
+> 唯一要接受的缺點：網址不是 `ibpsottawa.org`。
+> 對選舉來說這有一點影響 —— 會員看到陌生網址會怕是釣魚網站。
+> 所以**域名要選得像樣**（見路線 B 的命名建議），不要用 `.xyz`、`.top` 這類廉價 TLD。
+> 之後也可以在 Netfirms 加一筆 301 轉址，讓舊的 `vote.ibpsottawa.org`
+> 自動跳到新網址（見 [路線 B 第 3 步](#路線-b-第-3-步選用讓舊網址自動轉過來)）。
+
+<details>
+<summary><b>路線 A 的完整說明（要動 ibpsottawa.org DNS 才需要展開）</b></summary>
+
+# 路線 A：把 ibpsottawa.org 搬到 Cloudflare
+
+> 只有在你**不想花錢買新域名**、而且**拿得到 Netfirms 網域管理權**時才走這條。
+> 想省事就走路線 B，這整段可以跳過。
+
+## 一句話結論（路線 A）
 
 **可以，而且完全不用動路由器、不用拉線、不用請人跑現場。**
 但有一個前提：**`ibpsottawa.org` 的 DNS 必須整包交給 Cloudflare 托管。**
@@ -27,7 +58,7 @@
 
 | 方案 | 固定域名 | 費用 | 卡在哪 |
 |---|---|---|---|
-| **Cloudflare Tunnel（本文件）** | ✅ 自己的域名 | 0 | 要改 nameserver |
+| **Cloudflare Tunnel（本文件）** | ✅ 自己的域名 | 域名費 | 域名要在 Cloudflare |
 | Quick Tunnel（現在用的） | ❌ 每次重啟就換 | 0 | random 網址無法發給會員 |
 | Tailscale Funnel | ❌ 只能 `*.ts.net` | 0 | 不支援自訂域名 |
 | ngrok 自訂域名 | ✅ | 💰 付費 | 你不想花錢 |
@@ -170,7 +201,78 @@ dig +short A mail.ibpsottawa.org      # 應為 66.96.160.149
 > 如果到這裡發現網站或信箱壞了 → **立刻把 nameserver 改回 Netfirms**，
 > 完全回滾，不會有後遺症。
 
+</details>
+
 ---
+
+# 路線 B：新註冊一個專用域名 ⭐（建議）
+
+**完全不用碰 `ibpsottawa.org`**，也就完全沒有弄壞寺院網站或信箱的風險。
+前置只有你自己，5 分鐘就能搞定。
+
+## 路線 B 第 1 步：在 Cloudflare 註冊域名
+
+1. <https://dash.cloudflare.com> → 左側 **Domain Registration → Register Domains**
+2. 搜尋你要的名字。搜尋結果會直接顯示**每年的實際價格**（沒有隱藏費用）
+3. 加入購物車 → 結帳（需要信用卡）
+
+### 命名建議
+
+選一個**看起來就像寺院官方**的名字，會員才不會以為是釣魚網站：
+
+| 建議 | 說明 |
+|---|---|
+| `ibpsottawa-vote.org` | ⭐ 最推薦 —— 跟 `ibpsottawa.org` 幾乎一樣，會員一眼就認得 |
+| `bgsottawa-vote.org` | 佛光山（BGS）|
+| `fgsottawa-vote.org` | Fo Guang Shan Ottawa |
+| `ibpsottawa-election.org` | 更正式 |
+
+⚠️ **不要用 `.xyz`、`.top`、`.click` 這類廉價 TLD。**
+選舉系統的網址看起來可疑，會直接影響會員的信任與投票率。
+`.org` 或 `.com` 比較合適。
+
+### 費用
+
+- **Cloudflare Registrar 是成本價（wholesale），不加價** —— 官網寫的是
+  "Search and Buy Domains at Cost"，而且 WHOIS 隱私保護免費
+- `.org` / `.com` 大約 **US$10～12／年**（實際價格依註冊局當年公告，
+  以搜尋結果顯示的為準）
+- 沒有「首年優惠價」，所以**續約價跟第一年一樣**，不會第二年突然變貴
+  （這點跟 Namecheap／GoDaddy 不同）
+- ⚠️ **記得開自動續約** —— 選舉期間域名過期會直接讓系統斷線
+
+> 在這裡註冊的好處：**nameserver 會自動設成 Cloudflare，不用改任何東西**，
+> 註冊完就是一個現成的 Cloudflare zone，直接可以拿去綁隧道。
+> 如果你在別家（Porkbun、Namecheap）註冊，就要多一步「把 NS 改成
+> Cloudflare 給你的那兩台」並等生效。
+
+## 路線 B 第 2 步：確認 zone 是 Active
+
+註冊完成後回到 <https://dash.cloudflare.com>，應該會看到這個域名已經列在
+帳號首頁，狀態是 **Active**（不是 Pending）。是 Active 才能綁隧道。
+
+> 停在這一步之前都還沒有花到任何其他錢，也沒有動過任何現有服務。
+
+**接著跳到 [第 5 步：建立隧道](#第-5-步建立隧道) 繼續。**
+
+## 路線 B 第 3 步（選用）：讓舊網址自動轉過來
+
+如果你希望會員打 `vote.ibpsottawa.org` 也能通，可以在 Netfirms 加一筆轉址
+（**不是** DNS 記錄，是網站層的 301）：
+
+```
+vote.ibpsottawa.org  →  301  →  https://ibpsottawa-vote.org
+```
+
+Netfirms 的 cPanel 有「Redirects」功能可以直接設，不用改 nameserver，
+所以完全沒有風險。舊網址會自動跳到新網站。
+
+---
+
+# 接下來：兩條路線共用
+
+> 路線 B 用完第 2 步、路線 A 用完第 4 步之後，都是從下面這裡接下去。
+> 底下出現的 `vote.你的網域` 請換成你實際的域名。
 
 ## 第 5 步：建立隧道
 
@@ -179,15 +281,24 @@ dig +short A mail.ibpsottawa.org      # 應為 66.96.160.149
 3. 名稱填 `fgs-vote` → Save
 4. 安裝頁面會給你一串指令，裡面有 `--token eyJh...` 這種很長的字串。
    **複製那串 token**（注意：這一頁關掉之後就看不到 token 了，要馬上存好）
-5. 切到 **Public Hostname** 分頁，加**兩筆**：
+5. 切到 **Public Hostname** 分頁，加**兩筆**（`Domain` 下拉會列出你帳號裡的
+   zone —— 路線 B 選新買的域名，路線 A 選 `ibpsottawa.org`）：
 
    | Subdomain | Domain | Path | Service Type | URL |
    |---|---|---|---|---|
-   | `vote` | `ibpsottawa.org` | （留空） | **HTTP** | **`web:80`** |
-   | `admin` | `ibpsottawa.org` | （留空） | **HTTP** | **`web:81`** |
+   | `vote` | 你的域名 | （留空） | **HTTP** | **`web:80`** |
+   | `admin` | 你的域名 | （留空） | **HTTP** | **`web:81`** |
 
    `web` 是 compose 裡的容器名稱，走的是 Docker 內部網路，
    不需要知道 IP，也不用開放任何埠。
+
+   > 路線 B 的話，`vote` 這一筆不一定要用 `vote` 當開頭 ——
+   > 如果域名本身就叫 `ibpsottawa-vote.org`，那 `Subdomain` 留空（或填 `@`）
+   > 也可以，網址就是 `https://ibpsottawa-vote.org`。
+
+   > ⚠️ **如果 `Domain` 下拉是空的**，代表這個網域的 zone 不在你的 Cloudflare
+   > 帳號裡（或還在 Pending）。路線 A 遇到這個就是 nameserver 還沒生效，
+   > 回第 3 步等它變 Active。
 
 6. 如果要讓後台也能遠端管理，先別急 —— 先去做 [第 7 步](#第-7-步把管理後台鎖起來務必做)
    的 Access 保護，再把 `admin` 這筆打開。
@@ -268,12 +379,16 @@ Registered tunnel connection  connIndex=1 ... location=yyz01
 
 ## 第 8 步：把網址填進系統設定 + 產生 QR Code
 
-1. 後台 → **系統設定** → 統一投票入口連結填 `https://vote.ibpsottawa.org`
+1. 後台 → **系統設定** → 統一投票入口連結填你的對外網址（例如
+   `https://vote.ibpsottawa-vote.org`）
 2. 下載 QR Code，印出來貼在會場
 3. 用**手機關掉 Wi-Fi、只開行動網路**測試（一定要這樣測，才會真的走外部線路）：
-   - `https://vote.ibpsottawa.org` → 要能開，且是**有效憑證**（Cloudflare 簽的）
-   - `https://vote.ibpsottawa.org/api/health` → 要回
+   - 對外網址 → 要能開，且是**有效憑證**（Cloudflare 簽的）
+   - `<對外網址>/api/health` → 要回
      `{"status":"ok","checks":{"api":"ok","postgres":"ok","redis":"ok"}}`
+
+> 順手確認一下：`https://admin.<你的域名>` 應該先跳出 Cloudflare Access
+> 的驗證頁，而不是直接看到登入畫面。
 
 ---
 
@@ -287,22 +402,29 @@ Registered tunnel connection  connIndex=1 ... location=yyz01
 
 ## 回滾（出事怎麼辦）
 
-**只改 DNS、不動 NAS：**
+**只停隧道、保留域名（兩條路線都適用）：**
+
+Container Station → `fgs` → 編輯 → 刪掉 `cloudflared` 服務 → Update。
+投票系統本身完全不受影響，內網 `http://192.168.1.245:9080` 照常可用。
+之後要把隧道加回來，就是把服務貼回去、Update 就好。
+
+**路線 B 想整個放棄：**
+
+在 Cloudflare 把隧道刪掉、Public Hostname 刪掉。
+域名不放心的話就開著自動續約放著，或到期不續約讓它自然失效 ——
+**完全沒有動到任何現有服務，所以沒有任何東西需要回復。**
+
+**路線 A 要把 DNS 改回去：**
 
 1. Netfirms 把 nameserver 改回 `ns1.netfirms.com` / `ns2.netfirms.com`
 2. 等生效 → 網站與信箱回到原狀
 3. 隧道容器留著不管它（它連不上域名，但也不會壞）
 
-**只停隧道、保留域名：**
-
-Container Station → `fgs` → 編輯 → 刪掉 `cloudflared` 服務 → Update。
-投票系統本身完全不受影響，內網 `http://192.168.1.245:9080` 照常可用。
-
 ---
 
 ## 常見問題
 
-**Q：改 nameserver 會不會讓網站或信箱中斷？**
+**Q：改 nameserver 會不會讓網站或信箱中斷？（路線 A）**
 不會 —— 只要第 2 步把 `@`/`www`/`mail`/`mx`/`webmail`/`ftp`/`cpanel`/`autodiscover`
 都設成灰雲，Cloudflare 就只是「換一個人幫你回答 DNS」，流量還是直接到 Netfirms。
 剛切換的幾小時內可能因為 DNS 快取而有短暫不一致，所以第 4 步才要驗證。
@@ -310,7 +432,21 @@ Container Station → `fgs` → 編輯 → 刪掉 `cloudflared` 服務 → Updat
 **Q：為什麼不能只把 `vote` 子網域交給 Cloudflare？**
 那是 Cloudflare 的「Subdomain setup（child zone）」，官方 Availability 表
 Free / Pro / Business 都是 **No**，只有 **Enterprise** 有。
-免費方案唯一的路就是把整個 zone 搬過去。
+所以路線 A 只能把整個 zone 搬過去，不然就是走路線 B 買新域名。
+
+**Q：買新域名要多少錢？會不會每年一直漲？**
+Cloudflare Registrar 是**成本價、不加價**（官網自己寫 "Buy Domains at Cost"），
+`.org` / `.com` 大約 US$10～12／年。它不像 Namecheap／GoDaddy 有「首年便宜、
+續約變貴」的花招，第一年跟續約價一樣。WHOIS 隱私保護免費。
+缺點是沒有首年優惠，所以第一年會比別家的促銷價貴一點點。
+
+**Q：新域名的網址，會員會不會以為是詐騙？**
+這是走路線 B 唯一要認真考慮的點。做法：
+1. 域名取像 `ibpsottawa-vote.org` 這種一眼就認得出來的名字
+2. 不要用 `.xyz`／`.top` 這類廉價 TLD
+3. **正式通知信 + QR Code 上都寫清楚完整網址**，讓會員知道官方網址長什麼樣
+4. 可選：在 Netfirms 設 301 轉址，讓舊的 `vote.ibpsottawa.org` 也通
+   （路線 B 第 3 步，不用改 nameserver，零風險）
 
 **Q：Cloudflare 免費方案撐得住選舉嗎？**
 撐得住。Tunnel 本身免費且不限流量，選舉這種規模（241 人）連邊都碰不到。
@@ -332,9 +468,11 @@ NAS 重開機後也會自動起來。內網使用完全不受隧道影響。
 
 ---
 
-## 附錄 A：搬完後的 DNS 自我檢查
+## 附錄 A：搬完後的 DNS 自我檢查（路線 A 專用）
 
-存成 `check-dns.sh` 執行，全部顯示 ✅ 才算搬遷成功：
+> 路線 B 不需要跑這個 —— 你沒有動 `ibpsottawa.org` 的任何記錄。
+
+已存成 `deploy/check-dns.sh`，直接執行即可，全部顯示 ✅ 才算搬遷成功：
 
 ```bash
 #!/usr/bin/env bash
