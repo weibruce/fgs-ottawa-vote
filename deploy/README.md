@@ -4,7 +4,7 @@
 
 | 容器 | 內容 | NAS 對外 |
 |------|------|----------|
-| `web` | nginx + 投票端靜態檔（:80）＋ 管理後台靜態檔（:81） | **8080**（投票端）、**8081**（後台） |
+| `web` | nginx + 投票端靜態檔（:80）＋ 管理後台靜態檔（:81） | **9080**（投票端）、**9081**（後台） |
 | `api` | FastAPI 後端（啟動時自動套用 migration） | 不對外（由 `web` 反向代理） |
 | `db` | PostgreSQL 18 | 不對外 |
 | `redis` | Redis 7（防重與即時計數） | 不對外 |
@@ -142,14 +142,14 @@ docker compose logs -f api
 
 ```bash
 # API 健康檢查（從 NAS 本機）
-curl http://127.0.0.1:8080/api/health
+curl http://127.0.0.1:9080/api/health
 # → {"status":"ok","checks":{"api":"ok","postgres":"ok","redis":"ok"}}
 ```
 
 | 入口 | 網址 |
 |------|------|
-| 投票端 | `http://<NAS-IP>:8080` |
-| 管理後台 | `http://<NAS-IP>:8081`（`admin` / `admin123`，首次登入請改密碼） |
+| 投票端 | `http://<NAS-IP>:9080` |
+| 管理後台 | `http://<NAS-IP>:9081`（`admin` / `admin123`，首次登入請改密碼） |
 
 ### 資料是否帶過來了
 
@@ -172,7 +172,7 @@ docker compose exec db psql -U fgs_app -d fgs_vote -c \
 ## 五、讓遠端會員也能投票（HTTPS）
 
 若只有現場（同一個 Wi-Fi）投票，第二節做完就可以直接用了，
-`http://<NAS-IP>:8080` 不需要 HTTPS。
+`http://<NAS-IP>:9080` 不需要 HTTPS。
 
 **但只要有人在家裡／外縣市投票，就一定要走 HTTPS**，
 否則會員的姓名、會員卡號、投票內容都會以明文經過網際網路。
@@ -183,9 +183,14 @@ docker compose exec db psql -U fgs_app -d fgs_vote -c \
 
 | 方案 | 成本 | 適合 | 注意 |
 |------|------|------|------|
-| **雲端主機（VPS）** | 約 US$5–7／月 | 建議 | 有固定對外 IP、不用動路由器、不依賴 NAS 權限 |
+| **NAS + Cloudflare Tunnel** | **0 元** | ⭐ **目前建議** | 不用動路由器、不受兩層 NAT 影響、自動 HTTPS。需把網域 DNS 交給 Cloudflare 托管 |
+| **雲端主機（VPS）** | 約 US$5–7／月 | 有預算時 | 有固定對外 IP、不依賴 NAS 權限 |
 | **NAS + 路由器開埠** | 免費（需網域） | 已能取得 NAS admin 時 | 需固定 IP 或 DDNS；部分 ISP 是 CGNAT 會失敗 |
-| **家中電腦 + Cloudflare Tunnel** | 網域費用 | 不想花月租 | 那台電腦必須全程開機；設定較多 |
+| **Quick Tunnel** | 0 元 | 只適合測試 | 網址每次重啟就換，**不能發給會員** |
+
+> 📄 **自訂域名走 Cloudflare Tunnel 的完整步驟：`deploy/CUSTOM_DOMAIN.zh.md`**
+> （以 `vote.ibpsottawa.org` 為例，含 DNS 搬遷記錄清單與驗證腳本
+> `deploy/check-dns.sh`）
 
 ### 方法 A：雲端主機（VPS）
 
@@ -252,9 +257,9 @@ QR Code 才會指向正確的 HTTPS 網址。
 | 項目 | 值 |
 |------|-----|
 | 來源 | `https://vote.你的網域` 埠 443 |
-| 目的地 | `http://127.0.0.1:8080` |
+| 目的地 | `http://127.0.0.1:9080` |
 
-後台同理指到 `8081`（建議限制來源 IP）。
+後台同理指到 `9081`（建議限制來源 IP）。
 
 > 走這條路就不需要 `docker-compose.prod.yml`，用原本的 `docker-compose.yml` 即可。
 > 但**必須在路由器設定連接埠轉發 443 → NAS**，且確認 ISP 沒有用 CGNAT。
@@ -318,8 +323,12 @@ docker compose exec -T db psql -U fgs_app -d fgs_vote < backup-2026-09-21.sql
 若某個套件要現場編譯，會明顯變慢（可能 30 分鐘以上）。可考慮在 x86 機器建置後
 `docker save` / `docker load` 搬過去。
 
-**連接埠 8080 / 8081 被佔用**
+**連接埠 9080 / 9081 被佔用**
 改 `.env` 的 `VOTER_PORT` / `ADMIN_PORT` 後 `docker compose up -d`。
+
+> Container Station 的 Application 版本（`deploy/qnap-application-*.yml`）
+> 是把埠寫死在 YAML 裡的 `"9080:80"` / `"9081:81"`，直接改那兩行。
+> ⚠️ 不要改回 8080／8081 —— QTS 桌面自己佔用這兩個埠，容器會卡在 `Created`。
 
 **上傳大檔（Excel 匯入）失敗**
 nginx 已設 `client_max_body_size 32m`；若還是不夠，改 `deploy/nginx.conf` 後重新建置。
@@ -398,16 +407,16 @@ volumes:
 實測結果：
 
 - ✅ **File Station、NAS 管理介面**：可正常透過它開啟（中繼的就是 QNAP 自家服務）
-- ❌ **自訂容器埠（8080 / 8081）**：CloudLink **不會**轉發，該網址永遠連不到投票系統
+- ❌ **自訂容器埠（9080 / 9081）**：CloudLink **不會**轉發，該網址永遠連不到投票系統
 
 所以部署與投票請改用：
 
-- **區網 IP**（例如 `http://192.168.1.50:8080`）——同一個 Wi-Fi 下的電腦/手機最簡單
+- **區網 IP**（例如 `http://192.168.1.50:9080`）——同一個 Wi-Fi 下的電腦/手機最簡單
 - 或 NAS 的 **DDNS + 路由器開埠**（正式對外投票需要，見第五節 HTTPS）
 
 先確認連得上再往下做：
 ```bash
-curl -I http://<NAS-IP>:8080/          # 部署後應回 200
+curl -I http://<NAS-IP>:9080/          # 部署後應回 200
 ```
 （部署前該埠應該是連不上的）
 
@@ -438,6 +447,6 @@ chmod 644 deploy/db/init/01-fgs_vote.sql
 - [ ] `.env` 三個密碼都改過（`POSTGRES_PASSWORD` / `REDIS_PASSWORD` / `JWT_SECRET`）
 - [ ] `DB_PASSWORD` == `POSTGRES_PASSWORD`
 - [ ] `docker-compose.yml` 放在專案根目錄、與 `deploy/` 同層
-- [ ] NAS 上 8080 / 8081 **沒有被其他服務佔用**
+- [ ] NAS 上 9080 / 9081 **沒有被其他服務佔用**（不要用 8080／8081，QTS 自己佔了）
 - [ ] dump 已 `chmod 644`（若用自動匯入）
 - [ ] 知道 NAS 的區網 IP（不是 myqnapcloud 網址）

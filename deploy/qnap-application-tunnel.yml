@@ -185,19 +185,36 @@ services:
         done
     networks: [fgs]
 
+  # ── Cloudflare Tunnel（固定域名，免開對外埠） ──────────────────────
+  #  完整步驟：deploy/CUSTOM_DOMAIN.zh.md
+  #
+  #  這條隧道只「向外」連到 Cloudflare，路由器與兩層 NAT 完全不用動。
+  #  對外網址在 Cloudflare 後台設定（Networks → Tunnels → fgs-vote →
+  #  Public Hostnames），不用改這份 YAML：
+  #      vote.ibpsottawa.org   → HTTP  web:80    投票端（給會員）
+  #      admin.ibpsottawa.org  → HTTP  web:81    管理後台（務必加 Access）
+  #
+  #  ⚠️ TOKEN 不要寫死在這裡 —— 這份檔案有版控。
+  #     在 Container Station 的 Application 環境變數區新增 TUNNEL_TOKEN，
+  #     值就是 Cloudflare 建立隧道時給的那串（安裝指令裡 --token 後面那段）。
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: fgs-tunnel
     restart: unless-stopped
-    command:
-      - tunnel
-      - --no-autoupdate
-      - run
-      - --token
-      - PASTE_YOUR_TUNNEL_TOKEN_HERE
+    command: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "run"]
+    environment:
+      TUNNEL_TOKEN: CHANGE_ME_CLOUDFLARE_TUNNEL_TOKEN
+      TZ: America/Toronto
     depends_on:
       - web
     networks: [fgs]
+    # 隧道斷線時容器會變 unhealthy，方便在 Container Station 一眼看出
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "--metrics", "localhost:2000", "ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
 
 volumes:
