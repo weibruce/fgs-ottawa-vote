@@ -483,3 +483,53 @@ curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" \
 
 內網存取完全不受影響：`http://192.168.1.245:9080`（投票端）、
 `http://192.168.1.245:9081`（後台）。
+
+## 快取（重要，會造成「改了卻沒生效」）
+
+Cloudflare 預設會快取圖片、CSS、JS 等靜態副檔名。這在正常情況下是好事，
+但**排錯時會非常容易誤判** —— 你改了 NAS 上的東西，看到的還是舊結果。
+
+### 怎麼分辨「來源」與「邊緣快取」
+
+在網址後面加一個亂數參數，強制繞過快取：
+
+```bash
+curl -s -o /dev/null -D - \
+  "https://ibpsottawavote.org/api/media/candidates/xxx.jpg?cb=$RANDOM"
+```
+
+看 `cf-cache-status`：
+
+| 值 | 意思 |
+|---|---|
+| `MISS` | 這次直接問了 NAS —— **這才是真實狀態** |
+| `HIT` | 這是 Cloudflare 快取的舊結果 |
+| `DYNAMIC` | 沒有快取 |
+
+### 建議加一條 Cache Rule（一次性設定）
+
+```
+Caching → Cache Rules → Create rule
+  Rule name : API 不快取
+  When      : URI Path  starts with  /api/
+  Then      : Cache eligibility → Bypass cache
+  → Deploy
+```
+
+理由：API 的回應應該永遠反映資料庫現況。選舉系統 241 人的流量，
+快取帶來的效能好處遠小於「看到舊資料」的風險。
+
+### 真實踩過的坑
+
+nginx 的 `/api/` 原本是一般前綴 location，被
+`location ~* \.(jpg|png|...)$`（正則優先）攔走，導致
+`/api/media/candidates/*.jpg` 回 404；而該 location 帶了
+`add_header Cache-Control "public, max-age=31536000, immutable" always`，
+**連 404 都被標成「快取一年」**，Cloudflare 就照快取了一年。
+
+修好 nginx（`location ^~ /api/`）之後，**還必須清一次 Cloudflare 快取**，
+否則邊緣會繼續回舊的 404。這是「為什麼修了還是壞的」最常見原因。
+
+清快取：`Caching → Configuration → Purge Cache → Purge Everything`。
+
+---
