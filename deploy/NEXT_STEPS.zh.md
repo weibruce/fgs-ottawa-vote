@@ -51,6 +51,29 @@
    > 回去 Networks → Tunnels 點進 `fgs-vote` 就能設 Public Hostnames
    > （設路由不需要 connector 在線）。
 
+   > ### 🔑 token 只會顯示在這一頁，而且畫面是遮罩的
+   >
+   > 你會看到 `eyJhIjoi********************NSJ9` 這種帶 `*` 的樣子 ——
+   > **那只是顯示用的遮罩，貼上去一定失敗**（會噴
+   > `Provided Tunnel token is not valid.`）。
+   > 一定要按指令區塊旁邊的**複製圖示**，複製到的是完整的真實 token。
+   >
+   > 拿不到的話三個辦法：
+   > 1. 指令區塊右上角的複製圖示（複製的是完整指令，token 在裡面）
+   > 2. 回 Networks → Tunnels → 點 `fgs-vote` → **Configure**，
+   >    那裡會再給一次安裝指令
+   > 3. 什麼都拿不到就**刪掉重建**：現在還沒設任何路由，刪掉零損失，
+   >    重建後立刻按複製
+   >
+   > 拿到之後先驗證格式，再貼進 YAML：
+   >
+   > ```bash
+   > bash deploy/check-tunnel-token.sh "eyJh...貼在這..."
+   > ```
+   >
+   > 真的 token 有 **150～300 字元**。如果只有 30 幾個字元、或裡面有 `*`，
+   > 那就是拿到遮罩值了。
+
 > ⚠️ **離開這一頁之後就看不到 token 了**。先貼到記事本存著。
 > 真的弄丟也沒關係：回到隧道詳情頁可以重新產生 / 重新取得。
 
@@ -319,6 +342,8 @@ curl -s https://ibpsottawavote.org/api/health
 
 | 症狀 | 先查什麼 |
 |---|---|
+| Logs 一直印 `Provided Tunnel token is not valid.` | **token 格式壞了** —— 貼到遮罩值（含 `*`）或截斷了。跑 `bash deploy/check-tunnel-token.sh` |
+| 有 `Starting tunnel ...` 但接著 `ERR Register tunnel error` / `Failed to get tunnel` | 格式對但 token **已失效**（隧道被刪掉重建過）。重新取得 token |
 | 網址打不開，`/api/health` 也連不上 | `fgs-tunnel` 的 Logs 有沒有 `Registered tunnel connection` |
 | 有 `Registered tunnel` 但網址 404 | 第 2 步的 Public Hostname 是不是填 `web:80` / `web:81` |
 | 網站開得了但 API 500 | `fgs-api` 的 Logs；`fgs-db` 是否 healthy |
