@@ -17,7 +17,7 @@
 | 需要誰配合 | 只需要你自己 | 需要 Netfirms 網域管理權 |
 | 前置時間 | **5 分鐘** | 幾小時～24 小時（等 NS 生效） |
 | 費用 | 約 US$10／年 | 0 元 |
-| 會員看到的網址 | `ibpsottawa-vote.org` 之類的新網址 | `vote.ibpsottawa.org`（原有品牌）|
+| 會員看到的網址 | `ibpsottawavote.org`（新網址）| `vote.ibpsottawa.org`（原有品牌）|
 
 **建議走路線 B。** 多花 US$10／年，換到的是：
 不用碰寺院網站與信箱、不用等 DNS 生效、出錯的機率趨近於零。
@@ -210,28 +210,30 @@ dig +short A mail.ibpsottawa.org      # 應為 66.96.160.149
 **完全不用碰 `ibpsottawa.org`**，也就完全沒有弄壞寺院網站或信箱的風險。
 前置只有你自己，5 分鐘就能搞定。
 
-## 路線 B 第 1 步：在 Cloudflare 註冊域名
+## 路線 B 第 1 步：在 Cloudflare 註冊域名 ✅ 已完成
+
+> **你的域名：`ibpsottawavote.org`**
+> 已確認在 Cloudflare 上（NS = `joselyn.ns.cloudflare.com` /
+> `kianchau.ns.cloudflare.com`），且目前沒有任何 DNS 記錄 —— 正常。
+>
+> **這一步已經做完了，直接跳到第 2 步。**
+
+以下是當初的註冊流程，留著給以後參考：
 
 1. <https://dash.cloudflare.com> → 左側 **Domain Registration → Register Domains**
 2. 搜尋你要的名字。搜尋結果會直接顯示**每年的實際價格**（沒有隱藏費用）
 3. 加入購物車 → 結帳（需要信用卡）
 
-### 命名建議
+### 命名（已選定 `ibpsottawavote.org` ✅）
 
-選一個**看起來就像寺院官方**的名字，會員才不會以為是釣魚網站：
-
-| 建議 | 說明 |
-|---|---|
-| `ibpsottawa-vote.org` | ⭐ 最推薦 —— 跟 `ibpsottawa.org` 幾乎一樣，會員一眼就認得 |
-| `bgsottawa-vote.org` | 佛光山（BGS）|
-| `fgsottawa-vote.org` | Fo Guang Shan Ottawa |
-| `ibpsottawa-election.org` | 更正式 |
+`ibpsottawavote.org` 是好選擇 —— 跟 `ibpsottawa.org` 幾乎一樣，
+會員一眼就知道是寺院的系統，不會懷疑是釣魚網站。
 
 ⚠️ **不要用 `.xyz`、`.top`、`.click` 這類廉價 TLD。**
 選舉系統的網址看起來可疑，會直接影響會員的信任與投票率。
 `.org` 或 `.com` 比較合適。
 
-### 費用
+### 費用（已付）
 
 - **Cloudflare Registrar 是成本價（wholesale），不加價** —— 官網寫的是
   "Search and Buy Domains at Cost"，而且 WHOIS 隱私保護免費
@@ -261,7 +263,7 @@ dig +short A mail.ibpsottawa.org      # 應為 66.96.160.149
 （**不是** DNS 記錄，是網站層的 301）：
 
 ```
-vote.ibpsottawa.org  →  301  →  https://ibpsottawa-vote.org
+vote.ibpsottawa.org  →  301  →  https://ibpsottawavote.org
 ```
 
 Netfirms 的 cPanel 有「Redirects」功能可以直接設，不用改 nameserver，
@@ -286,15 +288,19 @@ Netfirms 的 cPanel 有「Redirects」功能可以直接設，不用改 nameserv
 
    | Subdomain | Domain | Path | Service Type | URL |
    |---|---|---|---|---|
-   | `vote` | 你的域名 | （留空） | **HTTP** | **`web:80`** |
-   | `admin` | 你的域名 | （留空） | **HTTP** | **`web:81`** |
+   | *（留空）* | `ibpsottawavote.org` | （留空） | **HTTP** | **`web:80`** |
+   | `admin` | `ibpsottawavote.org` | （留空） | **HTTP** | **`web:81`** |
+
+   → 會員網址：`https://ibpsottawavote.org`（最短，QR Code 用這個）
+   → 後台網址：`https://admin.ibpsottawavote.org`
 
    `web` 是 compose 裡的容器名稱，走的是 Docker 內部網路，
    不需要知道 IP，也不用開放任何埠。
 
-   > 路線 B 的話，`vote` 這一筆不一定要用 `vote` 當開頭 ——
-   > 如果域名本身就叫 `ibpsottawa-vote.org`，那 `Subdomain` 留空（或填 `@`）
-   > 也可以，網址就是 `https://ibpsottawa-vote.org`。
+   > **Subdomain 留空**代表用根網域（apex）。Cloudflare 會自動做
+   > CNAME flattening，所以 apex 一樣可以指向隧道，這是正常做法。
+   > 如果表單不接受空白，就改填 `vote`，網址變成
+   > `https://vote.ibpsottawavote.org` —— 功能完全一樣，只是長一點。
 
    > ⚠️ **如果 `Domain` 下拉是空的**，代表這個網域的 zone 不在你的 Cloudflare
    > 帳號裡（或還在 Pending）。路線 A 遇到這個就是 nameserver 還沒生效，
@@ -379,16 +385,15 @@ Registered tunnel connection  connIndex=1 ... location=yyz01
 
 ## 第 8 步：把網址填進系統設定 + 產生 QR Code
 
-1. 後台 → **系統設定** → 統一投票入口連結填你的對外網址（例如
-   `https://vote.ibpsottawa-vote.org`）
+1. 後台 → **系統設定** → 統一投票入口連結填 **`https://ibpsottawavote.org`**
 2. 下載 QR Code，印出來貼在會場
 3. 用**手機關掉 Wi-Fi、只開行動網路**測試（一定要這樣測，才會真的走外部線路）：
    - 對外網址 → 要能開，且是**有效憑證**（Cloudflare 簽的）
    - `<對外網址>/api/health` → 要回
      `{"status":"ok","checks":{"api":"ok","postgres":"ok","redis":"ok"}}`
 
-> 順手確認一下：`https://admin.<你的域名>` 應該先跳出 Cloudflare Access
-> 的驗證頁，而不是直接看到登入畫面。
+> 順手確認一下：`https://admin.ibpsottawavote.org` 應該先跳出 Cloudflare
+> Access 的驗證頁，而不是直接看到登入畫面。
 
 ---
 
@@ -442,7 +447,7 @@ Cloudflare Registrar 是**成本價、不加價**（官網自己寫 "Buy Domains
 
 **Q：新域名的網址，會員會不會以為是詐騙？**
 這是走路線 B 唯一要認真考慮的點。做法：
-1. 域名取像 `ibpsottawa-vote.org` 這種一眼就認得出來的名字
+1. 域名取像 `ibpsottawavote.org` 這種一眼就認得出來的名字（✅ 你已經做到了）
 2. 不要用 `.xyz`／`.top` 這類廉價 TLD
 3. **正式通知信 + QR Code 上都寫清楚完整網址**，讓會員知道官方網址長什麼樣
 4. 可選：在 Netfirms 設 301 轉址，讓舊的 `vote.ibpsottawa.org` 也通

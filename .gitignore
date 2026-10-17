@@ -46,5 +46,6 @@ deploy/fgs-images.version.txt
 deploy/*.tar.gz
 deploy/.image-build/
 deploy/qnap-application.filled.yml
+deploy/*.filled.yml
 deploy/*pw*.txt
 backend/uploads/

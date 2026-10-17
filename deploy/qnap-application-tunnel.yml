@@ -191,8 +191,8 @@ services:
   #  這條隧道只「向外」連到 Cloudflare，路由器與兩層 NAT 完全不用動。
   #  對外網址在 Cloudflare 後台設定（Networks → Tunnels → fgs-vote →
   #  Public Hostnames），不用改這份 YAML：
-  #      vote.ibpsottawa.org   → HTTP  web:80    投票端（給會員）
-  #      admin.ibpsottawa.org  → HTTP  web:81    管理後台（務必加 Access）
+  #      ibpsottawavote.org        → HTTP  web:80   投票端（給會員）
+  #      admin.ibpsottawavote.org  → HTTP  web:81   管理後台（務必加 Access）
   #
   #  ⚠️ TOKEN 不要寫死在這裡 —— 這份檔案有版控。
   #     在 Container Station 的 Application 環境變數區新增 TUNNEL_TOKEN，
