@@ -139,7 +139,43 @@
 
 ---
 
-## 第 3 步：NAS 換上隧道版 compose
+## 第 3 步：匯入新映像
+
+> ### ⚠️ 這一步如果跳過，系統會跑舊版程式
+>
+> 只把 compose 換掉、按 Recreate，**容器跑起來的還是舊映像** ——
+> 畫面看起來正常，但新功能（例如 `proxy_vote_limit`）不會出現，
+> 而且資料庫會停在舊結構。**必須先匯入新的映像包。**
+
+目前應該使用的版本：**`20261014-3d5ce22`**
+
+1. **File Station** 把 `deploy/fgs-images.tar.gz`（142 MB）上傳到
+   `/share/Container/fgs-ottawa-vote/`
+2. **Container Station → Images → Import → Local QNAP Device** → 選那個檔案
+   > ⚠️ 一定要在 **Images** 區，不是 Containers 區
+3. 匯入完成後，Images 清單應該同時看到：
+   ```
+   fgs-api:latest    fgs-api:20261014-3d5ce22
+   fgs-web:latest    fgs-web:20261014-3d5ce22
+   ```
+
+### 怎麼確認新映像真的生效
+
+部署後進後台 → 系統設定，或直接打 API：
+
+```bash
+curl -s https://admin.ibpsottawavote.org/api/admin/settings \
+  -H "Authorization: Bearer <登入取得的 token>"
+```
+
+回傳欄位裡**要有 `proxy_vote_limit`**。沒有的話就是還在跑舊映像。
+
+- [ ] 映像已匯入（看到 `20261014-3d5ce22` 標籤）
+- [ ] 部署後 API 回應含 `proxy_vote_limit`
+
+---
+
+## 第 3.1 步：NAS 換上隧道版 compose
 
 ### 3.1 先確認檔案在對的位置
 
@@ -268,31 +304,77 @@ curl -s https://ibpsottawavote.org/api/health
 ## 第 5 步：用 Cloudflare Access 鎖住後台（**務必做**）
 
 後台一旦公開，等於把 241 位會員的姓名、卡號、電話、email、地址
-和匯出功能全部攤在網路上。
+和「匯出 Excel」功能全部攤在網路上。而目前的防線只有一組帳號密碼。
 
-1. <https://one.dash.cloudflare.com> → **Access → Applications**
+Access 加在前面 = **連登入畫面都看不到**，要先過 email 一次性驗證碼。
+
+> 「Zero Trust」只是 Cloudflare 後台的一個區塊名稱，不是要另外買方案。
+> 你的隧道本來就是這個產品線的東西。**Access 在免費方案下 50 人以內免費。**
+
+### 5.0 第一次用要先建 team name（只需一次）
+
+如果打開 Zero Trust 時被要求「Choose a team name」，填一個短的，例如
+`fgs-ottawa` —— 之後驗證頁會是 `fgs-ottawa.cloudflareaccess.com`。
+方案選 **Free** 即可。
+
+- [ ] team name 已建立
+
+### 5.1 建立應用
+
+1. <https://one.dash.cloudflare.com> → 左側 **Zero Trust** → **Access → Applications**
 2. **Add an application** → **Self-hosted**
 3. Application name：`FGS 投票系統後台`
-4. Public hostname：`admin.ibpsottawavote.org`
-5. Session duration：`24 hours`
-6. **Add a policy**：
-   - Name：`管理員`
-   - Action：**Allow**
-   - Include → **Emails** → 填你自己的 email（要多加人就一行一個）
-   - 登入方式勾 **One-time PIN**
-7. **Save**
+4. Session duration：**`24 hours`**（想少驗證幾次就選 1 week）
+5. **Public hostnames** → Add：
+   - Subdomain：`admin`
+   - Domain：`ibpsottawavote.org`
+   - Path：（留空）
+6. **Next**
 
-之後開 `https://admin.ibpsottawavote.org` 會先跳出 Cloudflare 驗證頁，
-輸入 email → 收驗證碼 → 才看得到登入畫面。
+### 5.2 加政策
 
-> Access 在 Zero Trust 免費方案下 **50 個使用者以內免費**。
+- Policy name：`管理員`
+- Action：**Allow**
+- **Include** → **Emails** → 填 `Weiwei2017ca@gmail.com`
+  （要加其他管理員就一行一個；也可以改用 Emails ending in `@…` 一次涵蓋整個網域）
+
+> ⚠️ 這一步的邏輯是「**只允許這些 email**」。沒有列進來的人，
+> 就算知道後台網址也看不到登入頁。
+
+7. **Next → Save**
+
+### 5.3 確認登入方式有開 One-time PIN
+
+**Zero Trust → Settings → Authentication → Login methods**
+
+確認 **One-time PIN** 是啟用狀態（預設就是開的）。沒開的話，
+5.2 的驗證頁會沒有可用的登入方式。
+
+### 5.4 驗證
+
+用**無痕視窗**開 `https://admin.ibpsottawavote.org`：
+
+1. 應該先看到 Cloudflare 的驗證頁（不是我們的登入畫面）
+2. 輸入 `Weiwei2017ca@gmail.com` → 收信 → 輸入 6 位數驗證碼
+3. 通過後才會看到「佛光山幹部改選投票系統」的登入頁
+
+> ⚠️ **絕對不要**對 `ibpsottawavote.org`（投票端）也套 Access ——
+> 那是給全體會員用的，套上去所有人都被擋在門外。
 
 - [ ] Access application 已建立
-- [ ] 開 admin 網址會先跳驗證頁
+- [ ] 無痕視窗開 admin 會先跳 Cloudflare 驗證頁
+- [ ] 收到 email 驗證碼並成功登入
+- [ ] 投票端**沒有**被 Access 影響（開得起來）
 
 ---
 
 ## 第 6 步：改掉 admin 預設密碼
+
+> ### ⚠️ 順序很重要：**一定要在灌完資料庫之後才改**
+>
+> 第 3.5 步那份 dump 裡的 admin 密碼是 `admin123`
+> （`must_change_password=true`）。如果你先改密碼、之後才灌 dump，
+> **密碼會被覆蓋回 `admin123`**。
 
 **這步別跳過。** 目前後台密碼還是預設的 `admin123`。
 
