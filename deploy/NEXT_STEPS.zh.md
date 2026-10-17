@@ -34,7 +34,13 @@
    > ### ⚠️ 這一頁有一個很容易踩的坑
    >
    > 它會要你選 Operating System / Architecture，預設給你 **Windows** 的
-   > `.msi` 安裝指令。**不要照著做，也不要在任何 Windows 電腦上裝。**
+   > `.msi` 安裝指令。**不要照著做 —— Windows / macOS / Ubuntu 都一樣，
+   > 不要在你自己的電腦上裝。**
+   >
+   > 特別是 **Ubuntu 上不要選 macOS**：`brew` 是 macOS 的套件管理器，
+   > Ubuntu 根本沒有這個指令。而且就算改成 `apt` 裝成功了，那個 connector
+   > 跑在你的電腦上，**解析不到 `web` 這個容器名稱** —— 隧道會顯示已連線，
+   > 但網址全部 502，比沒連上更難查。
    >
    > 那個下拉只是「產生不同平台的安裝指令」，跟你要做的事無關。
    > 真的照它跑 `cloudflared.exe service install`，會在你那台 Windows 上
