@@ -28,13 +28,34 @@
 1. <https://one.dash.cloudflare.com> → **Networks → Tunnels**
 2. **Create a tunnel** → Connector type 選 **Cloudflared** → Next
 3. 名稱填 `fgs-vote` → **Save**
-4. 出現安裝指令頁，裡面有 `--token eyJh...` 這種很長的字串
+4. 出現「Setup Environment」頁面，裡面有 `--token eyJh...` 這種很長的字串
    → **整串複製下來**
+
+   > ### ⚠️ 這一頁有一個很容易踩的坑
+   >
+   > 它會要你選 Operating System / Architecture，預設給你 **Windows** 的
+   > `.msi` 安裝指令。**不要照著做，也不要在任何 Windows 電腦上裝。**
+   >
+   > 那個下拉只是「產生不同平台的安裝指令」，跟你要做的事無關。
+   > 真的照它跑 `cloudflared.exe service install`，會在你那台 Windows 上
+   > 開一個 connector —— 隧道會顯示已連線，但它在寺院內網之外，
+   > **解析不到 `web` 這個容器名稱**，所有請求都會 502。
+   >
+   > 你要的只有 **token**（`eyJh...NSJ9` 那串）。它在畫面上是遮罩的，
+   > 用指令區塊旁邊的**複製圖示**複製，拿到的是完整的真實值。
+   > 或者把 OS 改成 Linux 也一樣 —— token 是同一串。
+   >
+   > **Continue 按鈕不亮是正常的**，它在等「有 connector 連上線」。
+   > 你的 connector 是 NAS 上的 Docker 容器，部署完它才會亮。
+   > 而且**這一頁可以直接跳過**：隧道已經建立好了，關掉頁面不會消失，
+   > 回去 Networks → Tunnels 點進 `fgs-vote` 就能設 Public Hostnames
+   > （設路由不需要 connector 在線）。
 
 > ⚠️ **離開這一頁之後就看不到 token 了**。先貼到記事本存著。
 > 真的弄丟也沒關係：回到隧道詳情頁可以重新產生 / 重新取得。
 
-- [ ] token 已複製
+- [ ] token 已複製（`eyJh...` 開頭那串，不是 Windows 的 .msi）
+- [ ] **沒有**在任何 Windows 電腦上執行 `cloudflared.exe service install`
 
 ---
 
