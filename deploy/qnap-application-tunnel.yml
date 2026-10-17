@@ -63,6 +63,9 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+    # 讓 Container Station 的「Attach terminal」可用（等同 docker run -it）
+    stdin_open: true
+    tty: true
     networks: [fgs]
 
   redis:
@@ -83,6 +86,9 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+    # 讓 Container Station 的「Attach terminal」可用（等同 docker run -it）
+    stdin_open: true
+    tty: true
     networks: [fgs]
 
   api:
@@ -122,6 +128,9 @@ services:
     # 上傳的候選人照片；沒有這個 volume 的話，重建容器照片就消失
     volumes:
       - fgs_uploads:/app/uploads
+    # 讓 Container Station 的「Attach terminal」可用（等同 docker run -it）
+    stdin_open: true
+    tty: true
     networks: [fgs]
 
   web:
