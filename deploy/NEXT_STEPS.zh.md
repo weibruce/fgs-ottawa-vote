@@ -51,6 +51,16 @@
    > 回去 Networks → Tunnels 點進 `fgs-vote` 就能設 Public Hostnames
    > （設路由不需要 connector 在線）。
 
+   > ### 🆔 Tunnel ID ≠ Token（最常見的誤會）
+   >
+   > | | 長相 | 用途 |
+   > |---|---|---|
+   > | **Tunnel ID** | `f4e6ee0d-96d9-4a86-8568-9935697a1280`（36 字元、有連字號）| 只是隧道的**身分證字號**，用來辨識是哪條隧道 |
+   > | **Token** | `eyJhIjoi...一大串...`（150～300 字元）| **認證用**，connector 靠它證明有權限 |
+   >
+   > 貼 Tunnel ID 進去會噴 `Provided Tunnel token is not valid.`（已實測確認，
+   > 跟貼遮罩值是同一個錯）。
+
    > ### 🔑 token 只會顯示在這一頁，而且畫面是遮罩的
    >
    > 你會看到 `eyJhIjoi********************NSJ9` 這種帶 `*` 的樣子 ——

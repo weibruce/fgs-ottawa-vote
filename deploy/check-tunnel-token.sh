@@ -47,6 +47,17 @@ case "$TOKEN" in
     echo "     要去指令區塊旁邊按【複製圖示】才會拿到完整值";;
 esac
 
+# ── 2.5 貼成 Tunnel ID（UUID）────────────────────────────────────
+case "$TOKEN" in
+  *-*-*-*-*)
+    if printf '%s' "$TOKEN" | grep -qiE '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+      bad "這是 Tunnel ID（隧道的身分證字號），不是 token！"
+      echo "     Tunnel ID 只用來辨識隧道，不能用來認證。"
+      echo "     token 是另一串以 eyJhIjoi 開頭、150～300 字元的東西，"
+      echo "     在建立隧道那頁的安裝指令裡（--token 或 service install 後面）。"
+    fi;;
+esac
+
 # ── 3. 長度是否合理（真 token 通常 100 字元以上）─────────────────
 if [ "${#TOKEN}" -lt 100 ]; then
   bad "長度只有 ${#TOKEN}，真實 token 通常超過 100 字元（大概 150～300）"
