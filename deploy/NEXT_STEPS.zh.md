@@ -343,20 +343,52 @@ Access 加在前面 = **連登入畫面都看不到**，要先過 email 一次�
 
 7. **Next → Save**
 
-### 5.3 確認登入方式有開 One-time PIN
+### 5.3 登入方式（Identity providers）
 
-**Zero Trust → Settings → Authentication → Login methods**
+在應用程式的 **Authentication → Identity** 分頁，選
+**Select available identity providers**，勾選清單裡可用的登入方式。
 
-確認 **One-time PIN** 是啟用狀態（預設就是開的）。沒開的話，
-5.2 的驗證頁會沒有可用的登入方式。
+會看到什麼取決於 Zero Trust 組織已設定的 IdP：
+
+| 看到的選項 | 說明 |
+|---|---|
+| **Cloudflare**（走 Google 等第三方 IdP）| 實際會導到 Google 帳號登入頁 —— 本專案實測就是這個 |
+| **One-time PIN** | 輸入 email 收 6 位數驗證碼，不需要第三方帳號 |
+
+> 找不到 One-time PIN 是正常的 —— 有些組織只有第三方 IdP。
+> 不影響安全性，**真正決定誰能進來的是 5.2 的政策**。
+>
+> 你的 team domain 是 `quiet-band-0b6b.cloudflareaccess.com`。
+
+### 5.3.1 ⚠️ 政策一定要限定 email
+
+因為登入方式是 Google 帳號，如果政策寫成「Allow / Everyone」或
+「Emails ending in `gmail.com`」，那**任何有 Google 帳號的人都能進去**，
+等於沒鎖。必須是：
+
+```
+管理員    Allow    Include → Emails → 你自己的 email
+```
 
 ### 5.4 驗證
 
 用**無痕視窗**開 `https://admin.ibpsottawavote.org`：
 
 1. 應該先看到 Cloudflare 的驗證頁（不是我們的登入畫面）
-2. 輸入 `Weiwei2017ca@gmail.com` → 收信 → 輸入 6 位數驗證碼
+2. 用被允許的帳號登入
 3. 通過後才會看到「佛光山幹部改選投票系統」的登入頁
+
+也可以直接從外部確認（不需要瀏覽器）：
+
+```bash
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" \
+  https://admin.ibpsottawavote.org
+```
+
+- 回 **302** 且 redirect 到 `*.cloudflareaccess.com/cdn-cgi/access/login/…`
+  → ✅ Access 生效
+- 回 **200** → ❌ Access 沒生效
+- 投票端 `https://ibpsottawavote.org` 必須仍是 **200**（不能被擋）
 
 > ⚠️ **絕對不要**對 `ibpsottawavote.org`（投票端）也套 Access ——
 > 那是給全體會員用的，套上去所有人都被擋在門外。
