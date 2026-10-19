@@ -36,7 +36,7 @@ type Notice = { kind: 'i18n'; key: string } | { kind: 'api'; text: string }
 export function ProxyPage() {
   const navigate = useNavigate()
   const { session, save } = useVoteStore()
-  const { t, translateError, nameOf, divisionOf } = useI18n()
+  const { t, lang, translateError, nameOf, divisionOf } = useI18n()
 
   const [targetName, setTargetName] = useState('')
   const [targetCard, setTargetCard] = useState('')
@@ -163,8 +163,8 @@ export function ProxyPage() {
             {t('proxy.currentLabel')}
           </p>
           <dl className="mt-[10px]">
-            <InfoRow label={t('verify.nameLabel')} value={nameOf(session.voter)} />
-            <InfoRow label={t('confirmed.cardLabel')} value={session.voter.member_no} />
+            <InfoRow wide={lang === 'en'} label={t('verify.nameLabel')} value={nameOf(session.voter)} />
+            <InfoRow wide={lang === 'en'} label={t('confirmed.cardLabel')} value={session.voter.member_no} />
           </dl>
         </div>
 
@@ -261,12 +261,24 @@ export function ProxyPage() {
   )
 }
 
-/** 資訊框單列（label 固定寬度，對齊其他頁的資訊框樣式） */
-function InfoRow({ label, value }: { label: string; value: string }) {
+/**
+ * 資訊框單列（label 固定寬度，對齊其他頁的資訊框樣式）
+ *
+ * ⚠️ label 一律 whitespace-nowrap：英文的 "Membership no." 比中文「會員卡號」長，
+ *    在 74px 欄寬裡會折成兩行（"Membership" / "no."），看起來像排版壞掉。
+ *    英文時把欄寬放大到 118px，中文維持 74px —— 兩列仍共用同一寬度，左右對齊。
+ */
+function InfoRow({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
   return (
     <div className="mt-[8px] flex items-center first:mt-0">
-      <dt className="w-[74px] shrink-0 text-[14px] leading-[20px] text-ink">{label}</dt>
-      <dd className="text-[14px] leading-[20px] text-ink">{value}</dd>
+      <dt
+        className={`shrink-0 whitespace-nowrap text-[14px] leading-[20px] text-ink ${
+          wide ? 'w-[118px]' : 'w-[74px]'
+        }`}
+      >
+        {label}
+      </dt>
+      <dd className="min-w-0 flex-1 text-[14px] leading-[20px] text-ink">{value}</dd>
     </div>
   )
 }

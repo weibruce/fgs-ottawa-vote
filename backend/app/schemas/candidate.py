@@ -76,3 +76,13 @@ class CandidateAdminOut(CandidateOut):
 
     division_name: str = ""
     vote_count: int | None = None
+
+
+class CandidateReorder(BaseModel):
+    """同一分會內候選人的展示順序（由後台拖/點調整）"""
+
+    division_id: int = Field(..., description="分會 ID")
+    ordered_ids: list[int] = Field(
+        ...,
+        description="依新順序排列的候選人 ID。未列出的同分會候選人會排在後面。",
+    )

@@ -11,7 +11,9 @@ from app.services import media_service
 from app.models.division import Division
 from app.models.round_ import RoundCandidate
 from app.models.vote import Vote, VoteCandidate
-from app.schemas.candidate import CandidateCreate, CandidateUpdate, CandidateOut, CandidateAdminOut
+from app.schemas.candidate import (
+    CandidateCreate, CandidateUpdate, CandidateOut, CandidateAdminOut, CandidateReorder,
+)
 
 router = APIRouter(prefix="/admin/candidates", tags=["admin-candidates"])
 
@@ -85,6 +87,60 @@ def list_candidates(
     div_names = _division_names(db)
     votes = _vote_counts(db, round_id) if round_id is not None else None
     return [_to_admin_out(c, div_names, votes) for c in rows]
+
+
+@router.put("/reorder", response_model=dict)
+def reorder_candidates(
+    body: CandidateReorder,
+    db: Session = Depends(get_db),
+    _admin=Depends(get_current_admin),
+):
+    """設定同一分會內候選人的展示順序（1 起算）
+
+    為什麼要同時寫兩張表：
+      - 後台候選人列表讀 `candidates.sort_order`
+      - 投票端（投票頁、候選人詳情）讀 `round_candidates.sort_order`
+    只更新其中一邊，會出現「後台改了、投票端沒變」的鬼故事，所以兩邊一起同步。
+
+    ordered_ids 必須都屬於 body.division_id；同分會但未列出的候選人
+    會依原本的相對順序排在最後（不會消失）。
+    """
+    div = db.get(Division, body.division_id)
+    if div is None:
+        raise HTTPException(status_code=404, detail="分會不存在")
+
+    rows = (
+        db.query(Candidate)
+        .filter(Candidate.division_id == body.division_id)
+        .order_by(Candidate.sort_order, Candidate.id)
+        .all()
+    )
+    by_id = {c.id: c for c in rows}
+
+    if len(set(body.ordered_ids)) != len(body.ordered_ids):
+        raise HTTPException(status_code=400, detail="候選人 ID 不可重複")
+    unknown = [i for i in body.ordered_ids if i not in by_id]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"這些候選人不屬於此分會：{unknown}")
+
+    given = set(body.ordered_ids)
+    ordered = [by_id[i] for i in body.ordered_ids] + [c for c in rows if c.id not in given]
+
+    for idx, cand in enumerate(ordered, start=1):
+        cand.sort_order = idx
+
+    # 同步投票端排序
+    pos = {cand.id: idx for idx, cand in enumerate(ordered, start=1)}
+    links = (
+        db.query(RoundCandidate)
+        .filter(RoundCandidate.candidate_id.in_(list(pos.keys())))
+        .all()
+    )
+    for link in links:
+        link.sort_order = pos[link.candidate_id]
+
+    db.commit()
+    return {"message": "順序已更新", "count": len(ordered)}
 
 
 def _sync_names(data: dict) -> dict:

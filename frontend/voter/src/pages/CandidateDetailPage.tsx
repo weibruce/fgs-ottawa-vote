@@ -103,9 +103,16 @@ export function CandidateDetailPage() {
           : 'choose'
 
   const [candidate, setCandidate] = useState<Candidate | null>(state.candidate ?? null)
-  const [divisionName, setDivisionName] = useState(
-    state.divisionName ?? session?.voter.division_name ?? ''
-  )
+  // ⚠️ 英文介面必須用分會的英文名。session.voter.division_name 一律是中文，
+  //    之前這裡直接拿它當初始值，而下面載入完成後又有 `if (!state.divisionName)`
+  //    的守衛，導致英文介面永遠顯示中文分會名。
+  const initialDivisionName =
+    state.divisionName ??
+    (lang === 'en'
+      ? session?.voter.division_name_en || session?.voter.division_name
+      : session?.voter.division_name) ??
+    ''
+  const [divisionName, setDivisionName] = useState(initialDivisionName)
   const [loading, setLoading] = useState(!state.candidate)
 
   useEffect(() => {
@@ -133,13 +140,16 @@ export function CandidateDetailPage() {
           if (found) {
             if (!alive) return
             setCandidate(found)
-            if (!state.divisionName) {
-              setDivisionName(
-                (lang === 'en'
-                  ? (res.data.division.name_en || session?.voter.division_name || res.data.division.name)
-                  : (res.data.division.name || session?.voter.division_name || ''))
-              )
-            }
+            // API 是最權威的來源：不論初始值是什麼，都用它覆蓋一次，
+            // 這樣英文介面才拿得到 name_en。
+            setDivisionName(
+              lang === 'en'
+                ? (res.data.division.name_en ||
+                   res.data.division.name ||
+                   session?.voter.division_name_en ||
+                   '')
+                : (res.data.division.name || session?.voter.division_name || '')
+            )
             setLoading(false)
             return
           }

@@ -31,3 +31,19 @@ export async function uploadCandidateAvatar(file: File): Promise<{ url: string }
 export async function deleteCandidate(id: number): Promise<{ message: string }> {
   return http.delete<{ message: string }>(`/admin/candidates/${id}`)
 }
+
+/**
+ * 設定同一分會內候選人的展示順序。
+ * orderedIds 為新順序（未列出的同分會候選人會排在最後）。
+ * 後端會同時更新 candidates.sort_order 與 round_candidates.sort_order，
+ * 所以後台列表與投票端會一起變。
+ */
+export async function reorderCandidates(
+  divisionId: number,
+  orderedIds: number[],
+): Promise<{ message: string; count: number }> {
+  return http.put<{ message: string; count: number }>('/admin/candidates/reorder', {
+    division_id: divisionId,
+    ordered_ids: orderedIds,
+  })
+}

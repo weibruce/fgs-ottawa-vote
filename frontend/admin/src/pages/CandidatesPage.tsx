@@ -13,7 +13,13 @@
 import { useMemo, useState } from 'react'
 import { AdminLayout } from '../components/AdminLayout'
 import { Button, Card, DivisionTag, Field, PageIntro } from '../components/ui'
-import { IconEdit, IconPlus, IconTrash } from '../components/icons'
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconEdit,
+  IconPlus,
+  IconTrash,
+} from '../components/icons'
 import { useAsync } from '../hooks/useAsync'
 import { apiError } from '../api/client'
 import {
@@ -22,6 +28,7 @@ import {
   updateCandidate,
   deleteCandidate,
   uploadCandidateAvatar,
+  reorderCandidates,
 } from '../api/candidates'
 import { listRounds } from '../api/rounds'
 import { fetchDivisionOverview } from '../api/divisions'
@@ -63,6 +70,7 @@ const ALL = '全部' as const
 
 /** 欄位定義（順序＝表頭順序；w 為固定欄寬 px，總寬即表格最小寬度 → 可橫向捲動） */
 const COLUMNS: { key: string; label: string; w: number; align?: 'right' }[] = [
+  { key: 'order', label: '排序', w: 88 },
   { key: 'member_no', label: '佛光會員卡號', w: 150 },
   { key: 'name', label: '姓名(繁)', w: 100 },
   { key: 'name_simp', label: '姓名(簡)', w: 100 },
@@ -162,6 +170,8 @@ export function CandidatesPage() {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<CandRow | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  /** 正在送出排序的候選人 id（避免連點） */
+  const [orderBusy, setOrderBusy] = useState<number | null>(null)
 
   const flash = (msg: string) => {
     setToast(msg)
@@ -183,6 +193,33 @@ export function CandidatesPage() {
   }, [rows])
 
   const filtered = tab === ALL ? rows : rows.filter((c) => c.division === tab)
+
+  /**
+   * 上移／下移一位。
+   * 只在「同一個分會」內移動 —— 順序是各分會獨立的。
+   * 送出後重新載入，讓畫面與後端一致（不自己改本地陣列，避免競態）。
+   */
+  const move = async (c: CandRow, dir: -1 | 1) => {
+    const divisionId = divIdByName[c.division]
+    if (!divisionId || orderBusy !== null) return
+    const group = rows.filter((r) => r.division === c.division)
+    const from = group.findIndex((r) => r.id === c.id)
+    const to = from + dir
+    if (from < 0 || to < 0 || to >= group.length) return
+    const next = [...group]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    try {
+      setOrderBusy(c.id)
+      await reorderCandidates(divisionId, next.map((r) => r.id))
+      await reload()
+      flash(`已調整「${c.name}」的順序`)
+    } catch (e) {
+      flash(apiError(e))
+    } finally {
+      setOrderBusy(null)
+    }
+  }
 
   const startNew = () => {
     setEditing(null)
@@ -319,8 +356,38 @@ export function CandidatesPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c) => (
+              {filtered.map((c) => {
+                const group = rows.filter((r) => r.division === c.division)
+                const idx = group.findIndex((r) => r.id === c.id)
+                return (
                 <tr key={c.id}>
+                  <td className="h-[69px] px-4 py-0">
+                    <div className="flex items-center gap-[2px]">
+                      <span className="w-[18px] shrink-0 text-center text-[12px] font-bold text-gray-deep">
+                        {idx + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => move(c, -1)}
+                        disabled={idx <= 0 || orderBusy !== null}
+                        title={idx <= 0 ? '已經是最前面' : `把「${c.name}」上移一位`}
+                        aria-label={`把 ${c.name} 上移一位`}
+                        className="rounded p-[2px] text-ink-soft transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-25"
+                      >
+                        <IconChevronUp size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => move(c, 1)}
+                        disabled={idx >= group.length - 1 || orderBusy !== null}
+                        title={idx >= group.length - 1 ? '已經是最後面' : `把「${c.name}」下移一位`}
+                        aria-label={`把 ${c.name} 下移一位`}
+                        className="rounded p-[2px] text-ink-soft transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-25"
+                      >
+                        <IconChevronDown size={15} />
+                      </button>
+                    </div>
+                  </td>
                   <td className="h-[69px] px-4 py-0 whitespace-nowrap text-[13px] text-gray-deep">
                     {c.member_no || '—'}
                   </td>
@@ -410,7 +477,8 @@ export function CandidatesPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>
