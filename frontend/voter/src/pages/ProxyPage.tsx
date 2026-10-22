@@ -36,7 +36,7 @@ type Notice = { kind: 'i18n'; key: string } | { kind: 'api'; text: string }
 export function ProxyPage() {
   const navigate = useNavigate()
   const { session, save } = useVoteStore()
-  const { t, lang, translateError, nameOf, divisionOf } = useI18n()
+  const { t, translateError, nameOf, divisionOf } = useI18n()
 
   const [targetName, setTargetName] = useState('')
   const [targetCard, setTargetCard] = useState('')
@@ -162,9 +162,17 @@ export function ProxyPage() {
           <p className="text-[12px] font-bold leading-[18px] text-primary">
             {t('proxy.currentLabel')}
           </p>
-          <dl className="mt-[10px]">
-            <InfoRow wide={lang === 'en'} label={t('verify.nameLabel')} value={nameOf(session.voter)} />
-            <InfoRow wide={lang === 'en'} label={t('confirmed.cardLabel')} value={session.voter.member_no} />
+          {/*
+            ⚠️ 用 grid-cols-[auto_1fr] 而不是「label 固定寬度 + flex」：
+               固定寬度在某些字型下會不夠寬（Android 的 Roboto 把
+               "Membership no." 排得比中文標籤寬），文字會溢出並貼到數值上，
+               看起來就像 "Membership no.B20200300014349" 黏在一起。
+               auto 欄會依兩個 label 中較寬的那個自動撐開，任何字型都不會溢出；
+               gap-x 提供固定的視覺間距，兩列仍靠同一條欄線對齊。
+          */}
+          <dl className="mt-[10px] grid grid-cols-[auto_1fr] items-baseline gap-x-[12px] gap-y-[8px]">
+            <InfoRow label={t('verify.nameLabel')} value={nameOf(session.voter)} />
+            <InfoRow label={t('confirmed.cardLabel')} value={session.voter.member_no} />
           </dl>
         </div>
 
@@ -262,23 +270,19 @@ export function ProxyPage() {
 }
 
 /**
- * 資訊框單列（label 固定寬度，對齊其他頁的資訊框樣式）
+ * 資訊框單列 —— 只輸出 <dt>/<dd>，實際排版交給外層的 <dl> grid。
  *
- * ⚠️ label 一律 whitespace-nowrap：英文的 "Membership no." 比中文「會員卡號」長，
- *    在 74px 欄寬裡會折成兩行（"Membership" / "no."），看起來像排版壞掉。
- *    英文時把欄寬放大到 118px，中文維持 74px —— 兩列仍共用同一寬度，左右對齊。
+ * 不在這裡給 label 固定寬度：寬度是依「最寬的 label」自動決定的，
+ * 所以中文/英文、iOS/Android 不同字型度量都不會溢出或擠在一起。
+ *
+ * whitespace-nowrap 仍然保留：label 本身不可折行（"Membership no." 不能斷成兩行），
+ * 因為欄寬會自動適應內容，nowrap 不會再造成溢出。
  */
-function InfoRow({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="mt-[8px] flex items-center first:mt-0">
-      <dt
-        className={`shrink-0 whitespace-nowrap text-[14px] leading-[20px] text-ink ${
-          wide ? 'w-[118px]' : 'w-[74px]'
-        }`}
-      >
-        {label}
-      </dt>
-      <dd className="min-w-0 flex-1 text-[14px] leading-[20px] text-ink">{value}</dd>
-    </div>
+    <>
+      <dt className="whitespace-nowrap text-[14px] leading-[20px] text-ink">{label}</dt>
+      <dd className="min-w-0 text-[14px] leading-[20px] text-ink">{value}</dd>
+    </>
   )
 }
