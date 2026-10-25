@@ -103,16 +103,22 @@ export function CandidateDetailPage() {
           : 'choose'
 
   const [candidate, setCandidate] = useState<Candidate | null>(state.candidate ?? null)
-  // ⚠️ 英文介面必須用分會的英文名。session.voter.division_name 一律是中文，
-  //    之前這裡直接拿它當初始值，而下面載入完成後又有 `if (!state.divisionName)`
-  //    的守衛，導致英文介面永遠顯示中文分會名。
-  const initialDivisionName =
-    state.divisionName ??
-    (lang === 'en'
-      ? session?.voter.division_name_en || session?.voter.division_name
-      : session?.voter.division_name) ??
-    ''
-  const [divisionName, setDivisionName] = useState(initialDivisionName)
+  /**
+   * 分會名稱同時存中／英兩種，**顯示時才依當前語系挑選**。
+   *
+   * 為什麼不直接存一個字串：
+   *   先前存的是「載入當下語系」算好的字串，所以在這個頁面切換語言時，
+   *   那個字串不會重算 —— 必須離開頁面再進來才會變。存兩種名稱後，
+   *   lang 一變就自然重新渲染成正確語言，不必重新抓資料。
+   *
+   * session.voter.division_name 一律是中文，division_name_en 才是英文。
+   */
+  const [divisionNames, setDivisionNames] = useState<{ zh: string; en: string }>({
+    zh: state.divisionName ?? session?.voter.division_name ?? '',
+    en: session?.voter.division_name_en ?? '',
+  })
+  const divisionName =
+    (lang === 'en' ? divisionNames.en || divisionNames.zh : divisionNames.zh) || ''
   const [loading, setLoading] = useState(!state.candidate)
 
   useEffect(() => {
@@ -140,16 +146,14 @@ export function CandidateDetailPage() {
           if (found) {
             if (!alive) return
             setCandidate(found)
-            // API 是最權威的來源：不論初始值是什麼，都用它覆蓋一次，
-            // 這樣英文介面才拿得到 name_en。
-            setDivisionName(
-              lang === 'en'
-                ? (res.data.division.name_en ||
-                   res.data.division.name ||
-                   session?.voter.division_name_en ||
-                   '')
-                : (res.data.division.name || session?.voter.division_name || '')
-            )
+            // API 是最權威的來源：中英兩種名稱都存下來，顯示時再依語系挑。
+            setDivisionNames({
+              zh: res.data.division.name || session?.voter.division_name || '',
+              en:
+                res.data.division.name_en ||
+                session?.voter.division_name_en ||
+                '',
+            })
             setLoading(false)
             return
           }

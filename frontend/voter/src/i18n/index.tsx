@@ -625,14 +625,26 @@ export function candidateNameLines(
   const sn = (e.surname ?? '').trim()
   const en = (e.name_en ?? '').trim()
 
-  let primary: string
-  if (lang === 'en') primary = [sn, gn].filter(Boolean).join(' ') || en || trad || simp
-  else if (lang === 'zh-Hans') primary = simp || trad || en
-  else primary = trad || simp || en
+  // 英文介面：兩行都用 name_en。
+  //
+  // 為什麼不用 surname + givenname 當第一行：
+  //   實測 29 位候選人裡只有 1 位的 surname+givenname 等於 name_en，其餘 28 位
+  //   都是同一個名字的不同順序（例如 "Hu Jing Ping" / "Jing Ping Hu"），
+  //   有的是完全不同的英文名（name_en = "David"、"Helen"）。兩行擺在一起
+  //   會變成「兩個英文名而且還不一致」，看起來像資料錯誤。
+  //   所以英文版一律以 name_en 為準，兩行相同 —— 版面保留兩行（與中文版
+  //   的兩行高度一致），但不再出現互相矛盾的兩個名字。
+  //
+  //   name_en 若為空，才退回用 surname+givenname 組出來的名字。
+  if (lang === 'en') {
+    const englishName = en || [sn, gn].filter(Boolean).join(' ') || trad || simp
+    return { primary: englishName, secondary: englishName }
+  }
 
-  // 只跳過「完全相同」的第二行；若只是姓名順序不同（例如 name_en 由後端
-  // 自動組成的 givenname+surname，與 English 介面的 surname+givenname 相反），
-  // 仍照需求顯示兩行。
+  const primary =
+    lang === 'zh-Hans' ? (simp || trad || en) : (trad || simp || en)
+
+  // 中文／簡中：第二行仍是英文名；與第一行完全相同時就不重複顯示。
   const secondary = en && en !== primary ? en : ''
   return { primary, secondary }
 }
