@@ -609,16 +609,26 @@ LOG:  checkpoint complete: wrote 2 buffers ...
 
 **在那裡打字不會有任何反應**（Postgres 不讀 stdin），也無法執行 `psql`。
 
-### 要找的是這種入口
+### 正確入口：`Execute`
 
-在 Container Station 裡找 **有「執行指令」語意的功能**，名稱可能是：
+QNAP Container Station（本專案實測版本）的容器頁有這排按鈕：
 
-- 容器列右側 **⋮（三個點）** → `Console` / `Terminal` / `Execute` / 「執行指令」
-- 容器詳情頁的分頁：**Terminal / 終端機 / Console**（有輸入框可以打指令的那種）
-- 有些版本叫 `Execute command`，可以指定 `/bin/sh`
+```
+Inspect   Execute   Stop   Edit
+```
 
-判斷方式：**如果畫面出現 `#` 或 `/ #` 提示字元，才是 shell；`
-**如果看到的是服務的日誌，那是 attach，不能用。**
+- **`Execute`** = `docker exec`，**這個才是你要的**
+- `Attach terminal` 底下的 `Detach` = 脫離目前的日誌串流（不會關掉容器）
+
+操作順序：
+
+1. 先按 **`Detach`** 離開日誌串流（容器繼續正常運作，不用擔心）
+2. 按 **`Execute`**
+3. 若有互動終端機，輸入 `/bin/sh`，看到 `#` 提示字元後執行
+   `psql -U fgs_app -d fgs_vote`
+4. 若只能跑單次指令，用 `psql -U fgs_app -d fgs_vote -c "…"` 的形式
+
+判斷方式：**看到 `#` 或 `/ #` 提示字元才是 shell；看到服務日誌就是 attach，不能用。**
 
 ### 如果真的找不到（本專案實測情況）
 
