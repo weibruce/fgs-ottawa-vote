@@ -592,3 +592,47 @@ nginx 的 `/api/` 原本是一般前綴 location，被
   （誰核准、什麼理由），公示時可以佐證
 - 「新增」沒有被鎖其實是 `_ensure_editable()` 涵蓋範圍的缺口。
   對臨時需求剛好方便，但是否要補上，建議選舉結束後再評估
+
+---
+
+## 附錄二：QNAP「Attach terminal」不是 shell
+
+Container Station 容器上的 **「Attach terminal / 連接終端機」** 是
+`docker attach` —— 它把畫面接到容器的**主程序**上，不是開一個新的 shell。
+
+所以在 `fgs-db` 上按它，看到的是 PostgreSQL 的日誌串流：
+
+```
+LOG:  checkpoint starting: time
+LOG:  checkpoint complete: wrote 2 buffers ...
+```
+
+**在那裡打字不會有任何反應**（Postgres 不讀 stdin），也無法執行 `psql`。
+
+### 要找的是這種入口
+
+在 Container Station 裡找 **有「執行指令」語意的功能**，名稱可能是：
+
+- 容器列右側 **⋮（三個點）** → `Console` / `Terminal` / `Execute` / 「執行指令」
+- 容器詳情頁的分頁：**Terminal / 終端機 / Console**（有輸入框可以打指令的那種）
+- 有些版本叫 `Execute command`，可以指定 `/bin/sh`
+
+判斷方式：**如果畫面出現 `#` 或 `/ #` 提示字元，才是 shell；`
+**如果看到的是服務的日誌，那是 attach，不能用。**
+
+### 如果真的找不到（本專案實測情況）
+
+改用不需要 shell 的流程（見上一節「附錄：投票進行中要改會員資料怎麼辦」）：
+
+```
+① 進程管理 → 結束投票
+② 進程管理 → 重新開始一輪     ← 這步不能漏
+③ 後台改會員的繳費狀態
+④ 進程管理 → 開始投票
+```
+
+或想辦法 SSH 進 NAS 後執行：
+
+```sh
+docker exec -i fgs-db psql -U fgs_app -d fgs_vote
+```
