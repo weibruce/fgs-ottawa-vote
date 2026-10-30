@@ -59,7 +59,7 @@ export function OfficialResultsPage() {
   return (
     <div className="flex min-h-screen w-full flex-col bg-cream px-[22px] pt-[16px] pb-[12px] xl:px-[30px] xl:pt-[24px] xl:pb-[18px] [@media(max-height:900px)]:pt-[10px] [@media(max-height:900px)]:pb-[8px]">
       {/* ── 頁首 ── */}
-      <header className="flex flex-wrap items-end justify-between gap-[16px] border-b border-gold/40 pb-[16px] [@media(max-height:900px)]:pb-[10px]">
+      <header className="flex flex-wrap items-end justify-between gap-[20px] border-b border-gold/40 pb-[16px] [@media(max-height:900px)]:pb-[10px]">
         <div className="min-w-0">
           <p className="text-[13px] leading-[18px] font-bold tracking-[0.18em] text-primary">
             國際佛光會渥太華協會
@@ -67,11 +67,26 @@ export function OfficialResultsPage() {
           <h1 className="mt-[6px] font-serif text-[34px] leading-[42px] font-bold text-ink [@media(max-height:900px)]:text-[26px] [@media(max-height:900px)]:leading-[32px]">
             {data?.round_name || '各分會幹部改選'}
           </h1>
-          <p className="mt-[6px] text-[14px] leading-[20px] text-gray">
-            投票結果 · 每 5 秒自動更新
+          <p className="mt-[6px] text-[15px] leading-[22px] font-bold tracking-[0.10em] text-gray">
+            投票結果公示
           </p>
         </div>
 
+        {/* 總覽：右上角，三行精簡資訊 */}
+        <div className="shrink-0 text-right">
+          <p className="text-[12px] leading-[16px] text-gray">全部分會合計</p>
+          <p className="mt-[2px] font-serif text-[34px] leading-[38px] font-bold text-primary tabular-nums [@media(max-height:900px)]:text-[26px] [@media(max-height:900px)]:leading-[30px]">
+            投票率 {pct}%
+          </p>
+          <p className="mt-[2px] text-[15px] leading-[22px] text-gray tabular-nums">
+            已投票 / 應投票
+            <span className="ml-[8px] text-[18px] font-bold text-ink">
+              {totalVoted}
+              <span className="mx-[3px] font-normal text-gray-light">/</span>
+              {totalPeople}
+            </span>
+          </p>
+        </div>
       </header>
 
       {/* ── 分會結果 ── */}
@@ -80,17 +95,15 @@ export function OfficialResultsPage() {
           {roundError ?? '載入中…'}
         </p>
       ) : (
-        <div className="mt-[12px] grid flex-1 auto-rows-fr grid-cols-1 gap-[12px] md:grid-cols-2 lg:grid-cols-3 xl:mt-[18px] xl:gap-[18px] [@media(max-height:900px)]:mt-[8px] [@media(max-height:900px)]:gap-[9px]">
+        <div className="mt-[12px] flex flex-1 flex-wrap content-stretch justify-center gap-[12px] xl:mt-[18px] xl:gap-[18px] [@media(max-height:900px)]:mt-[8px] [@media(max-height:900px)]:gap-[9px]">
           {divisions.map((d) => (
-            <DivisionBoard key={d.division.id} data={d} divisionOf={divisionOf} nameOf={nameOf} />
+            <div
+              key={d.division.id}
+              className="w-full md:w-[calc(50%-6px)] lg:w-[calc(33.333%-8px)] xl:w-[calc(33.333%-12px)]"
+            >
+              <DivisionBoard data={d} divisionOf={divisionOf} nameOf={nameOf} />
+            </div>
           ))}
-          <SummaryBoard
-            divisions={divisions}
-            totalVoted={totalVoted}
-            totalPeople={totalPeople}
-            pct={pct}
-            divisionOf={divisionOf}
-          />
         </div>
       )}
 
@@ -98,70 +111,6 @@ export function OfficialResultsPage() {
         本頁數字為正式計票口徑：僅計入已繳 2026 年會費之會員
       </footer>
     </div>
-  )
-}
-
-/** 第 6 格：整體總覽（填滿 3×2 網格的最後一格） */
-function SummaryBoard({
-  divisions,
-  totalVoted,
-  totalPeople,
-  pct,
-  divisionOf,
-}: {
-  divisions: OfficialOverviewResult['divisions']
-  totalVoted: number
-  totalPeople: number
-  pct: number
-  divisionOf: (d: { name: string; name_en?: string } | null | undefined) => string
-}) {
-  return (
-    <section className="flex h-full flex-col rounded-[14px] border border-gold-light bg-panel-soft px-[15px] py-[13px] xl:px-[18px] xl:py-[16px] [@media(max-height:900px)]:px-[11px] [@media(max-height:900px)]:py-[8px]">
-      <div className="flex items-baseline justify-between gap-[12px]">
-        <h2 className="font-serif text-[23px] leading-[30px] font-bold text-ink">總覽</h2>
-        <p className="text-[14px] leading-[22px] text-gray">全部分會合計</p>
-      </div>
-
-      <div className="mt-[10px] flex items-end gap-[28px]">
-        <div>
-          <p className="text-[12px] leading-[16px] text-gray">投票率</p>
-          <p className="font-serif text-[52px] leading-[56px] font-bold text-primary tabular-nums">
-            {pct}%
-          </p>
-        </div>
-        <div className="pb-[6px]">
-          <p className="text-[12px] leading-[16px] text-gray">已投票 / 應投票</p>
-          <p className="mt-[2px] font-serif text-[26px] leading-[32px] font-bold text-ink tabular-nums">
-            {totalVoted}
-            <span className="mx-[6px] text-[18px] font-normal text-gray">/</span>
-            {totalPeople}
-          </p>
-          <p className="mt-[2px] text-[12px] leading-[18px] text-gray">人</p>
-        </div>
-      </div>
-
-      <div className="mt-[14px] flex flex-1 flex-col justify-around gap-[8px]">
-        {divisions.map((d) => {
-          const p = d.total_count > 0 ? Math.round((d.voted_count / d.total_count) * 1000) / 10 : 0
-          return (
-            <div key={d.division.id} className="flex items-center gap-[10px]">
-              <span className="w-[76px] shrink-0 truncate text-[14px] leading-[20px] text-ink">
-                {divisionOf(d.division)}
-              </span>
-              <span className="h-[6px] flex-1 overflow-hidden rounded-full bg-gold-pale">
-                <span
-                  className="block h-full rounded-full bg-primary"
-                  style={{ width: `${Math.min(100, p)}%` }}
-                />
-              </span>
-              <span className="w-[48px] shrink-0 text-right text-[13px] font-bold text-ink tabular-nums">
-                {p}%
-              </span>
-            </div>
-          )
-        })}
-      </div>
-    </section>
   )
 }
 
