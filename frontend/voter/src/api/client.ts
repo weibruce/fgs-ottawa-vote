@@ -167,3 +167,51 @@ export function getOverviewResults(roundId: number) {
     params: { round_id: roundId },
   })
 }
+
+/* ── 大屏公布用（正式計票口徑） ───────────────────────────────── */
+
+export interface OfficialCandidateResult {
+  candidate_id: number
+  name: string
+  name_simp: string
+  givenname: string
+  surname: string
+  name_en: string
+  avatar_url: string
+  votes: number
+  is_leading: boolean
+}
+
+export interface OfficialDivisionResult {
+  division: {
+    id: number
+    name: string
+    name_en: string
+    code: string
+    color: string
+    min_votes: number
+    max_votes: number
+    include_in_vote: boolean
+  }
+  voted_count: number
+  total_count: number
+  results: OfficialCandidateResult[]
+  status: string
+}
+
+export interface OfficialOverviewResult {
+  round_id: number
+  round_name: string
+  status: string
+  /** 被排除的測試會員人數（分母與分子都不計入） */
+  excluded_count: number
+  divisions: OfficialDivisionResult[]
+}
+
+/**
+ * 大屏公布用結果（公開端點）。
+ * 分母只算「已繳費且帳號啟用」的會員，且排除設定的測試會員名單。
+ */
+export function getOfficialResults(roundId: number) {
+  return api.get<OfficialOverviewResult>(`/results/official?round_id=${roundId}`)
+}

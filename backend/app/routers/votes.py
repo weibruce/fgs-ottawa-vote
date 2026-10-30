@@ -127,6 +127,25 @@ def submit_vote(
     return result
 
 
+@router.get("/results/official", response_model=None)
+def get_official_results(
+    round_id: int = Query(..., description="輪次 ID"),
+    db: Session = Depends(get_db),
+):
+    """大屏公布用結果（正式計票口徑，公開端點）
+
+    與 /votes/results 的差異：
+      - 只列「計入本次投票」的分會（不含青年團）
+      - 分母只算「已繳 2026 會費且帳號啟用」的會員
+      - 排除 app_settings.official_excluded_member_nos 名單（測試資料），
+        其票數不計入任何候選人得票
+
+    ⚠️ 必須宣告在 /results/{round_id} 之前，否則 "official" 會被當成
+       round_id 解析而回 422。
+    """
+    return vote_service.get_official_overview(db, round_id)
+
+
 @router.get("/results/{round_id}", response_model=ResultsResponse)
 def get_results(
     round_id: int,

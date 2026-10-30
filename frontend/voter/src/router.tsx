@@ -14,6 +14,7 @@ import { ViewCandidatesPage } from './pages/ViewCandidatesPage'
 import { CandidateDetailPage } from './pages/CandidateDetailPage'
 import { DivisionResultsPage } from './pages/DivisionResultsPage'
 import { ScreenOverview } from './pages/ScreenOverview'
+import { OfficialResultsPage } from './pages/OfficialResultsPage'
 
 export function AppRouter() {
   return (
@@ -42,6 +43,8 @@ export function AppRouter() {
 
         {/* 所有分會總覽大屏（獨立全屏，不需登入） */}
         <Route path="/screen" element={<ScreenOverview />} />
+        {/* 大屏公布頁：只能直接輸入網址進入，全站沒有任何連結指向這裡 */}
+        <Route path="/screen/official" element={<OfficialResultsPage />} />
 
         {/* 根路徑 → 投票入口 */}
         <Route path="/" element={<Navigate to="/vote" replace />} />

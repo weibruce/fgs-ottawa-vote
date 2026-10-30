@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import jwt
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -459,6 +460,119 @@ def submit_vote(
         "success": True,
         "message": "投票成功",
         "votes_cast": len(candidate_ids),
+    }
+
+
+# ============ 大屏公布用（正式計票口徑） ============
+def official_excluded_member_nos(db: Session) -> list[str]:
+    """大屏公布頁要排除的會員卡號（app_settings.official_excluded_member_nos，逗號分隔）
+
+    用途：測試資料（張三／李四／知印法師 等）不列入公布用分母，
+    其投出的票也不計入候選人得票。
+    """
+    raw = settings_service.get_one(db, "official_excluded_member_nos") or ""
+    return [x.strip() for x in str(raw).split(",") if x.strip()]
+
+
+def get_official_overview(db: Session, round_id: int) -> dict:
+    """大屏公布用結果（與 get_overview_results 回傳結構相同）
+
+    與一般結果頁的三個差異：
+      1. 只列「計入本次投票」的分會（include_in_vote=true），不含青年團
+      2. 分母（total_count）只算「帳號啟用 + 已繳 2026 會費」的會員，
+         未繳費者不列入投票總人數
+      3. 分母與分子都排除 official_excluded_member_nos 名單（測試資料），
+         而且這些人的票不計入任何候選人的得票
+
+    全部直接從 PostgreSQL 聚合（不用 Redis），確保公布數字與資料庫一致。
+    """
+    rnd = db.get(Round, round_id)
+    if rnd is None:
+        raise HTTPException(status_code=404, detail="輪次不存在")
+
+    excluded = official_excluded_member_nos(db)
+    excluded_set = set(excluded)
+
+    # 分母：每個分會的有效選舉人數
+    elig_q = db.query(Member.division_id, func.count(Member.id)).filter(
+        Member.is_active == True,  # noqa: E712
+        Member.paid_2026_dues == True,  # noqa: E712
+    )
+    if excluded:
+        elig_q = elig_q.filter(Member.member_no.notin_(excluded))
+    eligible = dict(elig_q.group_by(Member.division_id).all())
+
+    # 分子：每個分會已投票數（排除測試會員的票）
+    cast_q = db.query(Vote.division_id, func.count(Vote.id)).filter(Vote.round_id == round_id)
+    if excluded:
+        cast_q = cast_q.filter(Vote.member_no.notin_(excluded))
+    cast = dict(cast_q.group_by(Vote.division_id).all())
+
+    # 各候選人得票（同樣排除測試會員的票）
+    cnt_q = (
+        db.query(VoteCandidate.candidate_id, func.count(VoteCandidate.id))
+        .join(Vote, Vote.id == VoteCandidate.vote_id)
+        .filter(Vote.round_id == round_id)
+    )
+    if excluded:
+        cnt_q = cnt_q.filter(Vote.member_no.notin_(excluded))
+    cand_counts = dict(cnt_q.group_by(VoteCandidate.candidate_id).all())
+
+    divisions = (
+        db.query(Division)
+        .filter(
+            Division.is_active == True,  # noqa: E712
+            Division.include_in_vote == True,  # noqa: E712
+        )
+        .order_by(Division.sort_order, Division.id)
+        .all()
+    )
+
+    out = []
+    for d in divisions:
+        cands = (
+            db.query(Candidate)
+            .filter(Candidate.division_id == d.id, Candidate.is_active == True)  # noqa: E712
+            .order_by(Candidate.sort_order, Candidate.id)
+            .all()
+        )
+        rows = [
+            {
+                "candidate_id": c.id,
+                "name": c.name,
+                "name_simp": c.name_simp,
+                "givenname": c.givenname,
+                "surname": c.surname,
+                "name_en": c.name_en,
+                "avatar_url": c.avatar_url or "",
+                "votes": int(cand_counts.get(c.id, 0)),
+                "is_leading": False,
+            }
+            for c in cands
+        ]
+        max_votes = max([r["votes"] for r in rows], default=0)
+        for r in rows:
+            r["is_leading"] = max_votes > 0 and r["votes"] == max_votes
+
+        out.append({
+            "division": {
+                "id": d.id, "name": d.name, "name_en": d.name_en or "",
+                "code": d.code, "color": d.color,
+                "min_votes": d.min_votes, "max_votes": d.max_votes,
+                "include_in_vote": d.include_in_vote,
+            },
+            "voted_count": int(cast.get(d.id, 0)),
+            "total_count": int(eligible.get(d.id, 0)),
+            "results": rows,
+            "status": rnd.status,
+        })
+
+    return {
+        "round_id": round_id,
+        "round_name": rnd.name,
+        "status": rnd.status,
+        "excluded_count": len(excluded_set),
+        "divisions": out,
     }
 
 

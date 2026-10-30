@@ -646,3 +646,45 @@ Inspect   Execute   Stop   Edit
 ```sh
 docker exec -i fgs-db psql -U fgs_app -d fgs_vote
 ```
+
+---
+
+## 附錄三：大屏公布頁 `/screen/official`
+
+給大螢幕／投影展示用的結果頁，**只能直接輸入網址進入**，
+全站沒有任何連結或按鈕指向它（符合「不開放點擊鑽取」的需求）。
+
+```
+https://ibpsottawavote.org/screen/official
+```
+
+### 與其他結果頁的差別
+
+| | 一般結果頁 `/vote/results` | 大屏公布頁 `/screen/official` |
+|---|---|---|
+| 分會範圍 | 只列計入投票的分會 | 同左（不含青年團）|
+| 分母 | 該分會**全部**啟用會員 | 只算**已繳 2026 會費**且啟用的會員 |
+| 測試會員 | 計入 | 可排除（見下）|
+| 可否點擊 | 可鑽取到分會明細 | 純展示，無任何可點元素 |
+| 更新頻率 | 3 秒 | 5 秒（失敗保留上次畫面）|
+
+### 排除測試會員
+
+排除名單存在 `app_settings.official_excluded_member_nos`（逗號分隔的卡號）。
+被排除者**不列入分母，其票數也不計入任何候選人得票**。
+
+用 `deploy/set-official-excluded-members.sql` 設定，最快的方式是依姓名自動帶出卡號：
+
+```sql
+INSERT INTO app_settings (key, value)
+SELECT 'official_excluded_member_nos',
+       COALESCE(string_agg(member_no, ',' ORDER BY member_no), '')
+FROM members
+WHERE name_trad IN ('張三', '李四', '知印法師')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+```
+
+改完後大屏頁 5 秒內自動反映，不需重新整理。
+`GET /api/votes/results/official?round_id=N` 回傳的 `excluded_count` 可確認生效人數。
+
+> 只影響大屏公布頁。後台即時計票、投票端結果頁仍計入全部會員。

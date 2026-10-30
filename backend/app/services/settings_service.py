@@ -16,6 +16,9 @@ SETTING_DEFS: dict[str, tuple[type, object]] = {
     "retention_days": (int, 365),            # 投票資料保留天數
     "timezone": (str, "Asia/Taipei"),
     "proxy_vote_limit": (int, 1),            # 一位代投人本輪最多能代幾位會員投票
+    # 大屏公布頁要排除的會員卡號（逗號分隔）。測試資料（張三／李四／知印法師
+    # 等）不列入公布用分母，其票數也不計入候選人得票。
+    "official_excluded_member_nos": (str, ""),
 }
 
 

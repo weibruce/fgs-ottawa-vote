@@ -16,6 +16,7 @@ class SettingsOut(BaseModel):
     retention_days: int = 365
     timezone: str = "Asia/Taipei"
     proxy_vote_limit: int = 1
+    official_excluded_member_nos: str = ""
 
 
 class SettingsUpdate(BaseModel):
@@ -32,6 +33,9 @@ class SettingsUpdate(BaseModel):
     timezone: str | None = Field(None, max_length=64, description="時區")
     proxy_vote_limit: int | None = Field(
         None, ge=0, le=50, description="一位代投人本輪最多能代幾位會員投票（0 = 不限制）"
+    )
+    official_excluded_member_nos: str | None = Field(
+        None, max_length=4000, description="大屏公布頁要排除的會員卡號（逗號分隔）"
     )
 
 
